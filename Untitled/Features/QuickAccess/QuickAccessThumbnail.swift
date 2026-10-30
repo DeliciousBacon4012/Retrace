@@ -6,6 +6,7 @@ import SwiftUI
 struct QuickAccessThumbnail: View {
     let capture: CapturedImage
     let onCopy: () -> Void
+    let onAnnotate: () -> Void
     let onClose: () -> Void
 
     @State private var isHovering = false
@@ -74,6 +75,7 @@ struct QuickAccessThumbnail: View {
         ZStack {
             Color.black.opacity(0.3)
             VStack(spacing: 8) {
+                Button("Annotate", action: onAnnotate)
                 Button(didCopy ? "Copied" : "Copy") {
                     onCopy()
                     didCopy = true

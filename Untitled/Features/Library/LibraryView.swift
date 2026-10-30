@@ -64,7 +64,6 @@ struct LibraryView: View {
                 .help("Show the save folder in Finder")
             }
         }
-        .navigationSubtitle(Text("\(items.count) items"))
         .onChange(of: library.items) { _, newItems in
             viewModel.pruneSelection(keeping: newItems)
         }
@@ -98,6 +97,10 @@ struct LibraryView: View {
         let targets = viewModel.targets(for: item, in: dependencies.library.items)
         Button("Open") { targets.forEach { NSWorkspace.shared.open($0.url) } }
         Button("Quick Look") { viewModel.previewURL = item.url }
+        if item.kind == .image {
+            Button("Annotate") { dependencies.editor.open(fileAt: item.url) }
+                .disabled(targets.count > 1)
+        }
         Divider()
         Button("Copy") { dependencies.clipboard.copyFile(at: item.url) }
             .disabled(targets.count > 1)

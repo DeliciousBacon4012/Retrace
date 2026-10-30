@@ -6,6 +6,7 @@ struct AppCommands: Commands {
     let settings: SettingsStore
 
     @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.selectedTab) private var selectedTab
 
     var body: some Commands {
         CommandMenu("Capture") {
@@ -22,6 +23,17 @@ struct AppCommands: Commands {
                         .disabled(true)
                 }
             }
+        }
+
+        CommandGroup(before: .toolbar) {
+            ForEach(Array(AppTab.allCases.enumerated()), id: \.element) { index, tab in
+                Button(tab.title) {
+                    selectedTab?.wrappedValue = tab
+                }
+                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                .disabled(selectedTab == nil)
+            }
+            Divider()
         }
 
         CommandGroup(replacing: .help) {

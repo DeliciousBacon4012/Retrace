@@ -17,11 +17,17 @@ struct MainView: View {
             }
         }
         .tabViewStyle(.tabBarOnly)
+        .focusedSceneValue(\.selectedTab, $selection)
         .toolbar {
             CaptureToolbar(capture: dependencies.capture)
         }
         .frame(minWidth: 680, minHeight: 480)
     }
+}
+
+extension FocusedValues {
+    /// The main window's tab, so View menu commands can switch it.
+    @Entry var selectedTab: Binding<AppTab>?
 }
 
 /// Capture buttons in the window toolbar. macOS groups them on one glass capsule.

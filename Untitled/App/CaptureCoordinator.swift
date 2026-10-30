@@ -14,6 +14,7 @@ final class CaptureCoordinator {
     @ObservationIgnored private let storage: any CaptureStoring
     @ObservationIgnored private let clipboard: any ClipboardWriting
     @ObservationIgnored private let quickAccess: QuickAccessController
+    @ObservationIgnored private let editor: EditorPresenter
     @ObservationIgnored private let overlay = SelectionOverlay()
 
     init(
@@ -22,7 +23,8 @@ final class CaptureCoordinator {
         capturer: any ScreenCapturing,
         storage: any CaptureStoring,
         clipboard: any ClipboardWriting,
-        quickAccess: QuickAccessController
+        quickAccess: QuickAccessController,
+        editor: EditorPresenter
     ) {
         self.settings = settings
         self.permissions = permissions
@@ -30,6 +32,7 @@ final class CaptureCoordinator {
         self.storage = storage
         self.clipboard = clipboard
         self.quickAccess = quickAccess
+        self.editor = editor
     }
 
     func capture(_ mode: CaptureMode) async {
@@ -112,7 +115,9 @@ final class CaptureCoordinator {
         if settings.playsSounds {
             CaptureSound.play()
         }
-        if settings.showsQuickAccess {
+        if settings.opensEditor {
+            editor.open(capture)
+        } else if settings.showsQuickAccess {
             quickAccess.show(capture)
         }
     }

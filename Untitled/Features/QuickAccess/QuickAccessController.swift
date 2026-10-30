@@ -17,6 +17,8 @@ final class QuickAccessController {
     private let settings: SettingsStore
     private let clipboard: any ClipboardWriting
     private var entries: [Entry] = []
+    /// Opens a capture in the editor; set once the editor exists.
+    var onAnnotate: ((CapturedImage) -> Void)?
 
     init(settings: SettingsStore, clipboard: any ClipboardWriting) {
         self.settings = settings
@@ -27,6 +29,10 @@ final class QuickAccessController {
         let view = QuickAccessThumbnail(
             capture: capture,
             onCopy: { [weak self] in self?.clipboard.copy(capture.nsImage) },
+            onAnnotate: { [weak self] in
+                self?.dismiss(capture.id)
+                self?.onAnnotate?(capture)
+            },
             onClose: { [weak self] in self?.dismiss(capture.id) }
         )
         let hostingView = NSHostingView(rootView: view)

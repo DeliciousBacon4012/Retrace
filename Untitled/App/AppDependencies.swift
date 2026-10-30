@@ -16,6 +16,7 @@ final class AppDependencies {
     let library: CaptureLibrary
     let capture: CaptureCoordinator
     let shortcuts: GlobalShortcuts
+    let editor: EditorPresenter
 
     init(
         settings: SettingsStore,
@@ -30,13 +31,18 @@ final class AppDependencies {
         self.dockIcon = dockIcon
         self.clipboard = clipboard
         library = CaptureLibrary(folder: settings.saveFolderURL)
+        let editor = EditorPresenter(settings: settings, clipboard: clipboard)
+        self.editor = editor
+        let quickAccess = QuickAccessController(settings: settings, clipboard: clipboard)
+        quickAccess.onAnnotate = { [weak editor] capture in editor?.open(capture) }
         let capture = CaptureCoordinator(
             settings: settings,
             permissions: permissions,
             capturer: ScreenCaptureKitService(),
             storage: FileCaptureStorage(),
             clipboard: clipboard,
-            quickAccess: QuickAccessController(settings: settings, clipboard: clipboard)
+            quickAccess: quickAccess,
+            editor: editor
         )
         self.capture = capture
         shortcuts = GlobalShortcuts(settings: settings) { [weak capture] actionID in
