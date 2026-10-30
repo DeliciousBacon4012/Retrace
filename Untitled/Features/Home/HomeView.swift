@@ -171,6 +171,17 @@ private struct PermissionCard: View {
                         }
                         .disabled(viewModel.isChecking)
                     }
+                    if !CodeSigningInfo.hasTeamIdentifier {
+                        Label {
+                            Text("This build is signed only to run locally, so macOS forgets the permission every time it's rebuilt. In Xcode, choose a Team under Signing & Capabilities.")
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.yellow)
+                        }
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    }
                     if viewModel.checkFoundNoAccess {
                         HStack(spacing: 8) {
                             Text("Already turned it on? Some Macs only apply it after a restart.")
