@@ -141,7 +141,9 @@ private struct TextMarkEditor: View {
             // An explicit size keeps clicks outside the text going to the canvas.
             .frame(width: CGFloat(longest) * fontSize * 0.62, height: CGFloat(max(lines.count, 1)) * fontSize * 1.3, alignment: .topLeading)
             .focused($isFocused)
-            .offset(x: position.x, y: position.y)
+            // Padding, not offset, so the field's real frame sits under the text.
+            .padding(.leading, position.x)
+            .padding(.top, position.y)
             .onAppear {
                 text = mark.text
                 isFocused = true
