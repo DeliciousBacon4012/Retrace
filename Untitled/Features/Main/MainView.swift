@@ -1,26 +1,29 @@
 import SwiftUI
 
-/// The main window: a sidebar of areas and a detail pane.
+/// The main window: the selected tab's page, with a floating glass tab bar at the bottom.
 struct MainView: View {
     @State private var viewModel = MainViewModel()
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView(selection: $viewModel.selection)
-                .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 300)
-        } detail: {
-            detail
-        }
-        .frame(minWidth: 680, minHeight: 440)
+        page
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                GlassTabBar(selection: $viewModel.selectedTab)
+                    .padding(.bottom, 16)
+                    .padding(.top, 8)
+            }
+            .navigationTitle(viewModel.selectedTab.title)
+            .frame(minWidth: 640, minHeight: 460)
     }
 
     @ViewBuilder
-    private var detail: some View {
-        switch viewModel.selection {
-        case .home, nil:
+    private var page: some View {
+        switch viewModel.selectedTab {
+        case .home:
             HomeView()
-        case .area(let area):
-            FeatureAreaView(area: area)
+        case .capture, .record, .library:
+            FeatureListView(areas: viewModel.selectedTab.areas)
+                .id(viewModel.selectedTab)
         case .roadmap:
             RoadmapView()
         }
@@ -32,4 +35,5 @@ struct MainView: View {
     MainView()
         .environment(dependencies)
         .environment(dependencies.settings)
+        .frame(width: 900, height: 600)
 }

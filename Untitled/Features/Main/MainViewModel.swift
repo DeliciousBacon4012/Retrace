@@ -1,7 +1,7 @@
 import Observation
 
-/// State for the main window: which sidebar row is selected.
+/// State for the main window: which tab is showing.
 @Observable
 final class MainViewModel {
-    var selection: SidebarItem? = .home
+    var selectedTab: AppTab = .home
 }

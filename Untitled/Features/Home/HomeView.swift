@@ -22,7 +22,8 @@ private struct HomeContent: View {
                 header
 
                 if viewModel.screenRecording == .notGranted {
-                    permissionCard
+                    PermissionCard(viewModel: viewModel)
+                        .transition(.opacity)
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -33,7 +34,7 @@ private struct HomeContent: View {
                             QuickActionTile(action: action, isEnabled: false) {}
                         }
                     }
-                    Text("Capture tools arrive in the next few updates. The Roadmap lists everything planned.")
+                    Text("Capture tools arrive in the next update. The Roadmap tab lists everything planned.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -41,8 +42,11 @@ private struct HomeContent: View {
             .padding(24)
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
+            .animation(.default, value: viewModel.screenRecording)
         }
-        .navigationTitle("Home")
+        .task {
+            await viewModel.watchScreenRecording()
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refresh()
         }
@@ -55,13 +59,24 @@ private struct HomeContent: View {
             Text("Screenshots, recordings, and a replay buffer, all in one place.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text("\(viewModel.availableCount) of \(viewModel.plannedCount) planned features available")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
+            HStack(spacing: 12) {
+                Text("\(viewModel.availableCount) of \(viewModel.plannedCount) planned features available")
+                if viewModel.screenRecording == .granted {
+                    Label("Screen Recording allowed", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+            .font(.callout)
+            .foregroundStyle(.tertiary)
         }
     }
+}
 
-    private var permissionCard: some View {
+/// Explains why Screen Recording access is needed and notices when it is granted.
+private struct PermissionCard: View {
+    let viewModel: HomeViewModel
+
+    var body: some View {
         GroupBox {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "lock.shield")
@@ -71,17 +86,38 @@ private struct HomeContent: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Screen Recording access needed")
                         .font(.headline)
-                    Text("macOS asks once before any app can capture the screen. Untitled only captures when you ask it to.")
+                    Text("Turn on Untitled in System Settings › Privacy & Security › Screen & System Audio Recording. If macOS offers to quit and reopen, choosing Later is fine: Untitled notices on its own.")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack {
-                        Button("Grant Access…") {
+                        Button("Allow Access…") {
                             viewModel.requestScreenRecording()
                         }
                         .buttonStyle(.borderedProminent)
                         Button("Open System Settings") {
                             viewModel.openScreenRecordingSettings()
                         }
+                        Button {
+                            Task { await viewModel.checkAgain() }
+                        } label: {
+                            if viewModel.isChecking {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Text("Check Again")
+                            }
+                        }
+                        .disabled(viewModel.isChecking)
+                    }
+                    if viewModel.checkFoundNoAccess {
+                        HStack(spacing: 8) {
+                            Text("Already turned it on? Some Macs only apply it after a restart.")
+                                .foregroundStyle(.secondary)
+                            Button("Restart Untitled") {
+                                viewModel.restart()
+                            }
+                            .buttonStyle(.link)
+                        }
+                        .font(.callout)
                     }
                 }
                 Spacer(minLength: 0)

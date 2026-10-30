@@ -3,8 +3,6 @@ import SwiftUI
 /// Menu bar commands for the main window.
 struct AppCommands: Commands {
     var body: some Commands {
-        SidebarCommands()
-
         CommandMenu("Capture") {
             ForEach(QuickAction.all) { action in
                 Button(action.title) {}
