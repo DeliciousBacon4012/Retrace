@@ -6,7 +6,7 @@ An all-in-one screen utility for macOS: screenshots, annotation, screen recordin
 
 ## Requirements
 
-- macOS 14 Sonoma or later
+- macOS 15 Sequoia or later (Liquid Glass on macOS 26 and later)
 - Xcode 27 or later to build
 
 ## Build and run

@@ -1,37 +1,50 @@
 import SwiftUI
 
-/// The main window: the selected tab's page, with a floating glass tab bar at the bottom.
+/// The main window. Navigation and actions use system containers (a tab view and
+/// the window toolbar) so macOS draws them in Liquid Glass, with its own physics,
+/// accent color, and accessibility settings.
 struct MainView: View {
-    @State private var viewModel = MainViewModel()
+    @Environment(AppDependencies.self) private var dependencies
+    @SceneStorage("selectedTab") private var selection: AppTab = .capture
 
     var body: some View {
-        page
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                GlassTabBar(selection: $viewModel.selectedTab)
-                    .padding(.bottom, 16)
-                    .padding(.top, 8)
+        TabView(selection: $selection) {
+            Tab(AppTab.capture.title, systemImage: AppTab.capture.symbolName, value: AppTab.capture) {
+                CaptureHomeView(showLibrary: { selection = .library })
             }
-            .navigationTitle(viewModel.selectedTab.title)
-            .frame(minWidth: 640, minHeight: 460)
+            Tab(AppTab.library.title, systemImage: AppTab.library.symbolName, value: AppTab.library) {
+                LibraryView()
+            }
+        }
+        .tabViewStyle(.tabBarOnly)
+        .toolbar {
+            CaptureToolbar(capture: dependencies.capture)
+        }
+        .frame(minWidth: 680, minHeight: 480)
     }
+}
 
-    @ViewBuilder
-    private var page: some View {
-        switch viewModel.selectedTab {
-        case .home:
-            HomeView()
-        case .capture, .record, .library:
-            FeatureListView(areas: viewModel.selectedTab.areas)
-                .id(viewModel.selectedTab)
-        case .roadmap:
-            RoadmapView()
+/// Capture buttons in the window toolbar. macOS groups them on one glass capsule.
+private struct CaptureToolbar: ToolbarContent {
+    let capture: CaptureCoordinator
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            ForEach(QuickAction.screenshots) { action in
+                Button(action.title, systemImage: action.symbolName) {
+                    if let mode = action.captureMode {
+                        Task { await capture.capture(mode) }
+                    }
+                }
+                .help(action.title)
+                .disabled(capture.isCapturing)
+            }
         }
     }
 }
 
 #Preview {
-    let dependencies = AppDependencies.preview()
+    let dependencies = AppDependencies.preview(screenRecording: .granted)
     MainView()
         .environment(dependencies)
         .environment(dependencies.settings)

@@ -2,43 +2,41 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// The landing screen: permission status and quick actions.
-struct HomeView: View {
+/// The Capture tab: permission status, the capture buttons, recent captures,
+/// and where new ones are saved.
+struct CaptureHomeView: View {
+    let showLibrary: () -> Void
+
     @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
-        HomeContent(
-            viewModel: HomeViewModel(permissions: dependencies.permissions),
-            capture: dependencies.capture
+        CaptureHomeContent(
+            viewModel: CaptureHomeViewModel(permissions: dependencies.permissions),
+            capture: dependencies.capture,
+            library: dependencies.library,
+            showLibrary: showLibrary
         )
     }
 }
 
-private struct HomeContent: View {
-    @State var viewModel: HomeViewModel
+private struct CaptureHomeContent: View {
+    @State var viewModel: CaptureHomeViewModel
     let capture: CaptureCoordinator
-
-    private let columns = [GridItem(.adaptive(minimum: 140, maximum: 220), spacing: 12)]
+    let library: CaptureLibrary
+    let showLibrary: () -> Void
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                header
-
+            VStack(alignment: .leading, spacing: 28) {
                 if viewModel.screenRecording == .notGranted {
                     PermissionCard(viewModel: viewModel)
-                        .transition(.opacity)
+                        .transition(.blurReplace)
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Quick Actions")
-                        .font(.headline)
-                    LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(QuickAction.all) { action in
-                            QuickActionTile(
-                                action: action,
-                                isEnabled: action.captureMode != nil && !capture.isCapturing
-                            ) {
+                section("Take a Screenshot") {
+                    HStack(spacing: 12) {
+                        ForEach(QuickAction.screenshots) { action in
+                            CaptureButton(action: action, isDisabled: capture.isCapturing) {
                                 if let mode = action.captureMode {
                                     Task { await capture.capture(mode) }
                                 }
@@ -50,12 +48,18 @@ private struct HomeContent: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if !library.items.isEmpty {
+                    section("Recent") {
+                        RecentCapturesRow(items: Array(library.items.prefix(8)), showLibrary: showLibrary)
+                    }
+                }
+
                 SaveLocationRow()
             }
             .padding(24)
-            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity)
-            .animation(.default, value: viewModel.screenRecording)
+            .animation(.smooth, value: viewModel.screenRecording)
         }
         .task {
             await viewModel.watchScreenRecording()
@@ -65,22 +69,68 @@ private struct HomeContent: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Untitled")
-                .font(.largeTitle.weight(.semibold))
-            Text("Screenshots, recordings, and a replay buffer, all in one place.")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 12) {
-                Text("\(viewModel.availableCount) of \(viewModel.plannedCount) planned features available")
-                if viewModel.screenRecording == .granted {
-                    Label("Screen Recording allowed", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+    private func section(_ title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.title3.weight(.semibold))
+            content()
+        }
+    }
+}
+
+/// A large button for one capture mode, with its keyboard shortcut underneath.
+private struct CaptureButton: View {
+    let action: QuickAction
+    let isDisabled: Bool
+    let perform: () -> Void
+
+    var body: some View {
+        Button(action: perform) {
+            VStack(spacing: 8) {
+                Image(systemName: action.symbolName)
+                    .font(.system(size: 26, weight: .regular))
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(height: 32)
+                Text(action.title)
+                    .font(.body.weight(.medium))
+            }
+            .frame(maxWidth: .infinity, minHeight: 92)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.extraLarge)
+        .buttonBorderShape(.roundedRectangle(radius: 16))
+        .disabled(isDisabled)
+        .help(action.title)
+    }
+}
+
+/// The newest captures, side by side. Double-click opens one; drag it into any app.
+private struct RecentCapturesRow: View {
+    let items: [LibraryItem]
+    let showLibrary: () -> Void
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 12) {
+                    ForEach(items) { item in
+                        FileThumbnail(url: item.url, maximumSize: CGSize(width: 220, height: 140))
+                            .padding(6)
+                            .frame(width: 150, height: 100)
+                            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+                            .contentShape(.rect)
+                            .onTapGesture(count: 2) { NSWorkspace.shared.open(item.url) }
+                            .onDrag { NSItemProvider(object: item.url as NSURL) }
+                            .help(item.name)
+                            .accessibilityLabel(item.name)
+                            .accessibilityAddTraits(.isButton)
+                    }
                 }
             }
-            .font(.callout)
-            .foregroundStyle(.tertiary)
+            .scrollIndicators(.never)
+            Button("Show All", action: showLibrary)
+                .buttonStyle(.link)
         }
     }
 }
@@ -137,7 +187,7 @@ private struct SaveLocationRow: View {
 
 /// Explains why Screen Recording access is needed and notices when it is granted.
 private struct PermissionCard: View {
-    let viewModel: HomeViewModel
+    let viewModel: CaptureHomeViewModel
 
     var body: some View {
         GroupBox {
@@ -203,16 +253,16 @@ private struct PermissionCard: View {
 
 #Preview("Needs permission") {
     let dependencies = AppDependencies.preview()
-    HomeView()
+    CaptureHomeView(showLibrary: {})
         .environment(dependencies)
         .environment(dependencies.settings)
-        .frame(width: 700, height: 620)
+        .frame(width: 760, height: 620)
 }
 
 #Preview("Granted") {
     let dependencies = AppDependencies.preview(screenRecording: .granted)
-    HomeView()
+    CaptureHomeView(showLibrary: {})
         .environment(dependencies)
         .environment(dependencies.settings)
-        .frame(width: 700, height: 620)
+        .frame(width: 760, height: 620)
 }

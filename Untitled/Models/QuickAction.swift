@@ -8,6 +8,9 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
     /// The screenshot this action takes, or `nil` if it is not a screenshot action.
     var captureMode: CaptureMode?
 
+    /// The screenshot actions that work today, for toolbars and the Capture tab.
+    static var screenshots: [QuickAction] { all.filter { $0.captureMode != nil } }
+
     static let all: [QuickAction] = [
         QuickAction(id: "captureArea", title: String(localized: "Capture Area"), symbolName: "rectangle.dashed", captureMode: .area),
         QuickAction(id: "captureWindow", title: String(localized: "Capture Window"), symbolName: "macwindow", captureMode: .window),

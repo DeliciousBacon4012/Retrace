@@ -17,6 +17,13 @@ struct UntitledApp: App {
             AppCommands(capture: dependencies.capture)
         }
 
+        Window("Feature Roadmap", id: WindowID.roadmap) {
+            NavigationStack {
+                RoadmapView()
+            }
+        }
+        .defaultSize(width: 760, height: 560)
+
         MenuBarExtra("Untitled", systemImage: "camera.aperture") {
             MenuBarContent()
                 .environment(dependencies)

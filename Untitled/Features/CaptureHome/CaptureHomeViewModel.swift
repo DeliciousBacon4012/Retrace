@@ -1,9 +1,9 @@
 import Foundation
 import Observation
 
-/// State and actions for the Home screen.
+/// State and actions for the Capture tab.
 @Observable
-final class HomeViewModel {
+final class CaptureHomeViewModel {
     private(set) var screenRecording: PermissionStatus
     private(set) var isChecking = false
     /// True after a manual check still found no access, so the screen can suggest a restart.
@@ -15,9 +15,6 @@ final class HomeViewModel {
         self.permissions = permissions
         screenRecording = permissions.screenRecordingStatus
     }
-
-    var availableCount: Int { FeatureCatalog.all.filter(\.isAvailable).count }
-    var plannedCount: Int { FeatureCatalog.all.count }
 
     /// Re-reads permission status, for example when the app becomes active again.
     func refresh() {

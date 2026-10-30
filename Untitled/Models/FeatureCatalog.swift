@@ -69,7 +69,7 @@ nonisolated enum FeatureCatalog {
         Feature("replay.markers", .replayBuffer, .maybe, String(localized: "Markers while the buffer runs")),
 
         // Library
-        Feature("library.history", .library, .core, String(localized: "History of every capture and recording")),
+        Feature("library.history", .library, .core, String(localized: "History of every capture and recording"), isAvailable: true),
         Feature("library.search", .library, .next, String(localized: "Search by text inside images")),
         Feature("library.filter", .library, .next, String(localized: "Filters, tags, and favorites")),
         Feature("library.cleanup", .library, .next, String(localized: "Auto-delete with a restorable trash")),
