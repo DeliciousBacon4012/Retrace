@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# Build output
+build/
+DerivedData/
+*.xcarchive
+*.dSYM
+*.dSYM.zip
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Secrets and local config
+*.xcconfig.local
+.env
+*.p12
+*.mobileprovision
+*.provisionprofile
