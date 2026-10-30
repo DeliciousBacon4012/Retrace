@@ -37,9 +37,9 @@ nonisolated enum FeatureCatalog {
         Feature("clipboard.history", .clipboard, .maybe, String(localized: "Image clipboard history")),
 
         // Editor
-        Feature("editor.tools", .editor, .core, String(localized: "Arrow, shapes, text, pen, highlighter, steps, blur, crop")),
+        Feature("editor.tools", .editor, .core, String(localized: "Arrow, shapes, text, pen, highlighter, steps, blur, crop"), isAvailable: true),
         Feature("editor.inspector", .editor, .core, String(localized: "Inspector shows only the selected tool's options")),
-        Feature("editor.editable", .editor, .core, String(localized: "Editable annotations with undo and redo")),
+        Feature("editor.editable", .editor, .core, String(localized: "Editable annotations with undo and redo"), isAvailable: true),
         Feature("editor.spotlight", .editor, .next, String(localized: "Spotlight, magnifier, and smart redact")),
         Feature("editor.background", .editor, .next, String(localized: "Padding, rounded corners, shadow, and backdrops")),
         Feature("editor.transform", .editor, .next, String(localized: "Rotate, flip, resize, and expand canvas")),
@@ -48,9 +48,9 @@ nonisolated enum FeatureCatalog {
         Feature("editor.lift", .editor, .maybe, String(localized: "Remove the background from a subject")),
 
         // Recording
-        Feature("record.sources", .recording, .core, String(localized: "Record an area, a window, or a display")),
-        Feature("record.encoding", .recording, .core, String(localized: "H.264 or HEVC at 30 or 60 fps")),
-        Feature("record.audio", .recording, .core, String(localized: "System audio and microphone")),
+        Feature("record.sources", .recording, .core, String(localized: "Record an area, a window, or a display"), isAvailable: true),
+        Feature("record.encoding", .recording, .core, String(localized: "H.264 or HEVC at 30 or 60 fps"), isAvailable: true),
+        Feature("record.audio", .recording, .core, String(localized: "System audio and microphone"), isAvailable: true),
         Feature("record.controls", .recording, .core, String(localized: "Pause, resume, countdown, and menu bar timer")),
         Feature("record.crashSafe", .recording, .core, String(localized: "Crash-safe recordings")),
         Feature("record.trim", .recording, .next, String(localized: "Trim editor and GIF export")),
@@ -60,10 +60,10 @@ nonisolated enum FeatureCatalog {
         Feature("record.highFPS", .recording, .maybe, String(localized: "120 fps on ProMotion displays")),
 
         // Replay Buffer
-        Feature("replay.buffer", .replayBuffer, .core, String(localized: "Keep the last 15 seconds to 10 minutes")),
-        Feature("replay.segments", .replayBuffer, .core, String(localized: "Rolling on-disk segments with flat memory use")),
+        Feature("replay.buffer", .replayBuffer, .core, String(localized: "Keep the last 15 seconds to 10 minutes"), isAvailable: true),
+        Feature("replay.segments", .replayBuffer, .core, String(localized: "Rolling on-disk segments with flat memory use"), isAvailable: true),
         Feature("replay.caps", .replayBuffer, .core, String(localized: "Disk caps and low-space warnings")),
-        Feature("replay.indicator", .replayBuffer, .core, String(localized: "Always-visible indicator while running")),
+        Feature("replay.indicator", .replayBuffer, .core, String(localized: "Always-visible indicator while running"), isAvailable: true),
         Feature("replay.lengths", .replayBuffer, .next, String(localized: "Save a chosen length on demand")),
         Feature("replay.autoStart", .replayBuffer, .next, String(localized: "Start at login or when an app opens")),
         Feature("replay.pause", .replayBuffer, .next, String(localized: "Pause on battery, idle, or lock")),
