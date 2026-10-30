@@ -97,7 +97,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         let pointSize = NSSize(width: document.imageSize.width / document.scale, height: document.imageSize.height / document.scale)
         let chrome = NSSize(width: 48, height: 100)
         return NSSize(
-            width: min(max(pointSize.width + chrome.width, 760), visible.width * 0.85),
+            width: min(max(pointSize.width + chrome.width, 1000), visible.width * 0.9),
             height: min(max(pointSize.height + chrome.height, 480), visible.height * 0.85)
         )
     }

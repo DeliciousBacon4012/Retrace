@@ -29,7 +29,7 @@ final class EditorDocument {
         didSet { restyleSelection { $0.color = color } }
     }
     /// Line width in points; marks store it in pixels.
-    var lineWidth: CGFloat = 4 {
+    var lineWidth: CGFloat = 6 {
         didSet { restyleSelection { $0.lineWidth = lineWidth * scale } }
     }
     var fillsShapes = false {

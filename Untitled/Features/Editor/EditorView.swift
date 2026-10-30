@@ -7,14 +7,17 @@ struct EditorView: View {
     let actions: EditorActions
 
     @State private var showsStyle = false
+    @FocusState private var isCanvasFocused: Bool
 
     var body: some View {
         AnnotationCanvas(document: document)
             .background(.background.secondary)
-            .frame(minWidth: 560, minHeight: 380)
+            .frame(minWidth: 940, minHeight: 420)
             .toolbar { toolbar }
             .focusable()
+            .focused($isCanvasFocused)
             .focusEffectDisabled()
+            .onAppear { isCanvasFocused = true }
             .onKeyPress(phases: .down) { press in
                 handle(press)
             }
