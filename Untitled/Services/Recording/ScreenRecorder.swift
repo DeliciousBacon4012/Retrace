@@ -117,7 +117,7 @@ final class ScreenRecorder: NSObject {
         configuration.queueDepth = 6
         configuration.capturesAudio = options.recordsSystemAudio
         configuration.excludesCurrentProcessAudio = true
-        configuration.captureMicrophoneAudio = options.recordsMicrophone
+        configuration.captureMicrophone = options.recordsMicrophone
 
         let filter: SCContentFilter
         let size: CGSize
