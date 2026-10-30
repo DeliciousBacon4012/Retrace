@@ -13,6 +13,7 @@ struct CaptureHomeView: View {
         CaptureHomeContent(
             viewModel: CaptureHomeViewModel(permissions: dependencies.permissions),
             capture: dependencies.capture,
+            recording: dependencies.recording,
             library: dependencies.library,
             showLibrary: showLibrary
         )
@@ -22,6 +23,7 @@ struct CaptureHomeView: View {
 private struct CaptureHomeContent: View {
     @State var viewModel: CaptureHomeViewModel
     let capture: CaptureCoordinator
+    let recording: RecordingCoordinator
     let library: CaptureLibrary
     let showLibrary: () -> Void
 
@@ -36,7 +38,7 @@ private struct CaptureHomeContent: View {
                 section("Take a Screenshot") {
                     HStack(spacing: 12) {
                         ForEach(QuickAction.screenshots) { action in
-                            CaptureButton(action: action, isDisabled: capture.isCapturing) {
+                            CaptureButton(action: action, title: action.title, isDisabled: capture.isCapturing) {
                                 if let mode = action.captureMode {
                                     Task { await capture.capture(mode) }
                                 }
@@ -46,6 +48,22 @@ private struct CaptureHomeContent: View {
                     Text("Drag to capture an area, click a window to capture it, or press Escape to cancel.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                }
+
+                section("Record the Screen") {
+                    HStack(spacing: 12) {
+                        ForEach(QuickAction.recordings) { action in
+                            CaptureButton(
+                                action: action,
+                                title: recording.isRecording ? String(localized: "Stop Recording") : action.title,
+                                isDisabled: recording.recorder.state == .starting || recording.recorder.state == .finishing
+                            ) {
+                                if let mode = action.recordingMode {
+                                    Task { await recording.toggle(mode) }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if !library.items.isEmpty {
@@ -81,6 +99,7 @@ private struct CaptureHomeContent: View {
 /// A large button for one capture mode, with its keyboard shortcut underneath.
 private struct CaptureButton: View {
     let action: QuickAction
+    let title: String
     let isDisabled: Bool
     let perform: () -> Void
 
@@ -91,8 +110,9 @@ private struct CaptureButton: View {
                     .font(.system(size: 26, weight: .regular))
                     .symbolRenderingMode(.hierarchical)
                     .frame(height: 32)
-                Text(action.title)
+                Text(title)
                     .font(.body.weight(.medium))
+                    .contentTransition(.interpolate)
             }
             .frame(maxWidth: .infinity, minHeight: 92)
             .contentShape(.rect)
@@ -101,7 +121,7 @@ private struct CaptureButton: View {
         .controlSize(.extraLarge)
         .buttonBorderShape(.roundedRectangle(radius: 16))
         .disabled(isDisabled)
-        .help(action.title)
+        .help(title)
     }
 }
 

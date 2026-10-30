@@ -15,6 +15,7 @@ final class AppDependencies {
     let clipboard: any ClipboardWriting
     let library: CaptureLibrary
     let capture: CaptureCoordinator
+    let recording: RecordingCoordinator
     let shortcuts: GlobalShortcuts
     let editor: EditorPresenter
 
@@ -45,9 +46,21 @@ final class AppDependencies {
             editor: editor
         )
         self.capture = capture
-        shortcuts = GlobalShortcuts(settings: settings) { [weak capture] actionID in
-            guard let mode = QuickAction.all.first(where: { $0.id == actionID })?.captureMode else { return }
-            Task { await capture?.capture(mode) }
+        let recording = RecordingCoordinator(
+            settings: settings,
+            permissions: permissions,
+            storage: FileCaptureStorage(),
+            clipboard: clipboard,
+            quickAccess: quickAccess
+        )
+        self.recording = recording
+        shortcuts = GlobalShortcuts(settings: settings) { [weak capture, weak recording] actionID in
+            guard let action = QuickAction.all.first(where: { $0.id == actionID }) else { return }
+            if let mode = action.captureMode {
+                Task { await capture?.capture(mode) }
+            } else if let mode = action.recordingMode {
+                Task { await recording?.toggle(mode) }
+            }
         }
     }
 

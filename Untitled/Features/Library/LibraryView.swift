@@ -46,27 +46,45 @@ struct LibraryView: View {
         .onExitCommand { viewModel.selection.removeAll() }
         .quickLookPreview($viewModel.previewURL, in: items.map(\.url))
         .overlay { emptyState(library: library, isFiltered: items.isEmpty && !library.items.isEmpty) }
-        .searchable(text: $viewModel.searchText, placement: .toolbar, prompt: Text("Search captures"))
-        .toolbar {
-            ToolbarItem {
-                Picker("Show", selection: $viewModel.kindFilter) {
-                    ForEach(LibraryViewModel.KindFilter.allCases) { filter in
-                        Label(filter.title, systemImage: filter.symbolName).tag(filter)
-                    }
-                }
-                .pickerStyle(.menu)
-                .help("Show screenshots, recordings, or both")
-            }
-            ToolbarItem {
-                Button("Show in Finder", systemImage: "folder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([library.folder])
-                }
-                .help("Show the save folder in Finder")
-            }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            header(library: library, count: items.count)
         }
         .onChange(of: library.items) { _, newItems in
             viewModel.pruneSelection(keeping: newItems)
         }
+    }
+
+    /// Search, filter, and the folder, kept with the grid so the window toolbar stays the same on every tab.
+    private func header(library: CaptureLibrary, count: Int) -> some View {
+        HStack(spacing: 12) {
+            Picker("Show", selection: $viewModel.kindFilter) {
+                ForEach(LibraryViewModel.KindFilter.allCases) { filter in
+                    Text(filter.title).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+
+            Text("\(count) items")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+
+            Spacer(minLength: 12)
+
+            Button("Show in Finder", systemImage: "folder") {
+                NSWorkspace.shared.activateFileViewerSelecting([library.folder])
+            }
+            .labelStyle(.iconOnly)
+            .help("Show the save folder in Finder")
+
+            SearchField(text: $viewModel.searchText, prompt: String(localized: "Search captures"))
+                .frame(maxWidth: 240)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(.bar)
     }
 
     @ViewBuilder

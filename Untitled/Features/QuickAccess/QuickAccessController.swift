@@ -28,7 +28,13 @@ final class QuickAccessController {
     func show(_ capture: CapturedImage) {
         let view = QuickAccessThumbnail(
             capture: capture,
-            onCopy: { [weak self] in self?.clipboard.copy(capture.nsImage) },
+            onCopy: { [weak self] in
+                if capture.isVideo, let url = capture.fileURL {
+                    self?.clipboard.copyFile(at: url)
+                } else {
+                    self?.clipboard.copy(capture.nsImage)
+                }
+            },
             onAnnotate: { [weak self] in
                 self?.dismiss(capture.id)
                 self?.onAnnotate?(capture)

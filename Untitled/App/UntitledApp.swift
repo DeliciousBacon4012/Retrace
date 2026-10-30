@@ -14,7 +14,7 @@ struct UntitledApp: App {
         }
         .defaultSize(width: 920, height: 600)
         .commands {
-            AppCommands(capture: dependencies.capture, settings: dependencies.settings)
+            AppCommands(dependencies: dependencies)
         }
 
         Window("Feature Roadmap", id: WindowID.roadmap) {
@@ -24,10 +24,12 @@ struct UntitledApp: App {
         }
         .defaultSize(width: 760, height: 560)
 
-        MenuBarExtra("Untitled", systemImage: "camera.aperture") {
+        MenuBarExtra {
             MenuBarContent()
                 .environment(dependencies)
                 .environment(dependencies.settings)
+        } label: {
+            MenuBarLabel(recording: dependencies.recording)
         }
 
         Settings {

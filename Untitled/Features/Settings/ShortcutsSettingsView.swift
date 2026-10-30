@@ -28,7 +28,7 @@ struct ShortcutsSettingsView: View {
 
     @ViewBuilder
     private func row(for action: QuickAction) -> some View {
-        let isAvailable = action.captureMode != nil
+        let isAvailable = action.isAvailable
         LabeledContent {
             ShortcutRecorder(shortcut: binding(for: action.id)) { recording in
                 dependencies.shortcuts.setPaused(recording)

@@ -5,6 +5,8 @@ import OSLog
 protocol CaptureStoring: AnyObject {
     /// Saves the data in `folder`, creating it if needed, and returns the new file's URL.
     func save(_ data: Data, template: String, date: Date, fileExtension: String, in folder: URL) throws -> URL
+    /// Returns a free file URL in `folder` for something written later, such as a recording.
+    func reserveURL(template: String, date: Date, fileExtension: String, in folder: URL) throws -> URL
 }
 
 final class FileCaptureStorage: CaptureStoring {
@@ -21,6 +23,12 @@ final class FileCaptureStorage: CaptureStoring {
         try data.write(to: url, options: .atomic)
         Log.capture.info("Saved capture to \(url.path, privacy: .private)")
         return url
+    }
+
+    func reserveURL(template: String, date: Date, fileExtension: String, in folder: URL) throws -> URL {
+        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        let baseName = FileNameTemplate.fileName(from: template, date: date)
+        return uniqueURL(in: folder, baseName: baseName, fileExtension: fileExtension)
     }
 
     /// Adds " 2", " 3", and so on until the name is free, so nothing is overwritten.

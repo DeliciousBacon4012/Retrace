@@ -104,10 +104,17 @@ final class SettingsStore {
         shortcuts = loadShortcuts()
     }
 
+    /// Stored shortcuts on top of the defaults. A stored `null` means the person cleared it,
+    /// so actions added in later versions still get their default shortcut.
     private func loadShortcuts() -> [String: Shortcut] {
         guard let data = defaults.data(forKey: Key.shortcuts.rawValue) else { return Defaults.shortcuts }
         do {
-            return try JSONDecoder().decode([String: Shortcut].self, from: data)
+            let stored = try JSONDecoder().decode([String: Shortcut?].self, from: data)
+            var result = Defaults.shortcuts
+            for (actionID, shortcut) in stored {
+                result[actionID] = shortcut
+            }
+            return result
         } catch {
             Log.settings.error("Stored shortcuts were unreadable, using defaults: \(error.localizedDescription, privacy: .public)")
             return Defaults.shortcuts
@@ -116,7 +123,11 @@ final class SettingsStore {
 
     private func saveShortcuts() {
         do {
-            defaults.set(try JSONEncoder().encode(shortcuts), forKey: Key.shortcuts.rawValue)
+            var stored: [String: Shortcut?] = [:]
+            for action in QuickAction.all {
+                stored[action.id] = .some(shortcuts[action.id])
+            }
+            defaults.set(try JSONEncoder().encode(stored), forKey: Key.shortcuts.rawValue)
         } catch {
             Log.settings.error("Saving shortcuts failed: \(error.localizedDescription, privacy: .public)")
         }
@@ -182,11 +193,13 @@ private extension SettingsStore {
         static let replayBufferSeconds = 60
         static let replayDiskLimitGB = 4
 
-        /// ⌥⇧⌘ plus the number macOS uses for the same kind of screenshot.
+        /// ⌥⇧⌘ plus the number macOS uses for the same kind of screenshot; recordings follow on 6 and 7.
         static let shortcuts: [String: Shortcut] = [
             "captureScreen": Shortcut(keyCode: UInt32(kVK_ANSI_3), modifiers: [.option, .shift, .command]),
             "captureArea": Shortcut(keyCode: UInt32(kVK_ANSI_4), modifiers: [.option, .shift, .command]),
             "captureWindow": Shortcut(keyCode: UInt32(kVK_ANSI_5), modifiers: [.option, .shift, .command]),
+            "recordArea": Shortcut(keyCode: UInt32(kVK_ANSI_6), modifiers: [.option, .shift, .command]),
+            "recordScreen": Shortcut(keyCode: UInt32(kVK_ANSI_7), modifiers: [.option, .shift, .command]),
         ]
 
         static var saveFolderPath: String {

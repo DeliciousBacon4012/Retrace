@@ -2,6 +2,7 @@ import AppKit
 
 /// A finished screenshot, ready for the after-capture actions.
 struct CapturedImage: Identifiable {
+    // A screenshot, or the first frame of a recording.
     let id = UUID()
     let image: CGImage
     /// Pixels per point the image was captured at, such as 2 on a Retina display.
@@ -9,6 +10,8 @@ struct CapturedImage: Identifiable {
     let date: Date
     /// Where the image was saved, if it was saved.
     var fileURL: URL?
+    /// True when this is a recording's poster frame rather than a screenshot.
+    var isVideo = false
 
     /// The image's size in points, so it displays at its on-screen size.
     var pointSize: NSSize {

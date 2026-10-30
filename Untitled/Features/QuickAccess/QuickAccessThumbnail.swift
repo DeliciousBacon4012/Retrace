@@ -75,7 +75,9 @@ struct QuickAccessThumbnail: View {
         ZStack {
             Color.black.opacity(0.3)
             VStack(spacing: 8) {
-                Button("Annotate", action: onAnnotate)
+                if !capture.isVideo {
+                    Button("Annotate", action: onAnnotate)
+                }
                 Button(didCopy ? "Copied" : "Copy") {
                     onCopy()
                     didCopy = true
