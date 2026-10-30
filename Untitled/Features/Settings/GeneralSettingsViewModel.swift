@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Observation
 
 /// Login item state for the General pane, with errors turned into readable messages.

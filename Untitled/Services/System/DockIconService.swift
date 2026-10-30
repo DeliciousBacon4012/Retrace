@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 
 /// Shows or hides the app's Dock icon.
 protocol DockIconControlling: AnyObject {

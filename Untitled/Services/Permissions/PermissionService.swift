@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import OSLog
 
 /// Whether the app has been given a system permission.
 nonisolated enum PermissionStatus: Sendable {

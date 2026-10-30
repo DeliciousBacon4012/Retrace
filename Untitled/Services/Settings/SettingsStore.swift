@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Observation
 
 /// Typed, observable access to every user preference, persisted in `UserDefaults`.
