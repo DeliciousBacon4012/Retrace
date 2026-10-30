@@ -9,6 +9,7 @@ nonisolated enum FeatureCatalog {
         Feature("capture.area", .capture, .core, String(localized: "Area capture with loupe and size readout"), isAvailable: true),
         Feature("capture.window", .capture, .core, String(localized: "Window capture with shadow and background options"), isAvailable: true),
         Feature("capture.screen", .capture, .core, String(localized: "Full screen and all-displays capture"), isAvailable: true),
+        Feature("capture.shortcuts", .capture, .core, String(localized: "Global shortcuts you can record"), isAvailable: true),
         Feature("capture.repeat", .capture, .core, String(localized: "Repeat the last area")),
         Feature("capture.keys", .capture, .core, String(localized: "Keyboard controls while selecting")),
         Feature("capture.freeze", .capture, .core, String(localized: "Freeze the screen while selecting")),

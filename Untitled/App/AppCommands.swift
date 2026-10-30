@@ -3,6 +3,7 @@ import SwiftUI
 /// Menu bar commands for the main window.
 struct AppCommands: Commands {
     let capture: CaptureCoordinator
+    let settings: SettingsStore
 
     @Environment(\.openWindow) private var openWindow
 
@@ -14,6 +15,7 @@ struct AppCommands: Commands {
                         Task { await capture.capture(mode) }
                     }
                     .labelStyle(.titleAndIcon)
+                    .menuShortcut(settings.shortcuts[action.id])
                 } else {
                     Button(action.title, systemImage: action.symbolName) {}
                         .labelStyle(.titleAndIcon)

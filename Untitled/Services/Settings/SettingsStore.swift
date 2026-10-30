@@ -1,3 +1,5 @@
+import AppKit
+import Carbon.HIToolbox
 import Foundation
 import OSLog
 import Observation
@@ -45,6 +47,11 @@ final class SettingsStore {
     var replayBufferSeconds = Defaults.replayBufferSeconds { didSet { save(replayBufferSeconds, .replayBufferSeconds) } }
     var replayDiskLimitGB = Defaults.replayDiskLimitGB { didSet { save(replayDiskLimitGB, .replayDiskLimitGB) } }
 
+    // MARK: Shortcuts
+
+    /// Global shortcuts by `QuickAction` identifier. An action missing from the dictionary has none.
+    var shortcuts = Defaults.shortcuts { didSet { saveShortcuts() } }
+
     // MARK: Storage
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -53,6 +60,8 @@ final class SettingsStore {
         self.defaults = defaults
         load()
     }
+
+    static var defaultShortcuts: [String: Shortcut] { Defaults.shortcuts }
 
     /// The folder captures are saved to, as a file URL.
     var saveFolderURL: URL {
@@ -92,6 +101,25 @@ final class SettingsStore {
         showsClicks = value(.showsClicks, default: Defaults.showsClicks)
         replayBufferSeconds = value(.replayBufferSeconds, default: Defaults.replayBufferSeconds)
         replayDiskLimitGB = value(.replayDiskLimitGB, default: Defaults.replayDiskLimitGB)
+        shortcuts = loadShortcuts()
+    }
+
+    private func loadShortcuts() -> [String: Shortcut] {
+        guard let data = defaults.data(forKey: Key.shortcuts.rawValue) else { return Defaults.shortcuts }
+        do {
+            return try JSONDecoder().decode([String: Shortcut].self, from: data)
+        } catch {
+            Log.settings.error("Stored shortcuts were unreadable, using defaults: \(error.localizedDescription, privacy: .public)")
+            return Defaults.shortcuts
+        }
+    }
+
+    private func saveShortcuts() {
+        do {
+            defaults.set(try JSONEncoder().encode(shortcuts), forKey: Key.shortcuts.rawValue)
+        } catch {
+            Log.settings.error("Saving shortcuts failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Reads a stored value, falling back to the default when it is missing or has the wrong type.
@@ -129,6 +157,7 @@ private extension SettingsStore {
         case showsClicks
         case replayBufferSeconds
         case replayDiskLimitGB
+        case shortcuts
     }
 
     enum Defaults {
@@ -152,6 +181,13 @@ private extension SettingsStore {
         static let showsClicks = false
         static let replayBufferSeconds = 60
         static let replayDiskLimitGB = 4
+
+        /// ⌥⇧⌘ plus the number macOS uses for the same kind of screenshot.
+        static let shortcuts: [String: Shortcut] = [
+            "captureScreen": Shortcut(keyCode: UInt32(kVK_ANSI_3), modifiers: [.option, .shift, .command]),
+            "captureArea": Shortcut(keyCode: UInt32(kVK_ANSI_4), modifiers: [.option, .shift, .command]),
+            "captureWindow": Shortcut(keyCode: UInt32(kVK_ANSI_5), modifiers: [.option, .shift, .command]),
+        ]
 
         static var saveFolderPath: String {
             let pictures = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first

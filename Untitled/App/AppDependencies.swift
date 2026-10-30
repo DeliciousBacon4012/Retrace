@@ -15,6 +15,7 @@ final class AppDependencies {
     let clipboard: any ClipboardWriting
     let library: CaptureLibrary
     let capture: CaptureCoordinator
+    let shortcuts: GlobalShortcuts
 
     init(
         settings: SettingsStore,
@@ -29,7 +30,7 @@ final class AppDependencies {
         self.dockIcon = dockIcon
         self.clipboard = clipboard
         library = CaptureLibrary(folder: settings.saveFolderURL)
-        capture = CaptureCoordinator(
+        let capture = CaptureCoordinator(
             settings: settings,
             permissions: permissions,
             capturer: ScreenCaptureKitService(),
@@ -37,6 +38,11 @@ final class AppDependencies {
             clipboard: clipboard,
             quickAccess: QuickAccessController(settings: settings, clipboard: clipboard)
         )
+        self.capture = capture
+        shortcuts = GlobalShortcuts(settings: settings) { [weak capture] actionID in
+            guard let mode = QuickAction.all.first(where: { $0.id == actionID })?.captureMode else { return }
+            Task { await capture?.capture(mode) }
+        }
     }
 
     static func live() -> AppDependencies {
@@ -54,6 +60,7 @@ final class AppDependencies {
         followDockIconSetting()
         library.start()
         followSaveFolderSetting()
+        shortcuts.start()
         Log.app.info("Untitled \(Bundle.main.displayVersion, privacy: .public) started")
     }
 
