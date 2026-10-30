@@ -130,12 +130,16 @@ private struct TextMarkEditor: View {
         let position = layout.viewPoint(for: mark.start)
         let color = Color(.sRGB, red: mark.color.red, green: mark.color.green, blue: mark.color.blue, opacity: mark.color.opacity)
 
+        let fontSize = mark.fontSize * layout.factor
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        let longest = max(lines.map(\.count).max() ?? 0, 4) + 2
+
         TextField("Text", text: $text, axis: .vertical)
             .textFieldStyle(.plain)
-            .font(.system(size: mark.fontSize * layout.factor, weight: .bold, design: .rounded))
+            .font(.system(size: fontSize, weight: .bold, design: .rounded))
             .foregroundStyle(color)
-            .fixedSize()
-            .frame(minWidth: 40 * layout.factor, alignment: .leading)
+            // An explicit size keeps clicks outside the text going to the canvas.
+            .frame(width: CGFloat(longest) * fontSize * 0.62, height: CGFloat(max(lines.count, 1)) * fontSize * 1.3, alignment: .topLeading)
             .focused($isFocused)
             .offset(x: position.x, y: position.y)
             .onAppear {
