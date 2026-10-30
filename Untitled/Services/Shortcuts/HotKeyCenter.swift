@@ -93,8 +93,8 @@ private nonisolated func hotKeyEventHandler(
     )
     guard status == noErr else { return status }
     let id = hotKeyID.id
+    let center = Unmanaged<HotKeyCenter>.fromOpaque(userData).takeUnretainedValue()
     MainActor.assumeIsolated {
-        let center = Unmanaged<HotKeyCenter>.fromOpaque(userData).takeUnretainedValue()
         center.fire(id)
     }
     return noErr

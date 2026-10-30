@@ -54,8 +54,8 @@ nonisolated struct Shortcut: Codable, Hashable, Sendable {
         return KeyEquivalent(character)
     }
 
-    var eventModifiers: EventModifiers {
-        var result: EventModifiers = []
+    var eventModifiers: SwiftUI.EventModifiers {
+        var result: SwiftUI.EventModifiers = []
         if modifierFlags.contains(.command) { result.insert(.command) }
         if modifierFlags.contains(.option) { result.insert(.option) }
         if modifierFlags.contains(.control) { result.insert(.control) }
