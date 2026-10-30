@@ -29,7 +29,7 @@ struct UntitledApp: App {
                 .environment(dependencies)
                 .environment(dependencies.settings)
         } label: {
-            MenuBarLabel(recording: dependencies.recording)
+            MenuBarLabel(recording: dependencies.recording, replay: dependencies.replay)
         }
 
         Settings {

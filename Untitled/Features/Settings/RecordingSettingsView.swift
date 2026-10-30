@@ -15,7 +15,6 @@ struct RecordingSettingsView: View {
                     Text("30 fps").tag(30)
                     Text("60 fps").tag(60)
                 }
-                Toggle("Show clicks", isOn: $settings.showsClicks)
             }
 
             Section("Audio") {
@@ -24,6 +23,7 @@ struct RecordingSettingsView: View {
             }
 
             Section {
+                Toggle("Keep a replay buffer", isOn: $settings.replayBufferEnabled)
                 Picker("Keep the last", selection: $settings.replayBufferSeconds) {
                     Text("15 seconds").tag(15)
                     Text("30 seconds").tag(30)
@@ -32,7 +32,7 @@ struct RecordingSettingsView: View {
                     Text("5 minutes").tag(300)
                     Text("10 minutes").tag(600)
                 }
-                Picker("Disk limit", selection: $settings.replayDiskLimitGB) {
+                Picker("Size limit", selection: $settings.replayDiskLimitGB) {
                     Text("1 GB").tag(1)
                     Text("2 GB").tag(2)
                     Text("4 GB").tag(4)
@@ -42,7 +42,9 @@ struct RecordingSettingsView: View {
             } header: {
                 Text("Replay Buffer")
             } footer: {
-                PendingFeatureFooter()
+                Text("Untitled quietly records your screen at standard resolution and keeps only the last stretch, in a temporary folder that's cleared when it stops. Save it from the menu bar, the Capture tab, or its shortcut.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

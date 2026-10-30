@@ -20,6 +20,11 @@ struct MenuBarContent: View {
                 .menuShortcut(settings.shortcuts[action.id])
         }
 
+        Toggle("Replay Buffer", isOn: Binding(
+            get: { settings.replayBufferEnabled },
+            set: { dependencies.replay.setEnabled($0) }
+        ))
+
         Divider()
 
         Button("Open Untitled") {
@@ -42,13 +47,23 @@ struct MenuBarContent: View {
 }
 
 /// The menu bar icon, which turns into a red record symbol while recording.
+/// While the replay buffer runs, it shows a rewind symbol so it's never on unnoticed.
 struct MenuBarLabel: View {
     let recording: RecordingCoordinator
+    let replay: ReplayCoordinator
 
     var body: some View {
-        Image(systemName: recording.isRecording ? "record.circle.fill" : "camera.aperture")
-            .symbolRenderingMode(recording.isRecording ? .multicolor : .monochrome)
-            .accessibilityLabel(recording.isRecording ? "Untitled, recording" : "Untitled")
+        if recording.isRecording {
+            Image(systemName: "record.circle.fill")
+                .symbolRenderingMode(.multicolor)
+                .accessibilityLabel("Untitled, recording")
+        } else if replay.buffer.isOn {
+            Image(systemName: "gobackward")
+                .accessibilityLabel("Untitled, replay buffer on")
+        } else {
+            Image(systemName: "camera.aperture")
+                .accessibilityLabel("Untitled")
+        }
     }
 }
 
@@ -63,10 +78,12 @@ struct QuickActionButton: View {
                 Task { await dependencies.capture.capture(mode) }
             } else if let mode = action.recordingMode {
                 Task { await dependencies.recording.toggle(mode) }
+            } else if action.savesReplay {
+                Task { await dependencies.replay.saveClip() }
             }
         }
         .labelStyle(.titleAndIcon)
-        .disabled(!action.isAvailable)
+        .disabled(!action.isAvailable || (action.savesReplay && !dependencies.replay.buffer.isOn))
     }
 
     private var title: String {

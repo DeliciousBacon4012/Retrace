@@ -6,6 +6,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         dependencies.start()
+        #if DEBUG
+        // Lets automated checks open the editor: `open Untitled.app --args -UntitledDebugOpenImage <path>`.
+        if let path = UserDefaults.standard.string(forKey: "UntitledDebugOpenImage") {
+            dependencies.editor.open(fileAt: URL(fileURLWithPath: path))
+        }
+        #endif
     }
 
     /// Keep running in the menu bar after the main window closes.

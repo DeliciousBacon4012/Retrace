@@ -10,8 +10,11 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
     /// The recording this action starts or stops, or `nil` if it is not a recording action.
     var recordingMode: CaptureMode?
 
+    /// Whether the action saves the replay buffer.
+    var savesReplay = false
+
     /// Whether the action does anything yet.
-    var isAvailable: Bool { captureMode != nil || recordingMode != nil }
+    var isAvailable: Bool { captureMode != nil || recordingMode != nil || savesReplay }
 
     /// The screenshot actions that work today, for toolbars and the Capture tab.
     static var screenshots: [QuickAction] { all.filter { $0.captureMode != nil } }
@@ -25,6 +28,6 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
         QuickAction(id: "recordArea", title: String(localized: "Record Area"), symbolName: "rectangle.dashed.badge.record", recordingMode: .area),
         QuickAction(id: "recordWindow", title: String(localized: "Record Window"), symbolName: "macwindow.badge.plus", recordingMode: .window),
         QuickAction(id: "recordScreen", title: String(localized: "Record Screen"), symbolName: "record.circle", recordingMode: .screen),
-        QuickAction(id: "saveReplay", title: String(localized: "Save Replay"), symbolName: "gobackward"),
+        QuickAction(id: "saveReplay", title: String(localized: "Save Replay"), symbolName: "gobackward", savesReplay: true),
     ]
 }

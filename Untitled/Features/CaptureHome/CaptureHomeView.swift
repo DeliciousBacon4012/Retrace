@@ -66,6 +66,8 @@ private struct CaptureHomeContent: View {
                     }
                 }
 
+                ReplayRow()
+
                 if !library.items.isEmpty {
                     section("Recent") {
                         RecentCapturesRow(items: Array(library.items.prefix(8)), showLibrary: showLibrary)
@@ -151,6 +153,59 @@ private struct RecentCapturesRow: View {
             .scrollIndicators(.never)
             Button("Show All", action: showLibrary)
                 .buttonStyle(.link)
+        }
+    }
+}
+
+/// Turns the replay buffer on and off and saves what it holds.
+private struct ReplayRow: View {
+    @Environment(AppDependencies.self) private var dependencies
+    @Environment(SettingsStore.self) private var settings
+
+    var body: some View {
+        let buffer = dependencies.replay.buffer
+
+        GroupBox {
+            HStack(spacing: 12) {
+                Image(systemName: "gobackward")
+                    .font(.title2)
+                    .foregroundStyle(buffer.isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                    .symbolEffect(.rotate, value: buffer.isOn)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Replay Buffer")
+                        .font(.headline)
+                    Text(status(buffer))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Save Replay") {
+                    Task { await dependencies.replay.saveClip() }
+                }
+                .disabled(!buffer.isOn || buffer.state == .saving)
+                Toggle("Replay Buffer", isOn: Binding(
+                    get: { settings.replayBufferEnabled },
+                    set: { dependencies.replay.setEnabled($0) }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+            }
+            .padding(6)
+        }
+    }
+
+    private func status(_ buffer: ReplayBuffer) -> String {
+        let length = Duration.seconds(settings.replayBufferSeconds).formatted(.units(allowed: [.minutes, .seconds], width: .wide))
+        switch buffer.state {
+        case .off: return String(localized: "Off. Turn it on to always keep the last \(length).")
+        case .starting: return String(localized: "Starting…")
+        case .running:
+            if let shortcut = settings.shortcuts["saveReplay"] {
+                return String(localized: "Keeping the last \(length). Press \(shortcut.displayString) to save it.")
+            }
+            return String(localized: "Keeping the last \(length).")
+        case .saving: return String(localized: "Saving…")
         }
     }
 }

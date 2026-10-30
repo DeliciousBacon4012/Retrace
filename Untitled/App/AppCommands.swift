@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Menu bar commands for the main window.
 struct AppCommands: Commands {
@@ -8,6 +9,18 @@ struct AppCommands: Commands {
     @FocusedValue(\.selectedTab) private var selectedTab
 
     var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("Annotate Image…") {
+                let panel = NSOpenPanel()
+                panel.allowedContentTypes = [.image]
+                panel.allowsMultipleSelection = true
+                panel.directoryURL = dependencies.settings.saveFolderURL
+                guard panel.runModal() == .OK else { return }
+                panel.urls.forEach { dependencies.editor.open(fileAt: $0) }
+            }
+            .keyboardShortcut("o")
+        }
+
         CommandMenu("Capture") {
             ForEach(QuickAction.all) { action in
                 QuickActionButton(action: action)

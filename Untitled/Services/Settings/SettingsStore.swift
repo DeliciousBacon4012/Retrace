@@ -44,6 +44,8 @@ final class SettingsStore {
 
     // MARK: Replay buffer
 
+    /// Whether the replay buffer runs, including after the next launch.
+    var replayBufferEnabled = Defaults.replayBufferEnabled { didSet { save(replayBufferEnabled, .replayBufferEnabled) } }
     var replayBufferSeconds = Defaults.replayBufferSeconds { didSet { save(replayBufferSeconds, .replayBufferSeconds) } }
     var replayDiskLimitGB = Defaults.replayDiskLimitGB { didSet { save(replayDiskLimitGB, .replayDiskLimitGB) } }
 
@@ -99,6 +101,7 @@ final class SettingsStore {
         recordsSystemAudio = value(.recordsSystemAudio, default: Defaults.recordsSystemAudio)
         recordsMicrophone = value(.recordsMicrophone, default: Defaults.recordsMicrophone)
         showsClicks = value(.showsClicks, default: Defaults.showsClicks)
+        replayBufferEnabled = value(.replayBufferEnabled, default: Defaults.replayBufferEnabled)
         replayBufferSeconds = value(.replayBufferSeconds, default: Defaults.replayBufferSeconds)
         replayDiskLimitGB = value(.replayDiskLimitGB, default: Defaults.replayDiskLimitGB)
         shortcuts = loadShortcuts()
@@ -166,6 +169,7 @@ private extension SettingsStore {
         case recordsSystemAudio
         case recordsMicrophone
         case showsClicks
+        case replayBufferEnabled
         case replayBufferSeconds
         case replayDiskLimitGB
         case shortcuts
@@ -190,6 +194,7 @@ private extension SettingsStore {
         static let recordsSystemAudio = true
         static let recordsMicrophone = false
         static let showsClicks = false
+        static let replayBufferEnabled = false
         static let replayBufferSeconds = 60
         static let replayDiskLimitGB = 4
 
@@ -200,6 +205,7 @@ private extension SettingsStore {
             "captureWindow": Shortcut(keyCode: UInt32(kVK_ANSI_5), modifiers: [.option, .shift, .command]),
             "recordArea": Shortcut(keyCode: UInt32(kVK_ANSI_6), modifiers: [.option, .shift, .command]),
             "recordScreen": Shortcut(keyCode: UInt32(kVK_ANSI_7), modifiers: [.option, .shift, .command]),
+            "saveReplay": Shortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: [.option, .shift, .command]),
         ]
 
         static var saveFolderPath: String {

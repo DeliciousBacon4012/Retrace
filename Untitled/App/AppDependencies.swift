@@ -16,6 +16,7 @@ final class AppDependencies {
     let library: CaptureLibrary
     let capture: CaptureCoordinator
     let recording: RecordingCoordinator
+    let replay: ReplayCoordinator
     let shortcuts: GlobalShortcuts
     let editor: EditorPresenter
 
@@ -54,12 +55,16 @@ final class AppDependencies {
             quickAccess: quickAccess
         )
         self.recording = recording
-        shortcuts = GlobalShortcuts(settings: settings) { [weak capture, weak recording] actionID in
+        let replay = ReplayCoordinator(settings: settings, permissions: permissions, storage: FileCaptureStorage(), quickAccess: quickAccess)
+        self.replay = replay
+        shortcuts = GlobalShortcuts(settings: settings) { [weak capture, weak recording, weak replay] actionID in
             guard let action = QuickAction.all.first(where: { $0.id == actionID }) else { return }
             if let mode = action.captureMode {
                 Task { await capture?.capture(mode) }
             } else if let mode = action.recordingMode {
                 Task { await recording?.toggle(mode) }
+            } else if action.savesReplay {
+                Task { await replay?.saveClip() }
             }
         }
     }
@@ -80,6 +85,7 @@ final class AppDependencies {
         library.start()
         followSaveFolderSetting()
         shortcuts.start()
+        replay.start()
         Log.app.info("Untitled \(Bundle.main.displayVersion, privacy: .public) started")
     }
 
