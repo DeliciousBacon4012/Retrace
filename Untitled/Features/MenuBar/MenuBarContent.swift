@@ -3,12 +3,19 @@ import SwiftUI
 
 /// The menu shown from the menu bar icon.
 struct MenuBarContent: View {
+    @Environment(AppDependencies.self) private var dependencies
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         ForEach(QuickAction.all) { action in
-            Button(action.title, systemImage: action.symbolName) {}
-                .disabled(true)
+            if let mode = action.captureMode {
+                Button(action.title, systemImage: action.symbolName) {
+                    Task { await dependencies.capture.capture(mode) }
+                }
+            } else {
+                Button(action.title, systemImage: action.symbolName) {}
+                    .disabled(true)
+            }
         }
 
         Divider()

@@ -7,12 +7,16 @@ struct HomeView: View {
     @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
-        HomeContent(viewModel: HomeViewModel(permissions: dependencies.permissions))
+        HomeContent(
+            viewModel: HomeViewModel(permissions: dependencies.permissions),
+            capture: dependencies.capture
+        )
     }
 }
 
 private struct HomeContent: View {
     @State var viewModel: HomeViewModel
+    let capture: CaptureCoordinator
 
     private let columns = [GridItem(.adaptive(minimum: 140, maximum: 220), spacing: 12)]
 
@@ -31,13 +35,22 @@ private struct HomeContent: View {
                         .font(.headline)
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(QuickAction.all) { action in
-                            QuickActionTile(action: action, isEnabled: false) {}
+                            QuickActionTile(
+                                action: action,
+                                isEnabled: action.captureMode != nil && !capture.isCapturing
+                            ) {
+                                if let mode = action.captureMode {
+                                    Task { await capture.capture(mode) }
+                                }
+                            }
                         }
                     }
-                    Text("Capture tools arrive in the next update. The Roadmap tab lists everything planned.")
+                    Text("Drag to capture an area, click a window to capture it, or press Escape to cancel.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+
+                SaveLocationRow()
             }
             .padding(24)
             .frame(maxWidth: 760, alignment: .leading)
@@ -68,6 +81,56 @@ private struct HomeContent: View {
             }
             .font(.callout)
             .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// Where captures are saved, with buttons to change it or reveal it.
+private struct SaveLocationRow: View {
+    @Environment(SettingsStore.self) private var settings
+
+    var body: some View {
+        @Bindable var settings = settings
+
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "folder.fill")
+                        .foregroundStyle(.tint)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Save to")
+                            .font(.headline)
+                        Text(settings.saveFolderURL.path(percentEncoded: false))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer()
+                    Button("Change…") {
+                        if let folder = FolderPicker.chooseFolder(startingAt: settings.saveFolderURL) {
+                            settings.saveFolderPath = folder.path(percentEncoded: false)
+                        }
+                    }
+                    Button("Show in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([settings.saveFolderURL])
+                    }
+                }
+                Divider()
+                HStack(spacing: 16) {
+                    Toggle("Save", isOn: $settings.savesToFolder)
+                    Toggle("Copy to clipboard", isOn: $settings.copiesToClipboard)
+                    Toggle("Show thumbnail", isOn: $settings.showsQuickAccess)
+                    Spacer()
+                    Picker("Format", selection: $settings.imageFormat) {
+                        ForEach(ImageFormat.allCases) { Text($0.title).tag($0) }
+                    }
+                    .fixedSize()
+                }
+                .toggleStyle(.checkbox)
+            }
+            .padding(6)
         }
     }
 }
@@ -128,13 +191,17 @@ private struct PermissionCard: View {
 }
 
 #Preview("Needs permission") {
+    let dependencies = AppDependencies.preview()
     HomeView()
-        .environment(AppDependencies.preview())
-        .frame(width: 700, height: 520)
+        .environment(dependencies)
+        .environment(dependencies.settings)
+        .frame(width: 700, height: 620)
 }
 
 #Preview("Granted") {
+    let dependencies = AppDependencies.preview(screenRecording: .granted)
     HomeView()
-        .environment(AppDependencies.preview(screenRecording: .granted))
-        .frame(width: 700, height: 520)
+        .environment(dependencies)
+        .environment(dependencies.settings)
+        .frame(width: 700, height: 620)
 }

@@ -6,9 +6,9 @@ import Foundation
 nonisolated enum FeatureCatalog {
     static let all: [Feature] = [
         // Screenshots
-        Feature("capture.area", .capture, .core, String(localized: "Area capture with loupe and size readout")),
-        Feature("capture.window", .capture, .core, String(localized: "Window capture with shadow and background options")),
-        Feature("capture.screen", .capture, .core, String(localized: "Full screen and all-displays capture")),
+        Feature("capture.area", .capture, .core, String(localized: "Area capture with loupe and size readout"), isAvailable: true),
+        Feature("capture.window", .capture, .core, String(localized: "Window capture with shadow and background options"), isAvailable: true),
+        Feature("capture.screen", .capture, .core, String(localized: "Full screen and all-displays capture"), isAvailable: true),
         Feature("capture.repeat", .capture, .core, String(localized: "Repeat the last area")),
         Feature("capture.keys", .capture, .core, String(localized: "Keyboard controls while selecting")),
         Feature("capture.freeze", .capture, .core, String(localized: "Freeze the screen while selecting")),
@@ -20,8 +20,8 @@ nonisolated enum FeatureCatalog {
         Feature("capture.appWindows", .capture, .maybe, String(localized: "Capture every window of one app")),
 
         // Quick Access
-        Feature("quick.thumbnail", .quickAccess, .core, String(localized: "Floating thumbnail after each capture")),
-        Feature("quick.drag", .quickAccess, .core, String(localized: "Drag captures into any app")),
+        Feature("quick.thumbnail", .quickAccess, .core, String(localized: "Floating thumbnail after each capture"), isAvailable: true),
+        Feature("quick.drag", .quickAccess, .core, String(localized: "Drag captures into any app"), isAvailable: true),
         Feature("quick.actions", .quickAccess, .core, String(localized: "Copy, save, annotate, pin, and delete buttons")),
         Feature("quick.autoClose", .quickAccess, .core, String(localized: "Auto-close after a delay")),
         Feature("quick.position", .quickAccess, .next, String(localized: "Choose overlay corner and size")),
@@ -29,7 +29,7 @@ nonisolated enum FeatureCatalog {
         Feature("quick.restore", .quickAccess, .maybe, String(localized: "Restore the last closed capture")),
 
         // Clipboard
-        Feature("clipboard.copy", .clipboard, .core, String(localized: "Copy to clipboard after capture")),
+        Feature("clipboard.copy", .clipboard, .core, String(localized: "Copy to clipboard after capture"), isAvailable: true),
         Feature("clipboard.annotate", .clipboard, .core, String(localized: "Annotate the image on the clipboard")),
         Feature("clipboard.asFile", .clipboard, .core, String(localized: "Copy as image or as file")),
         Feature("clipboard.markdown", .clipboard, .next, String(localized: "Copy as Markdown or HTML")),
@@ -81,8 +81,8 @@ nonisolated enum FeatureCatalog {
         Feature("shelf.convert", .shelf, .maybe, String(localized: "Convert and compress on drop")),
 
         // iCloud and Storage
-        Feature("storage.folder", .storage, .core, String(localized: "Save folder and filename template")),
-        Feature("storage.formats", .storage, .core, String(localized: "PNG, JPEG, HEIC, TIFF, and PDF")),
+        Feature("storage.folder", .storage, .core, String(localized: "Save folder and filename template"), isAvailable: true),
+        Feature("storage.formats", .storage, .core, String(localized: "PNG, JPEG, HEIC, TIFF, and PDF"), isAvailable: true),
         Feature("storage.icloud", .storage, .next, String(localized: "Save to iCloud Drive")),
         Feature("storage.settingsSync", .storage, .next, String(localized: "Sync settings across Macs")),
         Feature("storage.uploads", .storage, .maybe, String(localized: "Custom upload destinations")),

@@ -14,11 +14,12 @@ struct UntitledApp: App {
         }
         .defaultSize(width: 920, height: 600)
         .commands {
-            AppCommands()
+            AppCommands(capture: dependencies.capture)
         }
 
         MenuBarExtra("Untitled", systemImage: "camera.aperture") {
             MenuBarContent()
+                .environment(dependencies)
         }
 
         Settings {

@@ -12,17 +12,27 @@ final class AppDependencies {
     let permissions: any PermissionProviding
     let launchAtLogin: any LaunchAtLoginControlling
     let dockIcon: any DockIconControlling
+    let capture: CaptureCoordinator
 
     init(
         settings: SettingsStore,
         permissions: any PermissionProviding,
         launchAtLogin: any LaunchAtLoginControlling,
-        dockIcon: any DockIconControlling
+        dockIcon: any DockIconControlling,
+        clipboard: any ClipboardWriting
     ) {
         self.settings = settings
         self.permissions = permissions
         self.launchAtLogin = launchAtLogin
         self.dockIcon = dockIcon
+        capture = CaptureCoordinator(
+            settings: settings,
+            permissions: permissions,
+            capturer: ScreenCaptureKitService(),
+            storage: FileCaptureStorage(),
+            clipboard: clipboard,
+            quickAccess: QuickAccessController(settings: settings, clipboard: clipboard)
+        )
     }
 
     static func live() -> AppDependencies {
@@ -30,7 +40,8 @@ final class AppDependencies {
             settings: SettingsStore(),
             permissions: SystemPermissionService(),
             launchAtLogin: SystemLaunchAtLoginService(),
-            dockIcon: SystemDockIconService()
+            dockIcon: SystemDockIconService(),
+            clipboard: SystemClipboard()
         )
     }
 
@@ -59,7 +70,8 @@ extension AppDependencies {
             settings: SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard),
             permissions: PreviewPermissionService(status: screenRecording),
             launchAtLogin: PreviewLaunchAtLoginService(),
-            dockIcon: PreviewDockIconService()
+            dockIcon: PreviewDockIconService(),
+            clipboard: PreviewClipboard()
         )
     }
 }
