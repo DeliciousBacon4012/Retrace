@@ -21,7 +21,7 @@ final class EditorPresenter {
 
     /// Opens a saved image. Shows an alert if the file isn't a readable image.
     func open(fileAt url: URL) {
-        if let existing = controllers.first(where: { $0.document.fileURL?.standardizedFileURL == url.standardizedFileURL }) {
+        if let existing = controllers.first(where: { $0.editorDocument.fileURL?.standardizedFileURL == url.standardizedFileURL }) {
             existing.window?.makeKeyAndOrderFront(nil)
             NSApp.activate()
             return
@@ -49,13 +49,13 @@ final class EditorPresenter {
 
 /// One editor window.
 final class EditorWindowController: NSWindowController, NSWindowDelegate {
-    let document: EditorDocument
+    let editorDocument: EditorDocument
     private let settings: SettingsStore
     private let clipboard: any ClipboardWriting
     private let onClose: (EditorWindowController) -> Void
 
     init(document: EditorDocument, settings: SettingsStore, clipboard: any ClipboardWriting, onClose: @escaping (EditorWindowController) -> Void) {
-        self.document = document
+        self.editorDocument = document
         self.settings = settings
         self.clipboard = clipboard
         self.onClose = onClose
@@ -103,27 +103,27 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func updateTitle() {
-        window?.title = document.fileURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Screenshot")
-        window?.representedURL = document.fileURL
+        window?.title = editorDocument.fileURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Screenshot")
+        window?.representedURL = editorDocument.fileURL
     }
 
     // MARK: Actions
 
     private func copyImage() {
         guard let image = renderOrWarn() else { return }
-        let size = NSSize(width: CGFloat(image.width) / document.scale, height: CGFloat(image.height) / document.scale)
+        let size = NSSize(width: CGFloat(image.width) / editorDocument.scale, height: CGFloat(image.height) / editorDocument.scale)
         clipboard.copy(NSImage(cgImage: image, size: size))
     }
 
     /// Saves over the original file, or asks where to save if there isn't one.
     @discardableResult
     private func save() -> Bool {
-        guard let url = document.fileURL ?? askForSaveLocation() else { return false }
+        guard let url = editorDocument.fileURL ?? askForSaveLocation() else { return false }
         return write(to: url)
     }
 
     private func finish() {
-        guard document.hasUnsavedChanges || document.fileURL == nil else {
+        guard editorDocument.hasUnsavedChanges || editorDocument.fileURL == nil else {
             copyImage()
             close()
             return
@@ -141,7 +141,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         do {
             let data = try ImageEncoder.data(for: image, format: format)
             try data.write(to: url, options: .atomic)
-            document.markSaved(to: url)
+            editorDocument.markSaved(to: url)
             updateTitle()
             Log.capture.info("Saved edited image")
             return true
@@ -162,8 +162,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func renderOrWarn() -> CGImage? {
-        document.finishTextEditing()
-        guard let image = AnnotationRenderer.export(document) else {
+        editorDocument.finishTextEditing()
+        guard let image = AnnotationRenderer.export(editorDocument) else {
             ErrorPresenter.present(String(localized: "The edited image couldn't be created."), recovery: String(localized: "Try again, or undo the last change."))
             return nil
         }
@@ -173,7 +173,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     // MARK: NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard document.hasUnsavedChanges else { return true }
+        guard editorDocument.hasUnsavedChanges else { return true }
         let alert = NSAlert()
         alert.messageText = String(localized: "Save changes to this screenshot?")
         alert.informativeText = String(localized: "Your marks will be lost if you don't save them.")
