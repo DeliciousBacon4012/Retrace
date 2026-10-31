@@ -95,9 +95,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     private static func initialSize(for document: EditorDocument) -> NSSize {
         let visible = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
         let pointSize = NSSize(width: document.imageSize.width / document.scale, height: document.imageSize.height / document.scale)
-        let chrome = NSSize(width: 48, height: 100)
+        // Room for the canvas padding, the toolbar, and the inspector beside the image.
+        let chrome = NSSize(width: 72 + 280, height: 120)
         return NSSize(
-            width: min(max(pointSize.width + chrome.width, 1000), visible.width * 0.9),
+            width: min(max(pointSize.width + chrome.width, 1080), visible.width * 0.92),
             height: min(max(pointSize.height + chrome.height, 480), visible.height * 0.85)
         )
     }

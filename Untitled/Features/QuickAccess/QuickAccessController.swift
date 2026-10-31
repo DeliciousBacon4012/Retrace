@@ -76,7 +76,7 @@ final class QuickAccessController {
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
         } completionHandler: {
-            panel.orderOut(nil)
+            MainActor.assumeIsolated { panel.orderOut(nil) }
         }
         layout(placingImmediately: nil)
     }
