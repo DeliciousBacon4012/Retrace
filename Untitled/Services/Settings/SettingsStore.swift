@@ -28,6 +28,10 @@ final class SettingsStore {
     var overlayAutoCloseSeconds = Defaults.overlayAutoCloseSeconds { didSet { save(overlayAutoCloseSeconds, .overlayAutoCloseSeconds) } }
     /// How quickly Quick Access thumbnails glide in and fade away.
     var overlaySpeed = Defaults.overlaySpeed { didSet { save(overlaySpeed.rawValue, .overlaySpeed) } }
+    var quickAccessLayout = Defaults.quickAccessLayout { didSet { save(quickAccessLayout.rawValue, .quickAccessLayout) } }
+    var quickAccessSize = Defaults.quickAccessSize { didSet { save(quickAccessSize.rawValue, .quickAccessSize) } }
+    /// The most thumbnails shown at once; older ones close first.
+    var quickAccessMaxVisible = Defaults.quickAccessMaxVisible { didSet { save(quickAccessMaxVisible, .quickAccessMaxVisible) } }
 
     // MARK: Output
 
@@ -110,6 +114,9 @@ final class SettingsStore {
         overlayCorner = OverlayCorner(rawValue: value(.overlayCorner, default: "")) ?? Defaults.overlayCorner
         overlayAutoCloseSeconds = value(.overlayAutoCloseSeconds, default: Defaults.overlayAutoCloseSeconds)
         overlaySpeed = OverlaySpeed(rawValue: value(.overlaySpeed, default: "")) ?? Defaults.overlaySpeed
+        quickAccessLayout = QuickAccessLayout(rawValue: value(.quickAccessLayout, default: "")) ?? Defaults.quickAccessLayout
+        quickAccessSize = QuickAccessSize(rawValue: value(.quickAccessSize, default: "")) ?? Defaults.quickAccessSize
+        quickAccessMaxVisible = min(max(value(.quickAccessMaxVisible, default: Defaults.quickAccessMaxVisible), 1), 8)
         imageFormat = ImageFormat(rawValue: value(.imageFormat, default: "")) ?? Defaults.imageFormat
         downscalesRetina = value(.downscalesRetina, default: Defaults.downscalesRetina)
         imageQuality = value(.imageQuality, default: Defaults.imageQuality)
@@ -181,6 +188,9 @@ private extension SettingsStore {
         case overlayCorner
         case overlayAutoCloseSeconds
         case overlaySpeed
+        case quickAccessLayout
+        case quickAccessSize
+        case quickAccessMaxVisible
         case imageFormat
         case downscalesRetina
         case imageQuality
@@ -210,6 +220,9 @@ private extension SettingsStore {
         static let overlayCorner = OverlayCorner.bottomLeft
         static let overlayAutoCloseSeconds = 0
         static let overlaySpeed = OverlaySpeed.normal
+        static let quickAccessLayout = QuickAccessLayout.stack
+        static let quickAccessSize = QuickAccessSize.medium
+        static let quickAccessMaxVisible = 5
         static let imageFormat = ImageFormat.png
         static let downscalesRetina = false
         static let imageQuality = 0.85

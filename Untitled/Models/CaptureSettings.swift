@@ -89,4 +89,60 @@ nonisolated enum OverlayCorner: String, CaseIterable, Identifiable, Sendable {
         case .topRight: String(localized: "Top right")
         }
     }
+
+    var symbolName: String {
+        switch self {
+        case .bottomLeft: "rectangle.inset.bottomleft.filled"
+        case .bottomRight: "rectangle.inset.bottomright.filled"
+        case .topLeft: "rectangle.inset.topleft.filled"
+        case .topRight: "rectangle.inset.topright.filled"
+        }
+    }
+
+    var isBottom: Bool { self == .bottomLeft || self == .bottomRight }
+    var isLeft: Bool { self == .bottomLeft || self == .topLeft }
+}
+
+/// How several Quick Access thumbnails are arranged.
+nonisolated enum QuickAccessLayout: String, CaseIterable, Identifiable, Sendable {
+    /// A neat pile that rises into evenly spaced floors while the pointer is over it.
+    case stack
+    /// Always spread out, one above the other.
+    case column
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .stack: String(localized: "Stack")
+        case .column: String(localized: "Column")
+        }
+    }
+}
+
+/// How big Quick Access thumbnails are.
+nonisolated enum QuickAccessSize: String, CaseIterable, Identifiable, Sendable {
+    case small
+    case medium
+    case large
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .small: String(localized: "Small")
+        case .medium: String(localized: "Medium")
+        case .large: String(localized: "Large")
+        }
+    }
+
+    /// Every thumbnail has the same 16:10 shape, so a stack lines up exactly.
+    var cardSize: CGSize {
+        let width: CGFloat = switch self {
+        case .small: 168
+        case .medium: 200
+        case .large: 240
+        }
+        return CGSize(width: width, height: (width * 10 / 16).rounded())
+    }
 }
