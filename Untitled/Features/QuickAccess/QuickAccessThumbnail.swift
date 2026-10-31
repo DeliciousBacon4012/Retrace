@@ -1,55 +1,59 @@
 import AppKit
+import Observation
 import SwiftUI
 
-enum ThumbnailMetrics {
-    /// Clear space around each thumbnail for its shadow and the corner buttons.
-    static let shadowPadding: CGFloat = 16
-    static let maximumSide: CGFloat = 220
-    /// How far back a thumbnail steps when another one is in front.
-    static let backScale: CGFloat = 0.88
+/// Everything the Quick Access stack shows, newest thumbnail first.
+@Observable
+final class QuickAccessStackModel {
+    struct Card: Identifiable {
+        let id: UUID
+        var capture: CapturedImage
+        /// A small copy for display, so a stack of 5K captures stays light.
+        let thumbnail: NSImage
+    }
+
+    var cards: [Card] = []
+    var isExpanded = false
+    var hoveredID: UUID?
+    /// Sideways movement of a thumbnail being flicked away.
+    var swipeOffsets: [UUID: CGFloat] = [:]
+    var corner: OverlayCorner = .bottomLeft
+    var geometry = StackGeometry(cardSize: QuickAccessSize.medium.cardSize)
+    var speed: Double = 1
+
+    /// The thumbnail under a point in the stack's window (top-left origin), front-most first.
+    func cardID(at point: CGPoint, in size: CGSize) -> UUID? {
+        for (index, card) in cards.enumerated() {
+            let place = geometry.placement(at: index, count: cards.count, expanded: isExpanded)
+            guard place.opacity > 0 else { continue }
+            if geometry.frame(at: index, count: cards.count, expanded: isExpanded, in: size, fromBottom: corner.isBottom).contains(point) {
+                return card.id
+            }
+        }
+        return nil
+    }
 }
 
-/// The floating thumbnail shown after a capture.
-///
-/// Hover for actions. Double-click to open it in the editor. Drag it into any app,
-/// or flick it toward the screen edge to put it away.
-struct QuickAccessThumbnail: View {
+/// The Quick Access stack: one window, one layout, so thumbnails never pile up or fight over hover.
+struct QuickAccessStackView: View {
     struct Actions {
-        var copy: () -> Void
-        var save: () -> Void
-        var delete: () -> Void
-        var pin: () -> Void
-        var open: () -> Void
-        var close: () -> Void
-        var hover: (Bool) -> Void
+        var copy: (UUID) -> Void
+        var save: (UUID) -> Void
+        var delete: (UUID) -> Void
+        var pin: (UUID) -> Void
+        var open: (UUID) -> Void
+        var close: (UUID) -> Void
+        /// The pointer entered or left the whole stack.
+        var hoverStack: (Bool) -> Void
     }
 
-    let capture: CapturedImage
-    let stack: QuickAccessStack
-    /// -1 when the stack sits on the left edge, 1 on the right.
-    let edge: CGFloat
-    let alignment: OverlayCorner
-    let speed: Double
+    let model: QuickAccessStackModel
     let actions: Actions
 
-    @State private var isShown = false
-    @State private var isHovering = false
-    @State private var didCopy = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var isFocused: Bool { stack.focusedID == capture.id }
-
-    private var thumbnailSize: CGSize {
-        let maximum = ThumbnailMetrics.maximumSide
-        let size = capture.pointSize
-        guard size.width > 0, size.height > 0 else { return CGSize(width: maximum, height: maximum * 0.6) }
-        let ratio = min(maximum / size.width, maximum / size.height)
-        return CGSize(width: max(size.width * ratio, 130), height: max(size.height * ratio, 84))
-    }
-
-    /// Thumbnails grow and shrink toward the screen edge they sit on.
-    private var anchor: UnitPoint {
-        switch alignment {
+    private var alignment: Alignment {
+        switch model.corner {
         case .bottomLeft: .bottomLeading
         case .bottomRight: .bottomTrailing
         case .topLeft: .topLeading
@@ -57,65 +61,132 @@ struct QuickAccessThumbnail: View {
         }
     }
 
+    /// -1 when the stack sits on the left edge, 1 on the right.
+    private var edge: CGFloat { model.corner.isLeft ? -1 : 1 }
+
     var body: some View {
-        card
-            .scaleEffect(isFocused ? 1 : ThumbnailMetrics.backScale, anchor: anchor)
-            .blur(radius: isFocused ? 0 : 1.2)
-            .saturation(isFocused ? 1 : 0.45)
-            .brightness(isFocused ? 0 : -0.04)
-            .opacity(isFocused ? 1 : 0.88)
-            .animation(.smooth(duration: 0.32 * speed), value: isFocused)
-            .padding(ThumbnailMetrics.shadowPadding)
-            // Arrives from the screen edge with a soft spring.
-            .offset(x: isShown || reduceMotion ? 0 : edge * 70)
-            .scaleEffect(isShown ? 1 : 0.9, anchor: anchor)
-            .opacity(isShown ? 1 : 0)
-            .onAppear {
-                withAnimation(.spring(duration: 0.55 * speed, bounce: 0.22)) { isShown = true }
+        let count = model.cards.count
+        ZStack(alignment: alignment) {
+            ForEach(Array(model.cards.enumerated()), id: \.element.id) { index, card in
+                let place = model.geometry.placement(at: index, count: count, expanded: model.isExpanded)
+                let isReachable = model.isExpanded || index == 0
+                QuickAccessCard(
+                    card: card,
+                    size: model.geometry.cardSize,
+                    isHovered: isReachable && model.hoveredID == card.id,
+                    badge: !model.isExpanded && index == 0 && count > 1 ? count : nil,
+                    actions: actions
+                )
+                .onHover { hovering in
+                    if hovering {
+                        model.hoveredID = card.id
+                    } else if model.hoveredID == card.id {
+                        model.hoveredID = nil
+                    }
+                }
+                .allowsHitTesting(isReachable)
+                .scaleEffect(place.scale, anchor: model.corner.isBottom ? .top : .bottom)
+                .opacity(place.opacity)
+                .offset(
+                    x: model.swipeOffsets[card.id] ?? 0,
+                    y: model.corner.isBottom ? -place.distance : place.distance
+                )
+                .zIndex(Double(count - index))
+                .animation(floorAnimation(index: index), value: model.isExpanded)
+                .transition(
+                    .asymmetric(
+                        insertion: .offset(x: reduceMotion ? 0 : edge * 60).combined(with: .opacity),
+                        removal: .opacity
+                    )
+                )
             }
-            .onHover { hovering in
-                withAnimation(.smooth(duration: 0.22 * speed)) { isHovering = hovering }
-                actions.hover(hovering)
-            }
-            .onTapGesture(count: 2, perform: actions.open)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(capture.isVideo ? "Recording" : "Screenshot")
-            .accessibilityAction(named: "Open in Editor", actions.open)
-            .accessibilityAction(named: "Save", actions.save)
-            .accessibilityAction(named: "Delete", actions.delete)
+        }
+        .padding(model.geometry.padding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+        .onHover(perform: actions.hoverStack)
     }
 
-    private var card: some View {
-        Image(nsImage: capture.nsImage)
+    /// Floors rise one after another, nearest first, like a quick ripple.
+    private func floorAnimation(index: Int) -> Animation {
+        guard !reduceMotion else { return .easeInOut(duration: 0.15) }
+        let spring: Animation = model.isExpanded
+            ? .spring(response: 0.38 * model.speed, dampingFraction: 0.82)
+            : .spring(response: 0.32 * model.speed, dampingFraction: 0.9)
+        return spring.delay(model.isExpanded ? Double(index) * 0.025 * model.speed : 0)
+    }
+}
+
+/// One thumbnail: the capture clipped to rounded corners, with actions while the pointer is over it.
+private struct QuickAccessCard: View {
+    let card: QuickAccessStackModel.Card
+    let size: CGSize
+    let isHovered: Bool
+    /// How many captures are stacked, shown on the front thumbnail while collapsed.
+    let badge: Int?
+    let actions: QuickAccessStackView.Actions
+
+    @State private var didCopy = false
+
+    private var id: UUID { card.id }
+
+    /// Tall captures show their top, where titles and headers usually are.
+    private var cropAlignment: Alignment {
+        let pixels = card.capture.pointSize
+        return pixels.height > pixels.width ? .top : .center
+    }
+
+    var body: some View {
+        Image(nsImage: card.thumbnail)
             .resizable()
             .aspectRatio(contentMode: .fill)
-            .frame(width: thumbnailSize.width, height: thumbnailSize.height)
-            .clipShape(.rect(cornerRadius: Design.radiusM - 4))
+            .frame(width: size.width, height: size.height, alignment: cropAlignment)
+            .clipShape(.rect(cornerRadius: 12, style: .continuous))
             .overlay {
-                if isHovering {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(.separator, lineWidth: 0.5)
+            }
+            .overlay {
+                if isHovered {
                     hoverActions
                         .transition(.opacity)
                 }
             }
-            .padding(4)
-            .glassEffect(.regular, in: .rect(cornerRadius: Design.radiusM))
-            .shadow(color: .black.opacity(isFocused ? 0.28 : 0.12), radius: isFocused ? 12 : 6, y: 4)
+            .overlay(alignment: .topTrailing) {
+                if let badge, !isHovered {
+                    Text(badge, format: .number)
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .glassEffect(.regular, in: .capsule)
+                        .padding(6)
+                        .transition(.opacity)
+                        .accessibilityLabel("\(badge) captures")
+                }
+            }
+            .shadow(color: .black.opacity(0.22), radius: 8, y: 3)
+            .animation(.easeOut(duration: 0.15), value: isHovered)
+            .onTapGesture(count: 2) { actions.open(id) }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(card.capture.isVideo ? "Recording" : "Screenshot")
+            .accessibilityAction(named: "Open in Editor") { actions.open(id) }
+            .accessibilityAction(named: "Save") { actions.save(id) }
+            .accessibilityAction(named: "Delete") { actions.delete(id) }
     }
 
+    /// Clear glass buttons over a light dim, as macOS does for controls over photos and video.
     private var hoverActions: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: Design.radiusM - 4)
-                .fill(.black.opacity(0.28))
+            Color.black.opacity(0.2)
+                .clipShape(.rect(cornerRadius: 12, style: .continuous))
 
             GlassEffectContainer(spacing: 8) {
                 VStack(spacing: 8) {
                     Button(didCopy ? "Copied" : "Copy") {
-                        actions.copy()
-                        withAnimation(.response) { didCopy = true }
+                        actions.copy(id)
+                        didCopy = true
                     }
                     .buttonStyle(.glass)
-                    .contentTransition(.interpolate)
-                    Button("Save", action: actions.save)
+                    Button("Save") { actions.save(id) }
                         .buttonStyle(.glassProminent)
                 }
                 .controlSize(.regular)
@@ -123,31 +194,29 @@ struct QuickAccessThumbnail: View {
 
             VStack {
                 HStack {
-                    cornerButton("Close", symbol: "xmark", action: actions.close)
+                    cornerButton("Close", symbol: "xmark") { actions.close(id) }
                     Spacer()
-                    if !capture.isVideo {
-                        cornerButton("Pin to Screen", symbol: "pin.fill", action: actions.pin)
+                    if !card.capture.isVideo {
+                        cornerButton("Pin to Screen", symbol: "pin") { actions.pin(id) }
                     }
                 }
                 Spacer()
                 HStack {
-                    cornerButton("Delete", symbol: "trash", action: actions.delete)
+                    cornerButton("Delete", symbol: "trash") { actions.delete(id) }
                     Spacer()
                 }
             }
             .padding(6)
         }
-        .clipShape(.rect(cornerRadius: Design.radiusM - 4))
     }
 
     private func cornerButton(_ title: LocalizedStringKey, symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 10, weight: .bold))
-                .frame(width: 24, height: 24)
         }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.small)
         .help(Text(title))
         .accessibilityLabel(Text(title))
     }
