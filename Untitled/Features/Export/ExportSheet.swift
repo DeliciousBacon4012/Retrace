@@ -44,7 +44,9 @@ struct ExportSheet: View {
                 preview
                 Form {
                     Section {
-                        GlassSegmentedPicker(title: "Format", selection: $options.format, options: ImageFormat.writable, label: \.title)
+                        Picker("Format", selection: $options.format) {
+                            ForEach(ImageFormat.writable) { Text($0.title).tag($0) }
+                        }
                         if options.format.isLossy {
                             ValueSlider("Quality", value: $options.quality, in: 0.05...1, format: .percent)
                                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -107,9 +109,11 @@ struct ExportSheet: View {
             .aspectRatio(contentMode: .fit)
             .frame(maxWidth: 300, maxHeight: 280)
             .clipShape(.rect(cornerRadius: Design.radiusS))
-            .padding(Design.spacingS)
-            .glassEffect(.regular, in: .rect(cornerRadius: Design.radiusL))
-            .frame(width: 316)
+            .overlay {
+                RoundedRectangle(cornerRadius: Design.radiusS)
+                    .strokeBorder(.separator, lineWidth: 0.5)
+            }
+            .frame(width: 316, height: 296)
     }
 
     private var summary: some View {
