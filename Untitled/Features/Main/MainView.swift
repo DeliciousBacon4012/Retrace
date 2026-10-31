@@ -25,7 +25,6 @@ struct MainView: View {
             .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
         } detail: {
             detail
-                .background { AmbientBackground() }
                 .navigationTitle(selection.title)
         }
         .focusedSceneValue(\.selectedTab, $selection)
@@ -61,10 +60,9 @@ struct MainView: View {
         }
     }
 
-    /// Settings forms sit on the moving background with their grouped boxes kept readable.
+    /// Settings forms keep a comfortable reading width in a wide window.
     private func settingsPage(@ViewBuilder _ content: () -> some View) -> some View {
         content()
-            .scrollContentBackground(.hidden)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
     }
