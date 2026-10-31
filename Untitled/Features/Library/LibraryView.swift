@@ -46,39 +46,31 @@ struct LibraryView: View {
         .onExitCommand { viewModel.selection.removeAll() }
         .quickLookPreview($viewModel.previewURL, in: items.map(\.url))
         .overlay { emptyState(library: library, isFiltered: items.isEmpty && !library.items.isEmpty) }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            header(library: library, count: items.count)
-        }
+        .searchable(text: $viewModel.searchText, placement: .toolbar, prompt: Text("Search captures"))
+        .navigationSubtitle(Text("\(items.count) items"))
+        .toolbar { toolbar(library: library) }
         .onChange(of: library.items) { _, newItems in
             viewModel.pruneSelection(keeping: newItems)
         }
     }
 
-    /// Search, filter, and the folder, kept with the grid so the window toolbar stays the same on every tab.
-    private func header(library: CaptureLibrary, count: Int) -> some View {
-        HStack(spacing: 12) {
-            GlassSegmentedPicker(title: "Show", selection: $viewModel.kindFilter, options: LibraryViewModel.KindFilter.allCases, label: \.title)
-                .frame(width: 300)
-
-            Text("\(count) items")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-
-            Spacer(minLength: 12)
-
+    /// The filter and the folder live in the window toolbar, where macOS draws them on glass.
+    @ToolbarContentBuilder
+    private func toolbar(library: CaptureLibrary) -> some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Picker("Show", selection: $viewModel.kindFilter) {
+                ForEach(LibraryViewModel.KindFilter.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+        }
+        ToolbarItem {
             Button("Show in Finder", systemImage: "folder") {
                 NSWorkspace.shared.activateFileViewerSelecting([library.folder])
             }
-            .labelStyle(.iconOnly)
             .help("Show the save folder in Finder")
-
-            SearchField(text: $viewModel.searchText, prompt: String(localized: "Search captures"))
-                .frame(maxWidth: 240)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(.bar)
     }
 
     @ViewBuilder
