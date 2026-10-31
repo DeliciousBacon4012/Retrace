@@ -79,6 +79,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
             save: { [weak self] in self?.save() },
             done: { [weak self] in self?.finish() },
             render: { [weak self] in self?.renderOrWarn() },
+            copyText: { [weak self] text in self?.clipboard.copy(text: text) },
             exportFolder: settings.saveFolderURL,
             exportOptions: settings.exportOptions(for: document.scale),
             suggestedName: document.fileURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Screenshot")

@@ -10,21 +10,24 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
     /// The recording this action starts or stops, or `nil` if it is not a recording action.
     var recordingMode: CaptureMode?
 
+    /// Whether the action reads text from a selected area.
+    var capturesText = false
+
     /// Whether the action saves the replay buffer.
     var savesReplay = false
 
     /// Whether the action does anything yet.
-    var isAvailable: Bool { captureMode != nil || recordingMode != nil || savesReplay }
+    var isAvailable: Bool { captureMode != nil || capturesText || recordingMode != nil || savesReplay }
 
-    /// The screenshot actions that work today, for toolbars and the Capture tab.
-    static var screenshots: [QuickAction] { all.filter { $0.captureMode != nil } }
+    /// The screenshot actions, including Capture Text, for toolbars and the Capture tab.
+    static var screenshots: [QuickAction] { all.filter { $0.captureMode != nil || $0.capturesText } }
     static var recordings: [QuickAction] { all.filter { $0.recordingMode != nil } }
 
     static let all: [QuickAction] = [
         QuickAction(id: "captureArea", title: String(localized: "Capture Area"), symbolName: "rectangle.dashed", captureMode: .area),
         QuickAction(id: "captureWindow", title: String(localized: "Capture Window"), symbolName: "macwindow", captureMode: .window),
         QuickAction(id: "captureScreen", title: String(localized: "Capture Screen"), symbolName: "display", captureMode: .screen),
-        QuickAction(id: "captureText", title: String(localized: "Capture Text"), symbolName: "text.viewfinder"),
+        QuickAction(id: "captureText", title: String(localized: "Capture Text"), symbolName: "text.viewfinder", capturesText: true),
         QuickAction(id: "recordArea", title: String(localized: "Record Area"), symbolName: "rectangle.dashed.badge.record", recordingMode: .area),
         QuickAction(id: "recordWindow", title: String(localized: "Record Window"), symbolName: "macwindow.badge.plus", recordingMode: .window),
         QuickAction(id: "recordScreen", title: String(localized: "Record Screen"), symbolName: "record.circle", recordingMode: .screen),

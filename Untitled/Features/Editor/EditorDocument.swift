@@ -281,6 +281,22 @@ final class EditorDocument {
         select(copy.id)
     }
 
+    /// Covers each area with a redact mark in the redact tool's current style, as one undo step.
+    func addRedactions(_ areas: [CGRect]) {
+        let existing = annotations.filter { $0.tool == .redact }.map(\.rect.integral)
+        let fresh = areas.filter { !existing.contains($0.integral) }
+        guard !fresh.isEmpty else { return }
+        pushUndo(snapshot)
+        let style = style(for: .redact)
+        let marks = fresh.map { area in
+            var mark = Annotation(tool: .redact, at: area.origin, style: style)
+            mark.end = CGPoint(x: area.maxX, y: area.maxY)
+            return mark
+        }
+        withAnimation(.pop) { annotations.append(contentsOf: marks) }
+        select(nil)
+    }
+
     func bringSelectionToFront() {
         guard let index = selectedIndex, index < annotations.count - 1 else { return }
         pushUndo(snapshot)

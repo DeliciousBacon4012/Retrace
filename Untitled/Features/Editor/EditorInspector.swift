@@ -30,6 +30,9 @@ struct EditorInspector: View {
                 if tool != .highlighter, tool != .redact {
                     EffectsSection(document: document)
                 }
+                if tool == .redact, document.selected == nil {
+                    AutoRedactSection(document: document)
+                }
             }
 
             if document.selected != nil {
@@ -414,6 +417,59 @@ struct ValueSlider: View {
         switch format {
         case .percent: value.formatted(.percent.precision(.fractionLength(0)))
         case .number(let unit): "\(Int(value.rounded()))\(unit)"
+        }
+    }
+}
+
+/// Finds personal details, faces, or all text on device and covers them in one step.
+private struct AutoRedactSection: View {
+    let document: EditorDocument
+
+    @State private var running: SensitiveKind?
+    @State private var result: String?
+
+    var body: some View {
+        Section {
+            ForEach(SensitiveKind.allCases) { kind in
+                Button {
+                    Task { await find(kind) }
+                } label: {
+                    HStack {
+                        Label(kind.title, systemImage: kind.symbolName)
+                        Spacer()
+                        if running == kind {
+                            ProgressView().controlSize(.small)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.borderless)
+                .disabled(running != nil)
+            }
+        } header: {
+            Text("Hide Automatically")
+        } footer: {
+            Text(result ?? String(localized: "Found on this Mac with Vision. Each area gets its own mark you can adjust or delete."))
+                .contentTransition(.opacity)
+        }
+        .animation(.response, value: running)
+        .animation(.response, value: result)
+    }
+
+    private func find(_ kind: SensitiveKind) async {
+        running = kind
+        defer { running = nil }
+        do {
+            let areas = try await TextRecognizer.sensitiveAreas(in: document.image, kinds: [kind])
+            document.addRedactions(areas)
+            switch areas.count {
+            case 0: result = String(localized: "Nothing to hide was found.")
+            case 1: result = String(localized: "Covered 1 area.")
+            default: result = String(localized: "Covered \(areas.count) areas.")
+            }
+        } catch {
+            result = error.localizedDescription
         }
     }
 }

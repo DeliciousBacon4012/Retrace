@@ -6,6 +6,7 @@ protocol ClipboardWriting: AnyObject {
     func copy(_ image: NSImage)
     /// Copies a saved file so it pastes as a file in Finder and as its contents in most apps.
     func copyFile(at url: URL)
+    func copy(text: String)
 }
 
 final class SystemClipboard: ClipboardWriting {
@@ -23,6 +24,10 @@ final class SystemClipboard: ClipboardWriting {
         write([item])
     }
 
+    func copy(text: String) {
+        write([text as NSString])
+    }
+
     private func write(_ objects: [any NSPasteboardWriting]) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -37,5 +42,6 @@ final class SystemClipboard: ClipboardWriting {
 final class PreviewClipboard: ClipboardWriting {
     func copy(_ image: NSImage) {}
     func copyFile(at url: URL) {}
+    func copy(text: String) {}
 }
 #endif
