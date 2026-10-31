@@ -235,7 +235,7 @@ private struct ReplayRow: View {
                     HStack(spacing: 6) {
                         Text("Replay Buffer")
                             .font(.headline)
-                        if buffer.state == .running {
+                        if case .running = buffer.state {
                             Circle()
                                 .fill(.green)
                                 .frame(width: 7, height: 7)
