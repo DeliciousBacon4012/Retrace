@@ -1,66 +1,55 @@
 import AppKit
 import SwiftUI
 
-/// Every setting for the selected mark, or for the next mark the current tool draws, on a
-/// floating Liquid Glass panel. Changes apply live and become the tool's style for next time.
-///
-/// Rows have fixed heights and values use fixed-width digits, so dragging a slider never
-/// moves anything else on the panel.
+/// Every setting for the selected mark, or for the next mark the current tool draws.
+/// It lives in the window's system inspector column and uses only standard controls,
+/// so macOS draws it in Liquid Glass. Changes apply live and become the tool's style for next time.
 struct EditorInspector: View {
     @Bindable var document: EditorDocument
-
-    static let width: CGFloat = 268
 
     var body: some View {
         let tool = document.inspectedTool
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+        Form {
+            Section {
                 InspectorHeader(tool: tool, isSelection: document.selected != nil)
+            }
 
-                switch tool {
-                case .select:
+            switch tool {
+            case .select:
+                Section {
                     Text("Click a mark to change it. Drag its handles to reshape it, or drag the mark to move it.")
-                        .font(.callout)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                case .crop:
-                    CropSection(document: document)
-                default:
-                    VariantSection(document: document, tool: tool)
-                    ColorSection(document: document, tool: tool)
-                    ToolSection(document: document, tool: tool)
-                    if tool != .highlighter, tool != .redact {
-                        EffectsSection(document: document)
-                    }
-                    if tool == .redact, document.selected == nil {
-                        AutoRedactSection(document: document)
-                    }
                 }
-
-                if document.selected != nil {
-                    ArrangeSection(document: document)
+            case .crop:
+                CropSection(document: document)
+            default:
+                VariantSection(document: document, tool: tool)
+                ColorSection(document: document, tool: tool)
+                ToolSection(document: document, tool: tool)
+                if tool != .highlighter, tool != .redact {
+                    EffectsSection(document: document)
                 }
-
-                if tool.draws {
-                    Button("Reset to Default Style", systemImage: "arrow.counterclockwise") {
-                        withAnimation(.response) { document.resetStyle() }
-                    }
-                    .buttonStyle(.glass)
-                    .controlSize(.small)
-                    .frame(maxWidth: .infinity)
+                if tool == .redact, document.selected == nil {
+                    AutoRedactSection(document: document)
                 }
             }
-            .padding(16)
-            .id(tool)
-            .transition(.opacity)
+
+            if document.selected != nil {
+                ArrangeSection(document: document)
+            }
+
+            if tool.draws {
+                Section {
+                    Button("Reset to Default Style") {
+                        withAnimation(.response) { document.resetStyle() }
+                    }
+                }
+            }
         }
-        .scrollIndicators(.never)
-        .scrollEdgeEffectStyle(.soft, for: .vertical)
-        .frame(width: Self.width)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
-        .animation(.smooth(duration: 0.22), value: tool)
+        .formStyle(.grouped)
         .controlSize(.small)
+        .animation(.smooth(duration: 0.22), value: tool)
     }
 }
 
@@ -69,31 +58,25 @@ private struct InspectorHeader: View {
     let isSelection: Bool
 
     var body: some View {
-        HStack(spacing: Design.spacingM) {
-            Image(systemName: tool.symbolName)
-                .font(.title3)
-                .foregroundStyle(.tint)
-                .frame(width: 34, height: 34)
-                .glassEffect(.regular.tint(.accentColor.opacity(0.25)), in: .rect(cornerRadius: Design.radiusS))
-                .contentTransition(.symbolEffect(.replace))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(tool.title)
-                    .font(.headline)
-                    .contentTransition(.opacity)
-                Text(isSelection ? "Selected mark" : (tool.draws ? "Next mark" : "Tool"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-            }
-            Spacer()
+        LabeledContent {
             Text(String(tool.key).uppercased())
-                .font(.system(.caption, design: .monospaced).weight(.semibold))
+                .font(.callout.monospaced())
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(.quaternary.opacity(0.6), in: .rect(cornerRadius: 5))
                 .help("Press \(String(tool.key).uppercased()) to pick this tool")
+        } label: {
+            Label {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(tool.title)
+                        .font(.headline)
+                    Text(isSelection ? "Selected mark" : (tool.draws ? "Next mark" : "Tool"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } icon: {
+                Image(systemName: tool.symbolName)
+                    .foregroundStyle(.tint)
+                    .contentTransition(.symbolEffect(.replace))
+            }
         }
     }
 }
@@ -106,46 +89,67 @@ private struct VariantSection: View {
     var body: some View {
         switch tool {
         case .arrow:
-            InspectorGroup("Arrow") {
-                GlassSegmentedPicker(title: "Type", selection: $document.style.route, options: ArrowRoute.allCases, label: \.title, symbol: { $0.symbolName })
-                InspectorRow("Start") {
-                    GlassMenuPicker(title: "Start", selection: $document.style.startHead, options: ArrowHead.allCases, label: \.title)
+            Section("Arrow") {
+                Picker("Type", selection: $document.style.route) {
+                    ForEach(ArrowRoute.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
                 }
-                InspectorRow("End") {
-                    GlassMenuPicker(title: "End", selection: $document.style.endHead, options: ArrowHead.allCases, label: \.title)
+                .pickerStyle(.segmented)
+                .labelStyle(.iconOnly)
+                Picker("Start", selection: $document.style.startHead) {
+                    ForEach(ArrowHead.allCases) { Text($0.title).tag($0) }
                 }
-                Button("Swap Ends", systemImage: "arrow.left.arrow.right") {
+                Picker("End", selection: $document.style.endHead) {
+                    ForEach(ArrowHead.allCases) { Text($0.title).tag($0) }
+                }
+                Button("Swap Ends") {
                     let start = document.style.startHead
                     document.style.startHead = document.style.endHead
                     document.style.endHead = start
                 }
-                .buttonStyle(.glass)
-                .frame(maxWidth: .infinity)
-                .help("Swap the start and end")
             }
         case .shape:
-            InspectorGroup("Shape") {
-                GlassSegmentedPicker(title: "Shape", selection: $document.style.shape, options: ShapeKind.allCases, label: \.title, symbol: { $0.symbolName })
-                GlassSegmentedPicker(title: "Fill", selection: $document.style.fill, options: ShapeFill.allCases, label: \.title)
+            Section("Shape") {
+                Picker("Shape", selection: $document.style.shape) {
+                    ForEach(ShapeKind.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelStyle(.iconOnly)
+                Picker("Fill", selection: $document.style.fill) {
+                    ForEach(ShapeFill.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
             }
         case .redact:
-            InspectorGroup("Type") {
-                GlassSegmentedPicker(title: "Type", selection: $document.style.redaction, options: Redaction.allCases, label: \.title)
-                GlassSegmentedPicker(title: "Shape", selection: $document.style.shape, options: ShapeKind.allCases, label: \.title, symbol: { $0.symbolName })
+            Section("Redaction") {
+                Picker("Type", selection: $document.style.redaction) {
+                    ForEach(Redaction.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Picker("Shape", selection: $document.style.shape) {
+                    ForEach(ShapeKind.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelStyle(.iconOnly)
             }
         case .text:
-            InspectorGroup("Text") {
-                GlassSegmentedPicker(title: "Style", selection: $document.style.textStyle, options: TextStyle.allCases, label: \.title)
-                InspectorRow("Font") {
-                    GlassMenuPicker(title: "Font", selection: $document.style.font, options: TextFont.allCases, label: \.title)
+            Section("Text") {
+                Picker("Style", selection: $document.style.textStyle) {
+                    ForEach(TextStyle.allCases) { Text($0.title).tag($0) }
                 }
-                InspectorRow("Weight") {
-                    GlassMenuPicker(title: "Weight", selection: $document.style.weight, options: TextWeight.allCases, label: \.title)
+                .pickerStyle(.segmented)
+                Picker("Font", selection: $document.style.font) {
+                    ForEach(TextFont.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Weight", selection: $document.style.weight) {
+                    ForEach(TextWeight.allCases) { Text($0.title).tag($0) }
                 }
             }
         case .counter:
-            InspectorGroup("Style") {
-                GlassSegmentedPicker(title: "Style", selection: $document.style.counterStyle, options: CounterStyle.allCases, label: \.title)
+            Section("Counter") {
+                Picker("Style", selection: $document.style.counterStyle) {
+                    ForEach(CounterStyle.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
             }
         default:
             EmptyView()
@@ -160,7 +164,7 @@ private struct ColorSection: View {
 
     var body: some View {
         if tool != .redact || document.style.redaction == .solid {
-            InspectorGroup("Color") {
+            Section("Color") {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 8) {
                     ForEach(Array(RGBAColor.presets.enumerated()), id: \.offset) { index, preset in
                         Swatch(color: preset, isSelected: preset == document.style.color) {
@@ -170,10 +174,7 @@ private struct ColorSection: View {
                     }
                 }
                 .padding(.vertical, 2)
-                InspectorRow("Custom") {
-                    ColorPicker("Custom", selection: customColor, supportsOpacity: false)
-                        .labelsHidden()
-                }
+                ColorPicker("Custom", selection: customColor, supportsOpacity: false)
                 if tool != .redact {
                     ValueSlider("Opacity", value: $document.style.opacity, in: 0.1...1, format: .percent)
                 }
@@ -204,7 +205,7 @@ private struct Swatch: View {
         Button(action: action) {
             Circle()
                 .fill(color.swiftUIColor)
-                .overlay { Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1) }
+                .overlay { Circle().strokeBorder(.separator, lineWidth: 1) }
                 .padding(isSelected ? 3 : 0)
                 .overlay {
                     if isSelected {
@@ -212,7 +213,7 @@ private struct Swatch: View {
                             .transition(.scale(1.3).combined(with: .opacity))
                     }
                 }
-                .frame(width: 26, height: 26)
+                .frame(width: 24, height: 24)
                 .contentShape(.circle)
         }
         .buttonStyle(.plain)
@@ -229,48 +230,50 @@ private struct ToolSection: View {
     var body: some View {
         switch tool {
         case .arrow:
-            InspectorGroup("Line") {
+            Section("Line") {
                 ValueSlider("Thickness", value: points(\.lineWidth), in: 1...30, unit: "pt")
                 ValueSlider("Head Size", value: $document.style.headScale, in: 0.5...2.5, format: .percent)
-                InspectorToggle("Tapered", isOn: $document.style.tapered)
-                InspectorToggle("Dashed", isOn: $document.style.dashed)
+                Toggle("Tapered", isOn: $document.style.tapered)
+                Toggle("Dashed", isOn: $document.style.dashed)
             }
         case .shape:
-            InspectorGroup("Border") {
+            Section("Border") {
                 ValueSlider("Thickness", value: points(\.lineWidth), in: 0...30, unit: "pt")
                 if document.style.shape == .rectangle {
                     ValueSlider("Roundness", value: points(\.cornerRadius), in: 0...80, unit: "pt")
                 }
-                InspectorToggle("Dashed", isOn: $document.style.dashed)
+                Toggle("Dashed", isOn: $document.style.dashed)
             }
         case .pen:
-            InspectorGroup("Stroke") {
+            Section("Stroke") {
                 ValueSlider("Thickness", value: points(\.lineWidth), in: 1...30, unit: "pt")
-                InspectorToggle("Dashed", isOn: $document.style.dashed)
+                Toggle("Dashed", isOn: $document.style.dashed)
             }
         case .highlighter:
-            InspectorGroup("Stroke") {
+            Section {
                 ValueSlider("Thickness", value: points(\.lineWidth), in: 4...60, unit: "pt")
-                Label("Hold Shift while dragging for a perfectly straight stroke.", systemImage: "shift")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text("Stroke")
+            } footer: {
+                Text("Hold Shift while dragging for a perfectly straight stroke.")
             }
         case .text:
-            InspectorGroup("Size") {
+            Section("Size") {
                 ValueSlider("Size", value: points(\.fontSize), in: 8...120, unit: "pt")
             }
         case .counter:
-            InspectorGroup("Size") {
+            Section("Size") {
                 ValueSlider("Size", value: points(\.fontSize), in: 10...64, unit: "pt")
             }
         case .redact:
-            InspectorGroup("Redaction") {
-                if document.style.redaction != .solid {
-                    ValueSlider("Strength", value: $document.style.strength, in: 0...1, format: .percent)
-                }
-                if document.style.shape == .rectangle {
-                    ValueSlider("Roundness", value: points(\.cornerRadius), in: 0...80, unit: "pt")
+            if document.style.redaction != .solid || document.style.shape == .rectangle {
+                Section("Amount") {
+                    if document.style.redaction != .solid {
+                        ValueSlider("Strength", value: $document.style.strength, in: 0...1, format: .percent)
+                    }
+                    if document.style.shape == .rectangle {
+                        ValueSlider("Roundness", value: points(\.cornerRadius), in: 0...80, unit: "pt")
+                    }
                 }
             }
         default:
@@ -289,8 +292,8 @@ private struct EffectsSection: View {
     @Bindable var document: EditorDocument
 
     var body: some View {
-        InspectorGroup("Shadow") {
-            InspectorToggle("Shadow", isOn: $document.style.shadow.animation(.response))
+        Section("Shadow") {
+            Toggle("Shadow", isOn: $document.style.shadow.animation(.response))
             if document.style.shadow {
                 ValueSlider("Softness", value: document.pointBinding(\.shadowRadius), in: 0...30, unit: "pt")
                 ValueSlider("Darkness", value: $document.style.shadowOpacity, in: 0.05...0.8, format: .percent)
@@ -306,28 +309,26 @@ private struct CropSection: View {
     private let ratios: [(String, CGFloat)] = [("16:9", 16 / 9), ("4:3", 4 / 3), ("1:1", 1), ("3:4", 3 / 4), ("9:16", 9 / 16)]
 
     var body: some View {
-        InspectorGroup("Crop") {
-            Text("Drag the handles or the box. Press Return to crop, or Esc to cancel. Hold Shift for a square.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            GlassEffectContainer(spacing: 6) {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+        Section {
+            LabeledContent("Aspect Ratio") {
+                Menu("Choose") {
                     ForEach(ratios, id: \.0) { title, ratio in
                         Button(title) { document.applyCropAspect(ratio) }
-                            .buttonStyle(.glass)
-                            .font(.system(.callout, design: .monospaced))
                     }
                 }
+                .fixedSize()
             }
             HStack {
-                Button("Reset", systemImage: "arrow.counterclockwise") { document.resetCrop() }
-                    .buttonStyle(.glass)
+                Button("Reset") { document.resetCrop() }
                     .disabled(document.cropRect == nil)
                 Spacer()
                 Button("Crop") { document.commitCrop() }
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.borderedProminent)
             }
+        } header: {
+            Text("Crop")
+        } footer: {
+            Text("Drag the handles or the box. Press Return to crop, or Esc to cancel. Hold Shift for a square.")
         }
     }
 }
@@ -337,49 +338,28 @@ private struct ArrangeSection: View {
     let document: EditorDocument
 
     var body: some View {
-        InspectorGroup("Arrange") {
-            GlassEffectContainer(spacing: 6) {
-                HStack(spacing: 6) {
+        Section("Arrange") {
+            HStack {
+                ControlGroup {
                     Button("Duplicate", systemImage: "plus.square.on.square") { document.duplicateSelection() }
                         .help("Duplicate (⌘D)")
                     Button("Bring to Front", systemImage: "square.3.layers.3d.top.filled") { document.bringSelectionToFront() }
                         .help("Bring to Front (⌘])")
                     Button("Send to Back", systemImage: "square.3.layers.3d.bottom.filled") { document.sendSelectionToBack() }
                         .help("Send to Back (⌘[)")
-                    Spacer()
-                    Button("Delete", systemImage: "trash", role: .destructive) { document.deleteSelection() }
-                        .help("Delete (⌫)")
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
+                .fixedSize()
+                Spacer()
+                Button("Delete", systemImage: "trash", role: .destructive) { document.deleteSelection() }
+                    .help("Delete (⌫)")
             }
+            .labelStyle(.iconOnly)
         }
     }
 }
 
-/// An on/off switch row.
-private struct InspectorToggle: View {
-    let title: LocalizedStringKey
-    @Binding var isOn: Bool
-
-    init(_ title: LocalizedStringKey, isOn: Binding<Bool>) {
-        self.title = title
-        _isOn = isOn
-    }
-
-    var body: some View {
-        Toggle(isOn: $isOn) {
-            Text(title)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
-        .toggleStyle(.switch)
-        .frame(minHeight: 26)
-    }
-}
-
-/// A slider with its title above and its value in fixed-width digits, so the value
-/// changing never resizes the row or nudges the slider under the pointer.
+/// A slider with its value in fixed-width digits beside it, so the value changing never
+/// resizes the row or nudges the slider under the pointer.
 struct ValueSlider: View {
     enum Format {
         case number(unit: String)
@@ -406,21 +386,16 @@ struct ValueSlider: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Spacer()
+        LabeledContent(title) {
+            HStack(spacing: 8) {
+                Slider(value: $value, in: range) { Text(title) }
+                    .labelsHidden()
                 Text(formatted)
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.primary)
-                    .frame(width: 52, alignment: .trailing)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, alignment: .trailing)
             }
-            Slider(value: $value, in: range)
-                .labelsHidden()
         }
-        .frame(height: 46)
         .accessibilityElement(children: .combine)
     }
 
@@ -440,29 +415,23 @@ private struct AutoRedactSection: View {
     @State private var result: String?
 
     var body: some View {
-        InspectorGroup("Hide Automatically") {
+        Section {
             ForEach(SensitiveKind.allCases) { kind in
-                Button {
-                    Task { await find(kind) }
-                } label: {
-                    HStack {
-                        Label(kind.title, systemImage: kind.symbolName)
-                        Spacer(minLength: 0)
-                        if running == kind {
-                            ProgressView().controlSize(.small)
-                                .transition(.scale.combined(with: .opacity))
-                        }
+                LabeledContent {
+                    if running == kind {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Hide") { Task { await find(kind) } }
+                            .disabled(running != nil)
                     }
-                    .frame(maxWidth: .infinity)
-                    .contentShape(.rect)
+                } label: {
+                    Label(kind.title, systemImage: kind.symbolName)
                 }
-                .buttonStyle(.glass)
-                .disabled(running != nil)
             }
+        } header: {
+            Text("Hide Automatically")
+        } footer: {
             Text(result ?? String(localized: "Found on this Mac with Vision. Each area gets its own mark you can adjust or delete."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
         }
         .animation(.response, value: running)
