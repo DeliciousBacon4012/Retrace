@@ -46,6 +46,32 @@ nonisolated enum VideoCodec: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// How quickly Quick Access thumbnails move. Each speed scales every spring and fade together.
+nonisolated enum OverlaySpeed: String, CaseIterable, Identifiable, Sendable {
+    case relaxed
+    case normal
+    case quick
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .relaxed: String(localized: "Relaxed")
+        case .normal: String(localized: "Normal")
+        case .quick: String(localized: "Quick")
+        }
+    }
+
+    /// Multiplies animation durations.
+    var factor: Double {
+        switch self {
+        case .relaxed: 1.6
+        case .normal: 1
+        case .quick: 0.6
+        }
+    }
+}
+
 /// Where the Quick Access overlay appears.
 nonisolated enum OverlayCorner: String, CaseIterable, Identifiable, Sendable {
     case bottomLeft

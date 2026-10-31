@@ -26,6 +26,8 @@ final class SettingsStore {
     var overlayCorner = Defaults.overlayCorner { didSet { save(overlayCorner.rawValue, .overlayCorner) } }
     /// Seconds before the Quick Access overlay closes on its own. Zero means never.
     var overlayAutoCloseSeconds = Defaults.overlayAutoCloseSeconds { didSet { save(overlayAutoCloseSeconds, .overlayAutoCloseSeconds) } }
+    /// How quickly Quick Access thumbnails glide in and fade away.
+    var overlaySpeed = Defaults.overlaySpeed { didSet { save(overlaySpeed.rawValue, .overlaySpeed) } }
 
     // MARK: Output
 
@@ -107,6 +109,7 @@ final class SettingsStore {
         includesWindowShadow = value(.includesWindowShadow, default: Defaults.includesWindowShadow)
         overlayCorner = OverlayCorner(rawValue: value(.overlayCorner, default: "")) ?? Defaults.overlayCorner
         overlayAutoCloseSeconds = value(.overlayAutoCloseSeconds, default: Defaults.overlayAutoCloseSeconds)
+        overlaySpeed = OverlaySpeed(rawValue: value(.overlaySpeed, default: "")) ?? Defaults.overlaySpeed
         imageFormat = ImageFormat(rawValue: value(.imageFormat, default: "")) ?? Defaults.imageFormat
         downscalesRetina = value(.downscalesRetina, default: Defaults.downscalesRetina)
         imageQuality = value(.imageQuality, default: Defaults.imageQuality)
@@ -177,6 +180,7 @@ private extension SettingsStore {
         case includesWindowShadow
         case overlayCorner
         case overlayAutoCloseSeconds
+        case overlaySpeed
         case imageFormat
         case downscalesRetina
         case imageQuality
@@ -205,6 +209,7 @@ private extension SettingsStore {
         static let includesWindowShadow = true
         static let overlayCorner = OverlayCorner.bottomLeft
         static let overlayAutoCloseSeconds = 0
+        static let overlaySpeed = OverlaySpeed.normal
         static let imageFormat = ImageFormat.png
         static let downscalesRetina = false
         static let imageQuality = 0.85
