@@ -16,6 +16,7 @@ final class CaptureCoordinator {
     @ObservationIgnored private let quickAccess: QuickAccessController
     @ObservationIgnored private let editor: EditorPresenter
     @ObservationIgnored private let overlay = SelectionOverlay()
+    @ObservationIgnored private let toast = CaptureToastController()
 
     init(
         settings: SettingsStore,
@@ -35,13 +36,17 @@ final class CaptureCoordinator {
         self.editor = editor
     }
 
-    func capture(_ mode: CaptureMode) async {
-        guard !isCapturing else { return }
-        guard permissions.screenRecordingStatus == .granted else {
-            permissions.requestScreenRecordingAccess()
-            ErrorPresenter.present(CaptureError.permissionDenied, recovery: String(localized: "Turn on Untitled in System Settings › Privacy & Security › Screen & System Audio Recording, then try again."))
-            return
+    /// Runs a screenshot quick action, including Capture Text.
+    func run(_ action: QuickAction) async {
+        if let mode = action.captureMode {
+            await capture(mode)
+        } else if action.capturesText {
+            await captureText()
         }
+    }
+
+    func capture(_ mode: CaptureMode) async {
+        guard !isCapturing, hasPermission() else { return }
 
         isCapturing = true
         defer { isCapturing = false }
@@ -56,6 +61,61 @@ final class CaptureCoordinator {
             Log.capture.error("Capture failed: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
         }
+    }
+
+    /// Reads the text in a selected area, copies it, and shows what was copied.
+    /// QR codes and barcodes are read too; a web link gets an Open button.
+    func captureText() async {
+        guard !isCapturing, hasPermission() else { return }
+        isCapturing = true
+        defer { isCapturing = false }
+
+        do {
+            guard let result = try await takeImage(.area) else { return }
+            let content = try await TextRecognizer.recognize(result.image)
+            if settings.playsSounds {
+                CaptureSound.play()
+            }
+            showTextResult(content)
+        } catch {
+            Log.capture.error("Text capture failed: \(error.localizedDescription, privacy: .public)")
+            ErrorPresenter.present(error)
+        }
+    }
+
+    private func showTextResult(_ content: RecognizedContent) {
+        guard !content.isEmpty else {
+            toast.show(.init(symbolName: "text.magnifyingglass", title: String(localized: "No text found"), detail: String(localized: "Try a larger or sharper area.")))
+            return
+        }
+        let copied = content.lines.isEmpty ? content.codes.joined(separator: "\n") : content.text
+        clipboard.copy(text: copied)
+
+        let title: String
+        if content.lines.isEmpty {
+            title = String(localized: "Copied code contents")
+        } else if content.lines.count == 1 {
+            title = String(localized: "Copied 1 line")
+        } else {
+            title = String(localized: "Copied \(content.lines.count) lines")
+        }
+        let detail = copied.split(whereSeparator: \.isNewline).first.map(String.init)
+        if let link = content.link {
+            toast.show(.init(symbolName: "qrcode.viewfinder", title: title, detail: link.absoluteString, actionTitle: String(localized: "Open Link")) {
+                NSWorkspace.shared.open(link)
+            })
+        } else {
+            toast.show(.init(symbolName: "text.viewfinder", title: title, detail: detail))
+        }
+    }
+
+    private func hasPermission() -> Bool {
+        guard permissions.screenRecordingStatus == .granted else {
+            permissions.requestScreenRecordingAccess()
+            ErrorPresenter.present(CaptureError.permissionDenied, recovery: String(localized: "Turn on Untitled in System Settings › Privacy & Security › Screen & System Audio Recording, then try again."))
+            return false
+        }
+        return true
     }
 
     /// Returns `nil` when the person cancels the selection.

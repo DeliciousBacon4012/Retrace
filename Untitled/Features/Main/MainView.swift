@@ -38,9 +38,7 @@ private struct CaptureToolbar: ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             ForEach(QuickAction.screenshots) { action in
                 Button(action.title, systemImage: action.symbolName) {
-                    if let mode = action.captureMode {
-                        Task { await capture.capture(mode) }
-                    }
+                    Task { await capture.run(action) }
                 }
                 .help(action.title)
                 .disabled(capture.isCapturing)

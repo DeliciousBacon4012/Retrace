@@ -59,8 +59,8 @@ final class AppDependencies {
         self.replay = replay
         shortcuts = GlobalShortcuts(settings: settings) { [weak capture, weak recording, weak replay] actionID in
             guard let action = QuickAction.all.first(where: { $0.id == actionID }) else { return }
-            if let mode = action.captureMode {
-                Task { await capture?.capture(mode) }
+            if action.captureMode != nil || action.capturesText {
+                Task { await capture?.run(action) }
             } else if let mode = action.recordingMode {
                 Task { await recording?.toggle(mode) }
             } else if action.savesReplay {

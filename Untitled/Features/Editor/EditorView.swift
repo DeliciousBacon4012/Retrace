@@ -10,6 +10,8 @@ struct EditorView: View {
     @AppStorage("editorShowsInspector") private var showsInspector = true
     @State private var exportItem: ExportItem?
     @State private var canvasSize: CGSize = .zero
+    @State private var notice: EditorNotice?
+    @State private var isReadingText = false
     @FocusState private var isCanvasFocused: Bool
 
     private var fitFactor: CGFloat {
@@ -23,6 +25,21 @@ struct EditorView: View {
             .overlay(alignment: .bottom) {
                 EditorStatusBar(document: document, fitFactor: fitFactor)
                     .padding(.bottom, Design.spacingL)
+            }
+            .overlay(alignment: .top) {
+                if let notice {
+                    EditorNoticeView(notice: notice)
+                        .padding(.top, Design.spacingL)
+                        .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(0.9, anchor: .top)))
+                        .id(notice.id)
+                }
+            }
+            .animation(.pop, value: notice?.id)
+            .task(id: notice?.id) {
+                guard notice != nil else { return }
+                try? await Task.sleep(for: .seconds(2.4))
+                guard !Task.isCancelled else { return }
+                notice = nil
             }
             .background { shortcutButtons }
             .frame(minWidth: 720, minHeight: 440)
@@ -79,6 +96,13 @@ struct EditorView: View {
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
+            Button("Copy Text", systemImage: "text.viewfinder") {
+                Task { await copyText() }
+            }
+            .keyboardShortcut("t", modifiers: [.command, .shift])
+            .disabled(isReadingText)
+            .symbolEffect(.pulse, isActive: isReadingText)
+            .help("Copy the text in this image (⇧⌘T)")
             Button("Copy", systemImage: "doc.on.doc") { actions.copy() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .help("Copy the edited image (⇧⌘C)")
@@ -109,6 +133,31 @@ struct EditorView: View {
             }
             .keyboardShortcut("i", modifiers: [.command, .option])
             .help("Show or hide the inspector (⌥⌘I)")
+        }
+    }
+
+    /// Reads the text in the edited image on device and puts it on the clipboard.
+    private func copyText() async {
+        guard let image = actions.render() else { return }
+        isReadingText = true
+        defer { isReadingText = false }
+        do {
+            let content = try await TextRecognizer.recognize(image)
+            let text = content.lines.isEmpty ? content.codes.joined(separator: "\n") : content.text
+            guard !text.isEmpty else {
+                notice = EditorNotice(symbolName: "text.magnifyingglass", title: String(localized: "No text found"))
+                return
+            }
+            actions.copyText(text)
+            let count = content.lines.count
+            let title = switch count {
+            case 0: String(localized: "Copied code contents")
+            case 1: String(localized: "Copied 1 line")
+            default: String(localized: "Copied \(count) lines")
+            }
+            notice = EditorNotice(symbolName: "doc.on.clipboard", title: title)
+        } catch {
+            ErrorPresenter.present(error)
         }
     }
 
@@ -191,9 +240,30 @@ struct EditorActions {
     var done: () -> Void
     /// The finished image, for exporting.
     var render: () -> CGImage?
+    var copyText: (String) -> Void
     var exportFolder: URL
     var exportOptions: ExportOptions
     var suggestedName: String
+}
+
+/// A short confirmation that floats in at the top of the canvas, then fades.
+struct EditorNotice: Equatable {
+    let id = UUID()
+    var symbolName: String
+    var title: String
+}
+
+private struct EditorNoticeView: View {
+    let notice: EditorNotice
+
+    var body: some View {
+        Label(notice.title, systemImage: notice.symbolName)
+            .font(.callout.weight(.medium))
+            .symbolRenderingMode(.hierarchical)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .glassEffect(.regular, in: .capsule)
+    }
 }
 
 /// Zoom controls and the image size, floating on glass at the bottom of the canvas.

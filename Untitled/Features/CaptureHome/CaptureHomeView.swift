@@ -40,9 +40,7 @@ private struct CaptureHomeContent: View {
                     TileRow {
                         ForEach(QuickAction.screenshots) { action in
                             CaptureTile(action: action, title: action.title, isActive: false, isDisabled: capture.isCapturing) {
-                                if let mode = action.captureMode {
-                                    Task { await capture.capture(mode) }
-                                }
+                                Task { await capture.run(action) }
                             }
                         }
                     }

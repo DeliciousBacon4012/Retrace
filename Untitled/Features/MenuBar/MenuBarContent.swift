@@ -74,8 +74,8 @@ struct QuickActionButton: View {
 
     var body: some View {
         Button(title, systemImage: action.symbolName) {
-            if let mode = action.captureMode {
-                Task { await dependencies.capture.capture(mode) }
+            if action.captureMode != nil || action.capturesText {
+                Task { await dependencies.capture.run(action) }
             } else if let mode = action.recordingMode {
                 Task { await dependencies.recording.toggle(mode) }
             } else if action.savesReplay {

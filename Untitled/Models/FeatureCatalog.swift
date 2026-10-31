@@ -89,10 +89,10 @@ nonisolated enum FeatureCatalog {
         Feature("storage.uploads", .storage, .maybe, String(localized: "Custom upload destinations")),
 
         // Utilities
-        Feature("util.ocr", .utilities, .next, String(localized: "Capture text from the screen")),
+        Feature("util.ocr", .utilities, .next, String(localized: "Capture text from the screen"), isAvailable: true),
         Feature("util.pin", .utilities, .next, String(localized: "Pin a capture on top of other windows")),
         Feature("util.colorPicker", .utilities, .next, String(localized: "Color picker")),
-        Feature("util.qr", .utilities, .maybe, String(localized: "QR and barcode reader")),
+        Feature("util.qr", .utilities, .maybe, String(localized: "QR and barcode reader"), isAvailable: true),
         Feature("util.ruler", .utilities, .maybe, String(localized: "Pixel ruler")),
         Feature("util.drawOnScreen", .utilities, .maybe, String(localized: "Draw on screen live")),
     ]
