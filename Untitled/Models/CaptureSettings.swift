@@ -1,11 +1,14 @@
 import Foundation
+import ImageIO
 
 /// Image file formats a capture can be saved as.
 nonisolated enum ImageFormat: String, CaseIterable, Identifiable, Sendable {
     case png
     case jpeg
     case heic
+    case avif
     case tiff
+    case gif
 
     var id: String { rawValue }
 
@@ -14,9 +17,17 @@ nonisolated enum ImageFormat: String, CaseIterable, Identifiable, Sendable {
         case .png: "PNG"
         case .jpeg: "JPEG"
         case .heic: "HEIC"
+        case .avif: "AVIF"
         case .tiff: "TIFF"
+        case .gif: "GIF"
         }
     }
+
+    /// The formats this Mac can write, checked once with ImageIO.
+    static let writable: [ImageFormat] = {
+        let types = Set((CGImageDestinationCopyTypeIdentifiers() as? [String]) ?? [])
+        return allCases.filter { types.contains($0.utType.identifier) }
+    }()
 }
 
 /// Video codecs a recording can be encoded with.

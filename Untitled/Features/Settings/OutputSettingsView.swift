@@ -10,7 +10,7 @@ struct OutputSettingsView: View {
         Form {
             Section("Images") {
                 Picker("Format", selection: $settings.imageFormat) {
-                    ForEach(ImageFormat.allCases) { Text($0.title).tag($0) }
+                    ForEach(ImageFormat.writable) { Text($0.title).tag($0) }
                 }
                 Toggle("Save Retina captures at standard size", isOn: $settings.downscalesRetina)
             }
