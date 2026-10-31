@@ -326,7 +326,7 @@ private struct SaveLocationRow: View {
                     Toggle("Show thumbnail", isOn: $settings.showsQuickAccess)
                     Spacer()
                     Picker("Format", selection: $settings.imageFormat) {
-                        ForEach(ImageFormat.allCases) { Text($0.title).tag($0) }
+                        ForEach(ImageFormat.writable) { Text($0.title).tag($0) }
                     }
                     .fixedSize()
                 }

@@ -124,10 +124,11 @@ final class CaptureCoordinator {
 
     /// Saves to the chosen folder, falling back to Pictures/Untitled if that fails.
     private func save(_ capture: CapturedImage) -> URL? {
-        let format = settings.imageFormat
+        let options = settings.exportOptions(for: capture.scale)
+        let format = options.format
         let data: Data
         do {
-            data = try ImageEncoder.data(for: capture.image, format: format)
+            data = try ImageEncoder.data(for: capture.image, options: options, pointScale: capture.scale)
         } catch {
             Log.capture.error("Encoding failed: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)

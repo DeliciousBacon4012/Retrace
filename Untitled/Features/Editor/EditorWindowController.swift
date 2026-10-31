@@ -77,7 +77,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         let actions = EditorActions(
             copy: { [weak self] in self?.copyImage() },
             save: { [weak self] in self?.save() },
-            done: { [weak self] in self?.finish() }
+            done: { [weak self] in self?.finish() },
+            render: { [weak self] in self?.renderOrWarn() },
+            exportFolder: settings.saveFolderURL,
+            exportOptions: settings.exportOptions(for: document.scale),
+            suggestedName: document.fileURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Screenshot")
         )
         let hosting = NSHostingController(rootView: EditorView(document: document, actions: actions))
         hosting.sceneBridgingOptions = [.toolbars, .title]
@@ -138,9 +142,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     private func write(to url: URL) -> Bool {
         guard let image = renderOrWarn() else { return false }
         let type = UTType(filenameExtension: url.pathExtension)
-        let format = ImageFormat.allCases.first { type?.conforms(to: $0.utType) == true } ?? .png
+        var options = settings.exportOptions(for: editorDocument.scale)
+        options.format = ImageFormat.allCases.first { type?.conforms(to: $0.utType) == true } ?? .png
+        options.scalePercent = 100
         do {
-            let data = try ImageEncoder.data(for: image, format: format)
+            let data = try ImageEncoder.data(for: image, options: options, pointScale: editorDocument.scale)
             try data.write(to: url, options: .atomic)
             editorDocument.markSaved(to: url)
             updateTitle()

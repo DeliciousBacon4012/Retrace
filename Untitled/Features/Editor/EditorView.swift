@@ -8,6 +8,7 @@ struct EditorView: View {
     let actions: EditorActions
 
     @AppStorage("editorShowsInspector") private var showsInspector = true
+    @State private var exportItem: ExportItem?
     @State private var canvasSize: CGSize = .zero
     @FocusState private var isCanvasFocused: Bool
 
@@ -30,6 +31,11 @@ struct EditorView: View {
                     .inspectorColumnWidth(min: 250, ideal: 272, max: 340)
             }
             .toolbar { toolbar }
+            .sheet(item: $exportItem) { item in
+                ExportSheet(item: item, folder: actions.exportFolder, options: actions.exportOptions) { url in
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            }
             .focusable()
             .focused($isCanvasFocused)
             .focusEffectDisabled()
@@ -79,6 +85,13 @@ struct EditorView: View {
             Button("Save", systemImage: "square.and.arrow.down") { actions.save() }
                 .keyboardShortcut("s", modifiers: .command)
                 .help("Save (⌘S)")
+            Button("Export", systemImage: "square.and.arrow.up") {
+                if let image = actions.render() {
+                    exportItem = ExportItem(image: image, scale: document.scale, suggestedName: actions.suggestedName)
+                }
+            }
+            .keyboardShortcut("e", modifiers: .command)
+            .help("Export with a different format, size, or quality (⌘E)")
         }
 
         ToolbarSpacer(.fixed)
@@ -176,6 +189,11 @@ struct EditorActions {
     var copy: () -> Void
     var save: () -> Void
     var done: () -> Void
+    /// The finished image, for exporting.
+    var render: () -> CGImage?
+    var exportFolder: URL
+    var exportOptions: ExportOptions
+    var suggestedName: String
 }
 
 /// Zoom controls and the image size, floating on glass at the bottom of the canvas.
@@ -211,7 +229,7 @@ private struct EditorStatusBar: View {
                 .padding(.vertical, 6)
                 .glassEffect(.regular.interactive(), in: .capsule)
 
-                Text("\(Int(size.width)) × \(Int(size.height)) px")
+                Text(verbatim: "\(Int(size.width)) × \(Int(size.height)) px")
                     .font(.system(.caption, design: .monospaced).weight(.medium))
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())

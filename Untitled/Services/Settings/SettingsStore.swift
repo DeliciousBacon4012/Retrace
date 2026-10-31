@@ -31,6 +31,10 @@ final class SettingsStore {
 
     var imageFormat = Defaults.imageFormat { didSet { save(imageFormat.rawValue, .imageFormat) } }
     var downscalesRetina = Defaults.downscalesRetina { didSet { save(downscalesRetina, .downscalesRetina) } }
+    /// Quality for JPEG, HEIC, and AVIF, from 0 to 1.
+    var imageQuality = Defaults.imageQuality { didSet { save(imageQuality, .imageQuality) } }
+    /// Leaves EXIF, GPS, and device details out of every saved and exported image.
+    var stripsMetadata = Defaults.stripsMetadata { didSet { save(stripsMetadata, .stripsMetadata) } }
     var saveFolderPath = Defaults.saveFolderPath { didSet { save(saveFolderPath, .saveFolderPath) } }
     var filenameTemplate = Defaults.filenameTemplate { didSet { save(filenameTemplate, .filenameTemplate) } }
 
@@ -65,6 +69,17 @@ final class SettingsStore {
 
     static var defaultShortcuts: [String: Shortcut] { Defaults.shortcuts }
 
+    /// How captures are encoded when saved, following the Output settings.
+    func exportOptions(for scale: CGFloat) -> ExportOptions {
+        var options = ExportOptions(format: imageFormat)
+        options.quality = imageQuality
+        options.stripsMetadata = stripsMetadata
+        if downscalesRetina, scale > 1 {
+            options.scalePercent = 100 / scale
+        }
+        return options
+    }
+
     /// The folder captures are saved to, as a file URL.
     var saveFolderURL: URL {
         URL(fileURLWithPath: saveFolderPath, isDirectory: true)
@@ -94,6 +109,8 @@ final class SettingsStore {
         overlayAutoCloseSeconds = value(.overlayAutoCloseSeconds, default: Defaults.overlayAutoCloseSeconds)
         imageFormat = ImageFormat(rawValue: value(.imageFormat, default: "")) ?? Defaults.imageFormat
         downscalesRetina = value(.downscalesRetina, default: Defaults.downscalesRetina)
+        imageQuality = value(.imageQuality, default: Defaults.imageQuality)
+        stripsMetadata = value(.stripsMetadata, default: Defaults.stripsMetadata)
         saveFolderPath = value(.saveFolderPath, default: Defaults.saveFolderPath)
         filenameTemplate = value(.filenameTemplate, default: Defaults.filenameTemplate)
         videoCodec = VideoCodec(rawValue: value(.videoCodec, default: "")) ?? Defaults.videoCodec
@@ -162,6 +179,8 @@ private extension SettingsStore {
         case overlayAutoCloseSeconds
         case imageFormat
         case downscalesRetina
+        case imageQuality
+        case stripsMetadata
         case saveFolderPath
         case filenameTemplate
         case videoCodec
@@ -188,6 +207,8 @@ private extension SettingsStore {
         static let overlayAutoCloseSeconds = 0
         static let imageFormat = ImageFormat.png
         static let downscalesRetina = false
+        static let imageQuality = 0.85
+        static let stripsMetadata = true
         static let filenameTemplate = "Untitled {date} at {time}"
         static let videoCodec = VideoCodec.hevc
         static let framesPerSecond = 60
