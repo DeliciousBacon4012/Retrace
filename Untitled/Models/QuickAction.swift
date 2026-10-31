@@ -12,12 +12,19 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
 
     /// Whether the action reads text from a selected area.
     var capturesText = false
+    /// Whether the action captures the last selected area again.
+    var repeatsArea = false
+    /// Whether the action opens the clipboard's image in the editor.
+    var opensClipboard = false
 
     /// Whether the action saves the replay buffer.
     var savesReplay = false
 
     /// Whether the action does anything yet.
-    var isAvailable: Bool { captureMode != nil || capturesText || recordingMode != nil || savesReplay }
+    var isAvailable: Bool { captureMode != nil || capturesText || repeatsArea || opensClipboard || recordingMode != nil || savesReplay }
+
+    /// Whether the action takes a screenshot of some kind.
+    var isScreenshot: Bool { captureMode != nil || capturesText || repeatsArea }
 
     /// The screenshot actions, including Capture Text, for toolbars and the Capture tab.
     static var screenshots: [QuickAction] { all.filter { $0.captureMode != nil || $0.capturesText } }
@@ -25,6 +32,7 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
 
     static let all: [QuickAction] = [
         QuickAction(id: "captureArea", title: String(localized: "Capture Area"), symbolName: "rectangle.dashed", captureMode: .area),
+        QuickAction(id: "capturePreviousArea", title: String(localized: "Capture Previous Area"), symbolName: "arrow.counterclockwise", repeatsArea: true),
         QuickAction(id: "captureWindow", title: String(localized: "Capture Window"), symbolName: "macwindow", captureMode: .window),
         QuickAction(id: "captureScreen", title: String(localized: "Capture Screen"), symbolName: "display", captureMode: .screen),
         QuickAction(id: "captureText", title: String(localized: "Capture Text"), symbolName: "text.viewfinder", capturesText: true),
@@ -32,5 +40,6 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
         QuickAction(id: "recordWindow", title: String(localized: "Record Window"), symbolName: "macwindow.badge.plus", recordingMode: .window),
         QuickAction(id: "recordScreen", title: String(localized: "Record Screen"), symbolName: "record.circle", recordingMode: .screen),
         QuickAction(id: "saveReplay", title: String(localized: "Save Replay"), symbolName: "gobackward", savesReplay: true),
+        QuickAction(id: "openClipboard", title: String(localized: "Open from Clipboard"), symbolName: "doc.on.clipboard", opensClipboard: true),
     ]
 }

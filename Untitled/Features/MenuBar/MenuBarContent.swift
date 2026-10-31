@@ -1,7 +1,9 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// The menu shown from the menu bar icon.
+/// The menu shown from the menu bar icon: every capture, then opening and pinning images,
+/// then history and settings. Each item shows its global shortcut.
 struct MenuBarContent: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
@@ -15,34 +17,73 @@ struct MenuBarContent: View {
             Divider()
         }
 
-        ForEach(QuickAction.all) { action in
-            QuickActionButton(action: action)
-                .menuShortcut(settings.shortcuts[action.id])
+        Section {
+            ForEach(QuickAction.all.filter(\.isScreenshot)) { action in
+                QuickActionButton(action: action)
+                    .menuShortcut(settings.shortcuts[action.id])
+            }
         }
 
-        Toggle("Replay Buffer", isOn: Binding(
-            get: { settings.replayBufferEnabled },
-            set: { dependencies.replay.setEnabled($0) }
-        ))
-
-        Divider()
-
-        Button("Open Untitled") {
-            openWindow(id: WindowID.main)
-            NSApplication.shared.activate()
+        Section {
+            if !dependencies.recording.isRecording {
+                ForEach(QuickAction.recordings) { action in
+                    QuickActionButton(action: action)
+                        .menuShortcut(settings.shortcuts[action.id])
+                }
+            }
+            ForEach(QuickAction.all.filter(\.savesReplay)) { action in
+                QuickActionButton(action: action)
+                    .menuShortcut(settings.shortcuts[action.id])
+            }
+            Toggle("Replay Buffer", isOn: Binding(
+                get: { settings.replayBufferEnabled },
+                set: { dependencies.replay.setEnabled($0) }
+            ))
         }
 
-        SettingsLink {
-            Text("Settings…")
+        Section {
+            Button("Open…", systemImage: "folder") {
+                openImages()
+            }
+            ForEach(QuickAction.all.filter(\.opensClipboard)) { action in
+                QuickActionButton(action: action)
+                    .menuShortcut(settings.shortcuts[action.id])
+            }
+            Button("Pin to the Screen…", systemImage: "pin") {
+                dependencies.pins.pinFromFile()
+            }
         }
-        .keyboardShortcut(",")
 
-        Divider()
+        Section {
+            Button("Capture History…", systemImage: "clock.arrow.circlepath") {
+                MainWindowRouter.shared.pending = .library
+                openWindow(id: WindowID.main)
+                NSApplication.shared.activate()
+            }
+            Button("Open Untitled", systemImage: "macwindow") {
+                openWindow(id: WindowID.main)
+                NSApplication.shared.activate()
+            }
+            SettingsLink {
+                Label("Settings…", systemImage: "gearshape")
+            }
+            .keyboardShortcut(",")
+        }
 
         Button("Quit Untitled") {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+
+    private func openImages() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = true
+        panel.directoryURL = settings.saveFolderURL
+        NSApplication.shared.activate()
+        guard panel.runModal() == .OK else { return }
+        panel.urls.forEach { dependencies.editor.open(fileAt: $0) }
     }
 }
 
@@ -67,20 +108,14 @@ struct MenuBarLabel: View {
     }
 }
 
-/// Runs a quick action: a screenshot, or starting or stopping a recording.
+/// Runs a quick action: a screenshot, a recording, a replay clip, or the clipboard's image.
 struct QuickActionButton: View {
     let action: QuickAction
     @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
         Button(title, systemImage: action.symbolName) {
-            if action.captureMode != nil || action.capturesText {
-                Task { await dependencies.capture.run(action) }
-            } else if let mode = action.recordingMode {
-                Task { await dependencies.recording.toggle(mode) }
-            } else if action.savesReplay {
-                Task { await dependencies.replay.saveClip() }
-            }
+            dependencies.perform(action)
         }
         .labelStyle(.titleAndIcon)
         .disabled(!action.isAvailable || (action.savesReplay && !dependencies.replay.buffer.isOn))

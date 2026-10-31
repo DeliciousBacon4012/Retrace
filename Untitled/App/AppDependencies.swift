@@ -19,6 +19,7 @@ final class AppDependencies {
     let replay: ReplayCoordinator
     let shortcuts: GlobalShortcuts
     let editor: EditorPresenter
+    let pins: PinController
 
     init(
         settings: SettingsStore,
@@ -35,8 +36,12 @@ final class AppDependencies {
         library = CaptureLibrary(folder: settings.saveFolderURL)
         let editor = EditorPresenter(settings: settings, clipboard: clipboard)
         self.editor = editor
+        let pins = PinController(clipboard: clipboard)
+        pins.onEdit = { [weak editor] capture in editor?.open(capture) }
+        self.pins = pins
         let quickAccess = QuickAccessController(settings: settings, clipboard: clipboard)
         quickAccess.onAnnotate = { [weak editor] capture in editor?.open(capture) }
+        quickAccess.onPin = { [weak pins] capture in pins?.pin(capture) }
         let capture = CaptureCoordinator(
             settings: settings,
             permissions: permissions,
@@ -47,6 +52,7 @@ final class AppDependencies {
             editor: editor
         )
         self.capture = capture
+        quickAccess.onSave = { [weak capture] image in capture?.save(image) }
         let recording = RecordingCoordinator(
             settings: settings,
             permissions: permissions,
@@ -59,13 +65,24 @@ final class AppDependencies {
         self.replay = replay
         shortcuts = GlobalShortcuts(settings: settings) { [weak capture, weak recording, weak replay] actionID in
             guard let action = QuickAction.all.first(where: { $0.id == actionID }) else { return }
-            if action.captureMode != nil || action.capturesText {
-                Task { await capture?.run(action) }
-            } else if let mode = action.recordingMode {
-                Task { await recording?.toggle(mode) }
-            } else if action.savesReplay {
-                Task { await replay?.saveClip() }
-            }
+            Self.perform(action, capture: capture, recording: recording, replay: replay)
+        }
+    }
+
+    /// Runs any quick action. Menus, global shortcuts, and buttons all come through here.
+    func perform(_ action: QuickAction) {
+        Self.perform(action, capture: capture, recording: recording, replay: replay)
+    }
+
+    private static func perform(_ action: QuickAction, capture: CaptureCoordinator?, recording: RecordingCoordinator?, replay: ReplayCoordinator?) {
+        if action.isScreenshot {
+            Task { await capture?.run(action) }
+        } else if action.opensClipboard {
+            capture?.openFromClipboard()
+        } else if let mode = action.recordingMode {
+            Task { await recording?.toggle(mode) }
+        } else if action.savesReplay {
+            Task { await replay?.saveClip() }
         }
     }
 
