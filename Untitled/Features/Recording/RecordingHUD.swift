@@ -53,7 +53,6 @@ private struct RecordingHUDView: View {
                     Circle()
                         .fill(.red)
                         .frame(width: 9, height: 9)
-                        .shadow(color: .red.opacity(0.9), radius: 5)
                         .phaseAnimator([1.0, 0.35]) { dot, phase in
                             dot.opacity(phase)
                         } animation: { _ in .easeInOut(duration: 0.9) }
