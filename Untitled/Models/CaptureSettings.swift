@@ -1,5 +1,6 @@
 import Foundation
 import ImageIO
+import UniformTypeIdentifiers
 
 /// Image file formats a capture can be saved as.
 nonisolated enum ImageFormat: String, CaseIterable, Identifiable, Sendable {
