@@ -147,10 +147,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         var options = settings.exportOptions(for: editorDocument.scale)
         options.format = ImageFormat.allCases.first { type?.conforms(to: $0.utType) == true } ?? .png
         options.scalePercent = 100
+        let redacts = editorDocument.hasRedactions
+        if redacts { options.stripsMetadata = true }
         do {
             let data = try ImageEncoder.data(for: image, options: options, pointScale: editorDocument.scale)
             try data.write(to: url, options: .atomic)
             editorDocument.markSaved(to: url)
+            // The original capture may still be on the clipboard. Swap in the covered version.
+            if redacts, clipboard.holdsOurImage {
+                let size = NSSize(width: CGFloat(image.width) / editorDocument.scale, height: CGFloat(image.height) / editorDocument.scale)
+                clipboard.copy(NSImage(cgImage: image, size: size))
+            }
             updateTitle()
             Log.capture.info("Saved edited image")
             return true

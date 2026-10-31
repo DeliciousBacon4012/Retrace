@@ -307,7 +307,10 @@ enum AnnotationRenderer {
         let path = shapePath(style.shape, in: mark.rect, cornerRadius: style.cornerRadius)
         switch style.redaction {
         case .solid:
-            layer.fill(path, with: .color(style.color.swiftUIColor))
+            // Always fully opaque, whatever opacity the color carries, so nothing shows through.
+            var opaque = style.color
+            opaque.opacity = 1
+            layer.fill(path, with: .color(opaque.swiftUIColor))
         case .blur, .pixelate:
             guard let image = redacted(style.redaction, style.strength) else { return }
             var clipped = layer

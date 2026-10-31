@@ -15,6 +15,10 @@ final class EditorDocument {
     private(set) var fileURL: URL?
 
     private(set) var annotations: [Annotation] = []
+
+    /// True when any mark hides part of the image, so every copy that leaves the editor
+    /// must be the covered version, with nothing extra in the file.
+    var hasRedactions: Bool { annotations.contains { $0.tool == .redact } }
     private(set) var cropRect: CGRect?
     private(set) var selectedID: Annotation.ID?
     /// The text mark being typed into, if any.
@@ -672,12 +676,13 @@ final class EditorDocument {
         case .blur:
             let filter = CIFilter.gaussianBlur()
             filter.inputImage = input.clampedToExtent()
-            filter.radius = Float((4 + 26 * level) * scale)
+            // Even the weakest setting is strong enough that text underneath can't be read.
+            filter.radius = Float((10 + 20 * level) * scale)
             output = filter.outputImage
         case .pixelate:
             let filter = CIFilter.pixellate()
             filter.inputImage = input.clampedToExtent()
-            filter.scale = Float((5 + 23 * level) * scale)
+            filter.scale = Float((10 + 18 * level) * scale)
             filter.center = .zero
             output = filter.outputImage
         case .solid:
