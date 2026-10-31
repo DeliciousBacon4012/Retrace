@@ -23,10 +23,10 @@ struct QuickAccessSettingsView: View {
             }
 
             Section("Motion") {
-                Picker("Speed", selection: $settings.overlaySpeed) {
-                    ForEach(OverlaySpeed.allCases) { Text($0.title).tag($0) }
+                LabeledContent("Speed") {
+                    GlassSegmentedPicker(title: "Speed", selection: $settings.overlaySpeed, options: OverlaySpeed.allCases, label: \.title)
+                        .frame(maxWidth: 260)
                 }
-                .pickerStyle(.segmented)
                 Picker("Close automatically", selection: $settings.overlayAutoCloseSeconds) {
                     Text("Never").tag(0)
                     Text("After 5 seconds").tag(5)

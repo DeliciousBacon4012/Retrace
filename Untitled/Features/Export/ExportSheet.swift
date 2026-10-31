@@ -44,10 +44,7 @@ struct ExportSheet: View {
                 preview
                 Form {
                     Section {
-                        Picker("Format", selection: $options.format) {
-                            ForEach(ImageFormat.writable) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
+                        GlassSegmentedPicker(title: "Format", selection: $options.format, options: ImageFormat.writable, label: \.title)
                         if options.format.isLossy {
                             ValueSlider("Quality", value: $options.quality, in: 0.05...1, format: .percent)
                                 .transition(.opacity.combined(with: .move(edge: .top)))
