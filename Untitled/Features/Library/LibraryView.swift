@@ -57,14 +57,8 @@ struct LibraryView: View {
     /// Search, filter, and the folder, kept with the grid so the window toolbar stays the same on every tab.
     private func header(library: CaptureLibrary, count: Int) -> some View {
         HStack(spacing: 12) {
-            Picker("Show", selection: $viewModel.kindFilter) {
-                ForEach(LibraryViewModel.KindFilter.allCases) { filter in
-                    Text(filter.title).tag(filter)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            GlassSegmentedPicker(title: "Show", selection: $viewModel.kindFilter, options: LibraryViewModel.KindFilter.allCases, label: \.title)
+                .frame(width: 300)
 
             Text("\(count) items")
                 .font(.callout)

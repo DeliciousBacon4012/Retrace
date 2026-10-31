@@ -18,9 +18,54 @@ struct EditorView: View {
         CanvasLayout(imageSize: document.imageSize, scale: document.scale, zoom: nil, pan: .zero, focus: document.visibleRect, in: canvasSize).fitFactor
     }
 
+    /// Room kept clear on the right for the floating inspector, so it never covers the image.
+    private var inspectorInset: CGFloat {
+        showsInspector ? EditorInspector.width + Design.spacingL * 2 : 0
+    }
+
     var body: some View {
+        ZStack(alignment: .topTrailing) {
+            canvas
+                .padding(.trailing, inspectorInset)
+
+            if showsInspector {
+                EditorInspector(document: document)
+                    .padding(.vertical, Design.spacingL)
+                    .padding(.trailing, Design.spacingL)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .background(Color(nsColor: .underPageBackgroundColor))
+        .animation(.panel, value: showsInspector)
+        .background { shortcutButtons }
+        .frame(minWidth: 720, minHeight: 440)
+        .toolbar { toolbar }
+        .sheet(item: $exportItem) { item in
+            ExportSheet(item: item, folder: actions.exportFolder, options: actions.exportOptions) { url in
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+        }
+        .focusable()
+        .focused($isCanvasFocused)
+        .focusEffectDisabled()
+        .onAppear { isCanvasFocused = true }
+        .onKeyPress(phases: [.down, .repeat]) { press in
+            handle(press)
+        }
+        .onDeleteCommand { document.deleteSelection() }
+        .onExitCommand {
+            if document.tool == .crop {
+                document.cancelCrop()
+            } else if document.editingTextID != nil {
+                document.finishTextEditing()
+            } else {
+                document.select(nil)
+            }
+        }
+    }
+
+    private var canvas: some View {
         AnnotationCanvas(document: document)
-            .background(Color(nsColor: .underPageBackgroundColor))
             .onGeometryChange(for: CGSize.self) { $0.size } action: { canvasSize = $0 }
             .overlay(alignment: .bottom) {
                 EditorStatusBar(document: document, fitFactor: fitFactor)
@@ -40,35 +85,6 @@ struct EditorView: View {
                 try? await Task.sleep(for: .seconds(2.4))
                 guard !Task.isCancelled else { return }
                 notice = nil
-            }
-            .background { shortcutButtons }
-            .frame(minWidth: 720, minHeight: 440)
-            .inspector(isPresented: $showsInspector) {
-                EditorInspector(document: document)
-                    .inspectorColumnWidth(min: 250, ideal: 272, max: 340)
-            }
-            .toolbar { toolbar }
-            .sheet(item: $exportItem) { item in
-                ExportSheet(item: item, folder: actions.exportFolder, options: actions.exportOptions) { url in
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                }
-            }
-            .focusable()
-            .focused($isCanvasFocused)
-            .focusEffectDisabled()
-            .onAppear { isCanvasFocused = true }
-            .onKeyPress(phases: [.down, .repeat]) { press in
-                handle(press)
-            }
-            .onDeleteCommand { document.deleteSelection() }
-            .onExitCommand {
-                if document.tool == .crop {
-                    document.cancelCrop()
-                } else if document.editingTextID != nil {
-                    document.finishTextEditing()
-                } else {
-                    document.select(nil)
-                }
             }
     }
 
@@ -131,7 +147,7 @@ struct EditorView: View {
 
         ToolbarItem(placement: .primaryAction) {
             Button("Inspector", systemImage: "sidebar.right") {
-                withAnimation(.panel) { showsInspector.toggle() }
+                showsInspector.toggle()
             }
             .keyboardShortcut("i", modifiers: [.command, .option])
             .help("Show or hide the inspector (⌥⌘I)")
