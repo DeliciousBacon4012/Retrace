@@ -39,7 +39,7 @@ struct AnnotationCanvas: View {
                 CropShade(cropRect: document.cropRect, layout: layout)
                     .allowsHitTesting(false)
 
-                SelectionOverlay(document: document, layout: layout)
+                MarkSelectionOverlay(document: document, layout: layout)
                     .allowsHitTesting(false)
 
                 if let id = document.editingTextID, let mark = document.annotations.first(where: { $0.id == id }) {
@@ -171,13 +171,14 @@ struct AnnotationCanvas: View {
 }
 
 /// Converts between the view's points and the image's pixels, for the current zoom and pan.
-struct CanvasLayout: Equatable {
+nonisolated struct CanvasLayout: Equatable {
     let factor: CGFloat
     let fitFactor: CGFloat
     let origin: CGPoint
     let viewSize: CGSize
     let imageSize: CGSize
 
+    @MainActor
     init(document: EditorDocument, in available: CGSize) {
         self.init(imageSize: document.imageSize, scale: document.scale, zoom: document.zoom, pan: document.pan, in: available)
     }
@@ -273,7 +274,7 @@ private struct CropShade: View {
 }
 
 /// The selected mark's outline and grab handles.
-private struct SelectionOverlay: View {
+private struct MarkSelectionOverlay: View {
     let document: EditorDocument
     let layout: CanvasLayout
 
