@@ -1,40 +1,27 @@
 import AppKit
-import Observation
-import QuartzCore
 import SwiftUI
-
-/// Which Quick Access thumbnail is in front: the one under the pointer, or else the newest.
-@Observable
-final class QuickAccessStack {
-    fileprivate(set) var order: [UUID] = []
-    var hoveredID: UUID?
-
-    var focusedID: UUID? { hoveredID ?? order.last }
-}
 
 /// Shows a floating thumbnail for each new capture, stacked in the corner chosen in Settings.
 ///
-/// The newest thumbnail sits nearest the corner and is a little larger; older ones step back,
-/// slightly smaller, softer, and greyer, until the pointer moves over them. Drag a thumbnail
-/// into any app to drop the file, or flick it toward the screen edge to put it away.
+/// The whole stack lives in one window so its layout is a single calculation (see
+/// `StackGeometry`): collapsed, older thumbnails peek out behind the newest; with the pointer
+/// over it, the stack rises into evenly spaced floors. Drag a thumbnail into any app to drop
+/// the file, or flick it toward the screen edge to put it away.
 final class QuickAccessController {
-    private struct Entry {
-        let capture: CapturedImage
-        let panel: NSPanel
-        let view: ThumbnailHostingView
-        var autoClose: Task<Void, Never>?
-    }
-
-    /// At most this many thumbnails are shown; older ones close first.
-    private let maximumVisible = 5
-    private let margin: CGFloat = 16
-    /// How much of each thumbnail's height the next one up starts at, so the stack reads as one.
-    private let stackStep: CGFloat = 0.9
-
     private let settings: SettingsStore
     private let clipboard: any ClipboardWriting
-    private let stack = QuickAccessStack()
-    private var entries: [Entry] = []
+    private let model = QuickAccessStackModel()
+
+    private var panel: QuickAccessPanel?
+    private var screen: NSScreen?
+    private var isPointerInside = false
+    private var hoverTask: Task<Void, Never>?
+    private var resizeTask: Task<Void, Never>?
+    private var closeTasks: [UUID: Task<Void, Never>] = [:]
+    /// When each thumbnail closes on its own, so hovering can pause and resume the countdown.
+    private var deadlines: [UUID: Date] = [:]
+    private var pausedRemaining: [UUID: TimeInterval] = [:]
+    private var screenObserver: (any NSObjectProtocol)?
 
     /// Opens a capture in the editor; set once the editor exists.
     var onAnnotate: ((CapturedImage) -> Void)?
@@ -46,120 +33,103 @@ final class QuickAccessController {
     init(settings: SettingsStore, clipboard: any ClipboardWriting) {
         self.settings = settings
         self.clipboard = clipboard
-    }
-
-    private var speed: Double { settings.overlaySpeed.factor }
-
-    private var edgeDirection: CGFloat {
-        switch settings.overlayCorner {
-        case .bottomLeft, .topLeft: -1
-        case .bottomRight, .topRight: 1
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.screenParametersChanged() }
         }
     }
+
+    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    private var alwaysExpanded: Bool { settings.quickAccessLayout == .column }
+
+    // MARK: Showing and closing
 
     func show(_ capture: CapturedImage) {
-        let id = capture.id
-        let actions = QuickAccessThumbnail.Actions(
-            copy: { [weak self] in
-                if capture.isVideo, let url = self?.entry(id)?.capture.fileURL {
-                    self?.clipboard.copyFile(at: url)
-                } else {
-                    self?.clipboard.copy(capture.nsImage)
-                }
-            },
-            save: { [weak self] in self?.save(id) },
-            delete: { [weak self] in self?.delete(id) },
-            pin: { [weak self] in
-                guard let self, let entry = entry(id) else { return }
-                onPin?(entry.capture)
-                dismiss(id)
-            },
-            open: { [weak self] in
-                guard let self, let entry = entry(id), !entry.capture.isVideo else {
-                    if let url = self?.entry(id)?.capture.fileURL { NSWorkspace.shared.open(url) }
-                    return
-                }
-                dismiss(id)
-                onAnnotate?(entry.capture)
-            },
-            close: { [weak self] in self?.dismiss(id) },
-            hover: { [weak self] hovering in self?.hoverChanged(id, hovering: hovering) }
-        )
-        let thumbnail = QuickAccessThumbnail(
-            capture: capture,
-            stack: stack,
-            edge: edgeDirection,
-            alignment: settings.overlayCorner,
-            speed: speed,
-            actions: actions
-        )
-        let view = ThumbnailHostingView(rootView: thumbnail)
-        view.setFrameSize(view.fittingSize)
-        view.fileURL = { [weak self] in self?.entry(id)?.capture.fileURL }
-        view.dragImage = capture.nsImage
-        view.edgeDirection = edgeDirection
-        view.speed = speed
-        view.onSwipeAway = { [weak self] in self?.dismiss(id, animated: false) }
-        view.onSwipeBegan = { [weak self] in self?.entry(id)?.autoClose?.cancel() }
-
-        let panel = ThumbnailPanel(contentRect: CGRect(origin: .zero, size: view.fittingSize))
-        panel.contentView = view
-
-        var entry = Entry(capture: capture, panel: panel, view: view)
-        entry.autoClose = scheduleAutoClose(id)
-        entries.append(entry)
-        stack.order = entries.map(\.capture.id)
-
-        while entries.count > maximumVisible, let oldest = entries.first {
-            dismiss(oldest.capture.id)
+        if model.cards.isEmpty {
+            screen = NSScreen.underPointer ?? NSScreen.main
         }
-        layout(placingImmediately: panel)
+        applySettings()
+
+        let card = QuickAccessStackModel.Card(id: capture.id, capture: capture, thumbnail: Self.thumbnail(of: capture, size: model.geometry.cardSize))
+        let panel = panel ?? makePanel()
+        // Grow first, away from the corner, so nothing on screen moves when the window does.
+        resizePanel(count: model.cards.count + 1, expanded: model.isExpanded, immediately: true)
         panel.orderFrontRegardless()
+
+        withAnimation(insertAnimation) {
+            model.cards.insert(card, at: 0)
+        }
+        scheduleAutoClose(capture.id)
+
+        let limit = min(settings.quickAccessMaxVisible, model.geometry.capacity(forHeight: screen?.visibleFrame.height ?? 900))
+        while model.cards.count > limit, let oldest = model.cards.last {
+            dismiss(oldest.id)
+        }
     }
 
     func dismiss(_ id: UUID, animated: Bool = true) {
-        guard let index = entries.firstIndex(where: { $0.capture.id == id }) else { return }
-        let entry = entries.remove(at: index)
-        entry.autoClose?.cancel()
-        stack.order = entries.map(\.capture.id)
-        if stack.hoveredID == id { stack.hoveredID = nil }
+        guard model.cards.contains(where: { $0.id == id }) else { return }
+        closeTasks.removeValue(forKey: id)?.cancel()
+        deadlines[id] = nil
+        pausedRemaining[id] = nil
+        if model.hoveredID == id { model.hoveredID = nil }
 
-        let panel = entry.panel
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.22 * speed
-                context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-                panel.animator().alphaValue = 0
-                var frame = panel.frame
-                frame.origin.x += edgeDirection * 24
-                panel.animator().setFrame(frame, display: false)
-            } completionHandler: {
-                MainActor.assumeIsolated { panel.orderOut(nil) }
+        withAnimation(animated ? removeAnimation : nil) {
+            model.cards.removeAll { $0.id == id }
+            if model.cards.count < 2, !alwaysExpanded { model.isExpanded = false }
+        }
+        model.swipeOffsets[id] = nil
+
+        if model.cards.isEmpty {
+            isPointerInside = false
+            hoverTask?.cancel()
+            let panel = panel
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(0.3))
+                guard let self, model.cards.isEmpty else { return }
+                panel?.orderOut(nil)
             }
         } else {
-            panel.orderOut(nil)
+            resizePanel(count: model.cards.count, expanded: model.isExpanded, immediately: false)
         }
-        layout(placingImmediately: nil)
+    }
+
+    private var insertAnimation: Animation {
+        reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.42 * model.speed, dampingFraction: 0.78)
+    }
+
+    private var removeAnimation: Animation {
+        reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.32 * model.speed, dampingFraction: 0.9)
     }
 
     // MARK: Actions
 
-    private func entry(_ id: UUID) -> Entry? {
-        entries.first { $0.capture.id == id }
+    private func card(_ id: UUID) -> QuickAccessStackModel.Card? {
+        model.cards.first { $0.id == id }
+    }
+
+    private func copy(_ id: UUID) {
+        guard let capture = card(id)?.capture else { return }
+        if capture.isVideo, let url = capture.fileURL {
+            clipboard.copyFile(at: url)
+        } else {
+            clipboard.copy(capture.nsImage)
+        }
     }
 
     private func save(_ id: UUID) {
-        guard let entry = entry(id) else { return }
-        if entry.capture.fileURL == nil, onSave?(entry.capture) == nil {
+        guard let capture = card(id)?.capture else { return }
+        if capture.fileURL == nil, onSave?(capture) == nil {
             return
         }
         dismiss(id)
     }
 
-    /// Deletes the saved file (to the Trash, so it can be put back) and closes the thumbnail.
+    /// Moves the saved file to the Trash, so it can be put back, and closes the thumbnail.
     private func delete(_ id: UUID) {
-        guard let entry = entry(id) else { return }
-        if let url = entry.capture.fileURL {
+        guard let capture = card(id)?.capture else { return }
+        if let url = capture.fileURL {
             NSWorkspace.shared.recycle([url]) { _, error in
                 if let error {
                     Task { @MainActor in ErrorPresenter.present(error) }
@@ -169,69 +139,185 @@ final class QuickAccessController {
         dismiss(id)
     }
 
-    private func hoverChanged(_ id: UUID, hovering: Bool) {
-        if hovering {
-            stack.hoveredID = id
-            entry(id)?.panel.orderFrontRegardless()
-            entry(id)?.autoClose?.cancel()
-        } else if stack.hoveredID == id {
-            stack.hoveredID = nil
-            if let index = entries.firstIndex(where: { $0.capture.id == id }) {
-                entries[index].autoClose = scheduleAutoClose(id)
+    private func pin(_ id: UUID) {
+        guard let capture = card(id)?.capture else { return }
+        onPin?(capture)
+        dismiss(id)
+    }
+
+    private func open(_ id: UUID) {
+        guard let capture = card(id)?.capture else { return }
+        if capture.isVideo {
+            if let url = capture.fileURL { NSWorkspace.shared.open(url) }
+            return
+        }
+        dismiss(id)
+        onAnnotate?(capture)
+    }
+
+    // MARK: Hover
+
+    /// Rises into floors shortly after the pointer arrives, and settles back a moment after
+    /// it leaves, so passing over the corner doesn't make the stack flicker.
+    private func pointerInside(_ inside: Bool) {
+        isPointerInside = inside
+        hoverTask?.cancel()
+        if inside {
+            pauseAutoClose()
+        } else {
+            resumeAutoClose()
+        }
+        guard !alwaysExpanded, model.cards.count > 1 else { return }
+
+        if inside, !model.isExpanded {
+            hoverTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(80))
+                guard let self, !Task.isCancelled, isPointerInside else { return }
+                resizePanel(count: model.cards.count, expanded: true, immediately: true)
+                model.isExpanded = true
+            }
+        } else if !inside, model.isExpanded {
+            hoverTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(350))
+                guard let self, !Task.isCancelled, !isPointerInside else { return }
+                model.isExpanded = false
+                resizePanel(count: model.cards.count, expanded: false, immediately: false)
             }
         }
     }
 
-    private func scheduleAutoClose(_ id: UUID) -> Task<Void, Never>? {
-        let seconds = settings.overlayAutoCloseSeconds
-        guard seconds > 0 else { return nil }
-        return Task { [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
+    // MARK: Closing on its own
+
+    private func scheduleAutoClose(_ id: UUID, after seconds: TimeInterval? = nil) {
+        let delay = seconds ?? TimeInterval(settings.overlayAutoCloseSeconds)
+        guard delay > 0 else { return }
+        closeTasks[id]?.cancel()
+        deadlines[id] = Date().addingTimeInterval(delay)
+        guard !isPointerInside else {
+            pauseAutoClose()
+            return
+        }
+        closeTasks[id] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
             self?.dismiss(id)
         }
     }
 
-    // MARK: Layout
-
-    /// Stacks the panels away from the chosen corner, newest nearest the corner.
-    /// Panels already on screen glide to their new places; a new one appears in place.
-    private func layout(placingImmediately newPanel: NSPanel?) {
-        guard let screen = NSScreen.underPointer ?? NSScreen.main else { return }
-        let area = screen.visibleFrame
-        let corner = settings.overlayCorner
-        var offset: CGFloat = 0
-
-        for entry in entries.reversed() {
-            let size = entry.panel.frame.size
-            let x: CGFloat = switch corner {
-            case .bottomLeft, .topLeft: area.minX + margin
-            case .bottomRight, .topRight: area.maxX - margin - size.width
-            }
-            let y: CGFloat = switch corner {
-            case .bottomLeft, .bottomRight: area.minY + margin + offset
-            case .topLeft, .topRight: area.maxY - margin - size.height - offset
-            }
-            let origin = CGPoint(x: x, y: y)
-            offset += (size.height - ThumbnailMetrics.shadowPadding * 2) * stackStep
-
-            guard !entry.view.isSwiping else { continue }
-            if entry.panel === newPanel {
-                entry.panel.setFrameOrigin(origin)
-            } else if entry.panel.frame.origin != origin {
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.42 * speed
-                    // Settles like a spring: fast start, a whisker of overshoot, soft landing.
-                    context.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1.12, 0.36, 1)
-                    entry.panel.animator().setFrameOrigin(origin)
-                }
-            }
+    private func pauseAutoClose() {
+        for (id, deadline) in deadlines {
+            closeTasks.removeValue(forKey: id)?.cancel()
+            pausedRemaining[id] = max(deadline.timeIntervalSinceNow, 0)
         }
+        deadlines.removeAll()
+    }
+
+    /// Picks up where each countdown left off, with at least a moment to spare.
+    private func resumeAutoClose() {
+        let paused = pausedRemaining
+        pausedRemaining.removeAll()
+        for (id, remaining) in paused where card(id) != nil {
+            scheduleAutoClose(id, after: max(remaining, 1.5))
+        }
+    }
+
+    // MARK: Window
+
+    private func applySettings() {
+        model.corner = settings.overlayCorner
+        model.speed = settings.overlaySpeed.factor
+        let size = settings.quickAccessSize.cardSize
+        if model.geometry.cardSize != size {
+            model.geometry.cardSize = size
+        }
+        if alwaysExpanded {
+            model.isExpanded = true
+        }
+    }
+
+    private func makePanel() -> QuickAccessPanel {
+        let actions = QuickAccessStackView.Actions(
+            copy: { [weak self] in self?.copy($0) },
+            save: { [weak self] in self?.save($0) },
+            delete: { [weak self] in self?.delete($0) },
+            pin: { [weak self] in self?.pin($0) },
+            open: { [weak self] in self?.open($0) },
+            close: { [weak self] in self?.dismiss($0) },
+            hoverStack: { [weak self] in self?.pointerInside($0) }
+        )
+        let view = QuickAccessHostingView(rootView: QuickAccessStackView(model: model, actions: actions))
+        view.sizingOptions = []
+        view.model = model
+        view.fileURL = { [weak self] id in self?.card(id)?.capture.fileURL }
+        view.onSwipeBegan = { [weak self] id in
+            self?.closeTasks.removeValue(forKey: id)?.cancel()
+        }
+        view.onSwipeAway = { [weak self] id in self?.dismiss(id, animated: false) }
+
+        let panel = QuickAccessPanel(contentRect: .zero)
+        panel.contentView = view
+        self.panel = panel
+        return panel
+    }
+
+    /// Resizes the window around the stack, anchored to its corner. Growing happens at once;
+    /// shrinking waits for the thumbnails to finish moving, so none of them gets clipped.
+    private func resizePanel(count: Int, expanded: Bool, immediately: Bool) {
+        guard let panel, let screen else { return }
+        let size = model.geometry.panelSize(count: max(count, 1), expanded: expanded)
+        let area = screen.visibleFrame
+        let frame = CGRect(
+            x: model.corner.isLeft ? area.minX : area.maxX - size.width,
+            y: model.corner.isBottom ? area.minY : area.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+        resizeTask?.cancel()
+        if immediately || frame.height >= panel.frame.height || panel.frame.width != frame.width {
+            panel.setFrame(frame, display: true)
+            return
+        }
+        resizeTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(0.45 * (self?.model.speed ?? 1)))
+            guard let self, !Task.isCancelled, model.isExpanded == expanded, model.cards.count == count else { return }
+            panel.setFrame(frame, display: true)
+        }
+    }
+
+    /// Keeps the stack on a screen that still exists, in the right place after display changes.
+    private func screenParametersChanged() {
+        guard panel != nil, !model.cards.isEmpty else { return }
+        let id = screen?.displayID
+        screen = NSScreen.screens.first { $0.displayID == id } ?? NSScreen.main
+        resizePanel(count: model.cards.count, expanded: model.isExpanded, immediately: true)
+    }
+
+    /// A copy at twice the thumbnail's size, enough for Retina without holding the full capture twice.
+    private static func thumbnail(of capture: CapturedImage, size: CGSize) -> NSImage {
+        let image = capture.image
+        let target = CGSize(width: size.width * 2, height: size.height * 2)
+        let factor = max(target.width / CGFloat(image.width), target.height / CGFloat(image.height))
+        guard factor < 1,
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: nil,
+                  width: Int((CGFloat(image.width) * factor).rounded()),
+                  height: Int((CGFloat(image.height) * factor).rounded()),
+                  bitsPerComponent: 8,
+                  bytesPerRow: 0,
+                  space: space,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              )
+        else { return capture.nsImage }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: context.width, height: context.height))
+        guard let small = context.makeImage() else { return capture.nsImage }
+        return NSImage(cgImage: small, size: capture.pointSize)
     }
 }
 
-/// A floating panel that never takes focus away from the app you're working in.
-private final class ThumbnailPanel: NSPanel {
+/// A floating window that never takes focus away from the app you're working in.
+private final class QuickAccessPanel: NSPanel {
     init(contentRect: CGRect) {
         super.init(contentRect: contentRect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         level = .floating
@@ -245,36 +331,40 @@ private final class ThumbnailPanel: NSPanel {
     }
 }
 
-/// Hosts a thumbnail and turns drags into one of two gestures: a flick toward the screen edge
-/// moves the thumbnail with the pointer and throws it away with its momentum; any other drag
-/// carries the file into another app. Clicks, hovers, and double-clicks go to SwiftUI.
-final class ThumbnailHostingView: NSHostingView<QuickAccessThumbnail> {
-    var fileURL: () -> URL? = { nil }
-    var dragImage: NSImage?
-    /// -1 when the thumbnails sit on the left edge, 1 on the right.
-    var edgeDirection: CGFloat = -1
-    var speed: Double = 1
-    var onSwipeAway: () -> Void = {}
-    var onSwipeBegan: () -> Void = {}
+/// Hosts the stack and turns drags on a thumbnail into one of two gestures: a flick toward the
+/// screen edge moves that thumbnail with the pointer and throws it away with its momentum; any
+/// other drag carries the file into another app. Clicks, hovers, and double-clicks go to SwiftUI.
+final class QuickAccessHostingView: NSHostingView<QuickAccessStackView> {
+    weak var model: QuickAccessStackModel?
+    var fileURL: (UUID) -> URL? = { _ in nil }
+    var onSwipeAway: (UUID) -> Void = { _ in }
+    var onSwipeBegan: (UUID) -> Void = { _ in }
 
     private enum Mode {
-        case undecided
-        case swiping(startOrigin: CGPoint)
-        case done
+        case idle
+        case undecided(UUID)
+        case swiping(UUID)
     }
 
-    private var mode: Mode = .done
+    private var mode: Mode = .idle
     private var downLocation: CGPoint = .zero
     private var downEvent: NSEvent?
     private var samples: [(time: TimeInterval, x: CGFloat)] = []
+    /// NSHostingView already acts as a drag source for SwiftUI, so file drags use their own.
+    private let dragSource = ThumbnailDragSource()
 
-    private(set) var isSwiping = false
+    private var edge: CGFloat {
+        model?.corner.isLeft == true ? -1 : 1
+    }
 
     override func mouseDown(with event: NSEvent) {
-        mode = .undecided
+        mode = .idle
         downLocation = NSEvent.mouseLocation
         downEvent = event
         samples = []
+        if let model, let id = model.cardID(at: topLeftPoint(for: event), in: bounds.size) {
+            mode = .undecided(id)
+        }
         super.mouseDown(with: event)
     }
 
@@ -284,51 +374,55 @@ final class ThumbnailHostingView: NSHostingView<QuickAccessThumbnail> {
         let dy = location.y - downLocation.y
 
         switch mode {
-        case .undecided:
-            guard hypot(dx, dy) > 5, let window else { return }
+        case .idle:
+            super.mouseDragged(with: event)
+
+        case .undecided(let id):
+            guard hypot(dx, dy) > 5 else { return }
             cancelSwiftUIPress(with: event)
-            if abs(dx) > abs(dy) * 1.2, dx * edgeDirection > 0 {
-                mode = .swiping(startOrigin: window.frame.origin)
-                isSwiping = true
-                onSwipeBegan()
+            if abs(dx) > abs(dy) * 1.2, dx * edge > 0 {
+                mode = .swiping(id)
+                onSwipeBegan(id)
                 track(location.x)
             } else {
-                mode = .done
-                startFileDrag(with: downEvent ?? event)
+                mode = .idle
+                startFileDrag(for: id, with: downEvent ?? event)
             }
 
-        case .swiping(let start):
-            guard let window else { return }
+        case .swiping(let id):
             track(location.x)
             // Toward the edge follows the pointer; away from it resists, like a rubber band.
-            let pull = dx * edgeDirection > 0 ? dx : dx * 0.2
-            window.setFrameOrigin(CGPoint(x: start.x + pull, y: start.y))
-
-        case .done:
-            break
+            let pull = dx * edge > 0 ? dx : dx * 0.2
+            model?.swipeOffsets[id] = pull
         }
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard case .swiping(let start) = mode, let window else {
+        guard case .swiping(let id) = mode, let model else {
             if case .undecided = mode { super.mouseUp(with: event) }
-            mode = .done
+            if case .idle = mode { super.mouseUp(with: event) }
+            mode = .idle
             return
         }
-        mode = .done
+        mode = .idle
         track(NSEvent.mouseLocation.x)
 
-        let travelled = (window.frame.origin.x - start.x) * edgeDirection
-        let velocity = currentVelocity() * edgeDirection
-        let width = window.frame.width
+        let travelled = (model.swipeOffsets[id] ?? 0) * edge
+        let velocity = currentVelocity() * edge
+        let width = model.geometry.cardSize.width
         if travelled > width * 0.35 || velocity > 500 {
-            throwAway(window: window, velocity: max(velocity, 900))
+            throwAway(id, from: travelled, velocity: max(velocity, 900))
         } else {
-            springBack(window: window, to: start)
+            springBack(id)
         }
     }
 
     // MARK: Swipe physics
+
+    private func topLeftPoint(for event: NSEvent) -> CGPoint {
+        let local = convert(event.locationInWindow, from: nil)
+        return isFlipped ? local : CGPoint(x: local.x, y: bounds.height - local.y)
+    }
 
     private func track(_ x: CGFloat) {
         let now = ProcessInfo.processInfo.systemUptime
@@ -342,63 +436,45 @@ final class ThumbnailHostingView: NSHostingView<QuickAccessThumbnail> {
         return (last.x - first.x) / CGFloat(last.time - first.time)
     }
 
-    private func throwAway(window: NSWindow, velocity: CGFloat) {
-        guard let screen = window.screen ?? NSScreen.main else {
-            onSwipeAway()
-            return
-        }
-        var frame = window.frame
-        let target = edgeDirection < 0 ? screen.frame.minX - frame.width - 20 : screen.frame.maxX + 20
-        let distance = abs(target - frame.origin.x)
-        frame.origin.x = target
-        NSAnimationContext.runAnimationGroup { context in
-            // Keep the hand's momentum: the faster the flick, the shorter the flight.
-            context.duration = min(max(Double(distance / velocity), 0.12), 0.4) * speed
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.15, 0.6, 0.35, 1)
-            window.animator().setFrame(frame, display: false)
-            window.animator().alphaValue = 0.4
-        } completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                self?.isSwiping = false
-                self?.onSwipeAway()
-            }
+    /// Keeps the hand's momentum: the faster the flick, the shorter the flight. The window ends at
+    /// the screen edge, so the thumbnail slides off the screen rather than fading in mid-air.
+    private func throwAway(_ id: UUID, from travelled: CGFloat, velocity: CGFloat) {
+        guard let model else { return }
+        let target = model.geometry.cardSize.width + model.geometry.padding * 2 + 20
+        let duration = min(max(Double((target - travelled) / velocity), 0.12), 0.4) * model.speed
+        withAnimation(.timingCurve(0.15, 0.6, 0.35, 1, duration: duration)) {
+            model.swipeOffsets[id] = target * edge
+        } completion: { [weak self] in
+            self?.onSwipeAway(id)
         }
     }
 
-    private func springBack(window: NSWindow, to origin: CGPoint) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.45 * speed
-            // Overshoots a touch past home, then settles, like a released spring.
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 1.45, 0.55, 1)
-            window.animator().setFrameOrigin(origin)
-        } completionHandler: { [weak self] in
-            MainActor.assumeIsolated { self?.isSwiping = false }
+    private func springBack(_ id: UUID) {
+        withAnimation(.spring(response: 0.35 * (model?.speed ?? 1), dampingFraction: 0.62)) {
+            model?.swipeOffsets[id] = 0
         }
     }
 
     // MARK: File drag
 
-    private func startFileDrag(with event: NSEvent) {
+    private func startFileDrag(for id: UUID, with event: NSEvent) {
+        guard let card = model?.cards.first(where: { $0.id == id }) else { return }
         let writer: any NSPasteboardWriting
-        if let url = fileURL() {
+        if let url = fileURL(id) {
             writer = url as NSURL
-        } else if let dragImage {
-            writer = dragImage
         } else {
-            return
+            writer = card.capture.nsImage
         }
         let item = NSDraggingItem(pasteboardWriter: writer)
-        let imageSize = NSSize(width: min(bounds.width * 0.7, 180), height: min(bounds.height * 0.7, 120))
+        let size = model?.geometry.cardSize ?? CGSize(width: 200, height: 125)
+        let imageSize = NSSize(width: size.width * 0.8, height: size.height * 0.8)
         let origin = convert(event.locationInWindow, from: nil)
         item.setDraggingFrame(
             NSRect(x: origin.x - imageSize.width / 2, y: origin.y - imageSize.height / 2, width: imageSize.width, height: imageSize.height),
-            contents: dragImage
+            contents: card.thumbnail
         )
         beginDraggingSession(with: [item], event: event, source: dragSource)
     }
-
-    /// NSHostingView already acts as a drag source for SwiftUI, so file drags use their own.
-    private let dragSource = ThumbnailDragSource()
 
     /// Ends SwiftUI's press without a click, so a drag that starts on a button never fires it.
     private func cancelSwiftUIPress(with event: NSEvent) {
