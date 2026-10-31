@@ -17,6 +17,8 @@ final class CaptureCoordinator {
     @ObservationIgnored private let editor: EditorPresenter
     @ObservationIgnored private let overlay = SelectionOverlay()
     @ObservationIgnored private let toast = CaptureToastController()
+    /// The last area selected, for Capture Previous Area.
+    @ObservationIgnored private var lastArea: (rect: CGRect, screen: NSScreen)?
 
     init(
         settings: SettingsStore,
@@ -42,7 +44,51 @@ final class CaptureCoordinator {
             await capture(mode)
         } else if action.capturesText {
             await captureText()
+        } else if action.repeatsArea {
+            await capturePreviousArea()
         }
+    }
+
+    /// Captures the same area as last time without selecting it again.
+    func capturePreviousArea() async {
+        guard let lastArea, NSScreen.screens.contains(lastArea.screen) else {
+            await capture(.area)
+            return
+        }
+        guard !isCapturing, hasPermission() else { return }
+        isCapturing = true
+        defer { isCapturing = false }
+        do {
+            guard let displayID = lastArea.screen.displayID else { throw CaptureError.displayNotFound }
+            let captureScale = scale(for: lastArea.screen)
+            let image = try await capturer.captureDisplay(
+                displayID,
+                rect: lastArea.screen.topLeftRelativeRect(for: lastArea.rect),
+                options: options(scale: captureScale)
+            )
+            finish(CapturedImage(image: image, scale: captureScale, date: .now))
+        } catch {
+            Log.capture.error("Capture failed: \(error.localizedDescription, privacy: .public)")
+            ErrorPresenter.present(error)
+        }
+    }
+
+    /// Opens the image on the clipboard in the editor, from any app.
+    func openFromClipboard() {
+        let pasteboard = NSPasteboard.general
+        let image: NSImage?
+        if let url = (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL])?.first,
+           let fileImage = NSImage(contentsOf: url) {
+            image = fileImage
+        } else {
+            image = NSImage(pasteboard: pasteboard)
+        }
+        guard let image, let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            toast.show(.init(symbolName: "clipboard", title: String(localized: "No image on the clipboard"), detail: String(localized: "Copy an image, then try again.")))
+            return
+        }
+        let scale = image.size.width > 0 ? max(CGFloat(cgImage.width) / image.size.width, 1) : 1
+        editor.open(CapturedImage(image: cgImage, scale: scale, date: .now))
     }
 
     func capture(_ mode: CaptureMode) async {
@@ -137,6 +183,7 @@ final class CaptureCoordinator {
 
         case .area:
             guard case .area(let rect, let screen)? = await overlay.select(.area) else { return nil }
+            lastArea = (rect, screen)
             guard let displayID = screen.displayID else { throw CaptureError.displayNotFound }
             let captureScale = scale(for: screen)
             let image = try await capturer.captureDisplay(
@@ -189,7 +236,7 @@ final class CaptureCoordinator {
     }
 
     /// Saves to the chosen folder, falling back to Pictures/Untitled if that fails.
-    private func save(_ capture: CapturedImage) -> URL? {
+    func save(_ capture: CapturedImage) -> URL? {
         let options = settings.exportOptions(for: capture.scale)
         let format = options.format
         let data: Data
