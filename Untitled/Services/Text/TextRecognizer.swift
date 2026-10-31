@@ -1,5 +1,7 @@
 import CoreGraphics
 import Foundation
+import os
+import OSLog
 import Vision
 
 /// Text and codes found in an image, with where each line sits.
@@ -49,72 +51,80 @@ nonisolated enum SensitiveKind: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// On-device text, code, and face recognition with Vision. Nothing leaves the Mac.
+///
+/// Requests run on a dedicated queue with Vision's synchronous request handler, and every
+/// call has a time limit, so a stuck model can never leave the app waiting forever.
 nonisolated enum TextRecognizer {
-    /// Reads every line of text and every QR code or barcode.
-    @concurrent
-    static func recognize(_ image: CGImage) async throws -> RecognizedContent {
-        let size = CGSize(width: image.width, height: image.height)
+    enum RecognitionError: LocalizedError {
+        case timedOut
 
-        var textRequest = RecognizeTextRequest()
-        textRequest.recognitionLevel = .accurate
-        textRequest.usesLanguageCorrection = true
-        textRequest.automaticallyDetectsLanguage = true
-        let observations = try await textRequest.perform(on: image)
-
-        var content = RecognizedContent()
-        content.lines = observations.compactMap { observation in
-            guard let candidate = observation.topCandidates(1).first else { return nil }
-            return RecognizedContent.Line(
-                text: candidate.string,
-                rect: observation.boundingBox.toImageCoordinates(size, origin: .upperLeft)
-            )
+        var errorDescription: String? {
+            String(localized: "Reading the text took too long.")
         }
+    }
 
-        let codes = (try? await DetectBarcodesRequest().perform(on: image)) ?? []
-        var seen = Set<String>()
-        content.codes = codes.compactMap(\.payloadString).filter { seen.insert($0).inserted }
-        return content
+    private static let queue = DispatchQueue(label: "io.github.deliciousbacon4012.Untitled.vision", qos: .userInitiated)
+    private static let log = Logger(subsystem: Log.subsystem, category: "text")
+
+    /// Reads every line of text and every QR code or barcode.
+    static func recognize(_ image: CGImage) async throws -> RecognizedContent {
+        try await run(limit: .seconds(20)) {
+            let text = textRequest(correctsLanguage: true)
+            let codes = VNDetectBarcodesRequest()
+            try VNImageRequestHandler(cgImage: image, options: [:]).perform([text, codes])
+
+            let size = CGSize(width: image.width, height: image.height)
+            var content = RecognizedContent()
+            content.lines = (text.results ?? []).compactMap { observation in
+                guard let candidate = observation.topCandidates(1).first else { return nil }
+                return RecognizedContent.Line(text: candidate.string, rect: pixelRect(observation.boundingBox, in: size))
+            }
+            var seen = Set<String>()
+            content.codes = (codes.results ?? []).compactMap(\.payloadStringValue).filter { seen.insert($0).inserted }
+            log.info("Read \(content.lines.count, privacy: .public) lines and \(content.codes.count, privacy: .public) codes")
+            return content
+        }
     }
 
     /// Areas worth hiding before sharing, in image pixels with the origin at the top left.
-    @concurrent
     static func sensitiveAreas(in image: CGImage, kinds: Set<SensitiveKind>) async throws -> [CGRect] {
-        let size = CGSize(width: image.width, height: image.height)
-        var areas: [CGRect] = []
+        try await run(limit: .seconds(30)) {
+            let size = CGSize(width: image.width, height: image.height)
+            let handler = VNImageRequestHandler(cgImage: image, options: [:])
+            var areas: [CGRect] = []
 
-        if kinds.contains(.faces) {
-            let faces = try await DetectFaceRectanglesRequest().perform(on: image)
-            areas += faces.map { face in
-                let rect = face.boundingBox.toImageCoordinates(size, origin: .upperLeft)
-                // Faces read better hidden with a little room around them.
-                return rect.insetBy(dx: -rect.width * 0.15, dy: -rect.height * 0.2)
-            }
-        }
-
-        if kinds.contains(.personal) || kinds.contains(.allText) {
-            var request = RecognizeTextRequest()
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = false
-            request.automaticallyDetectsLanguage = true
-            for observation in try await request.perform(on: image) {
-                guard let candidate = observation.topCandidates(1).first else { continue }
-                let lineRect = observation.boundingBox.toImageCoordinates(size, origin: .upperLeft)
-                if kinds.contains(.allText) {
-                    areas.append(lineRect)
-                    continue
-                }
-                for range in sensitiveRanges(in: candidate.string) {
-                    let rect = candidate.boundingBox(for: range)
-                        .map { $0.boundingBox.toImageCoordinates(size, origin: .upperLeft) } ?? lineRect
-                    areas.append(rect)
+            if kinds.contains(.faces) {
+                let faces = VNDetectFaceRectanglesRequest()
+                try handler.perform([faces])
+                areas += (faces.results ?? []).map { face in
+                    let rect = pixelRect(face.boundingBox, in: size)
+                    // Faces read better hidden with a little room around them.
+                    return rect.insetBy(dx: -rect.width * 0.15, dy: -rect.height * 0.2)
                 }
             }
-        }
 
-        let bounds = CGRect(origin: .zero, size: size)
-        return areas
-            .map { $0.insetBy(dx: -3, dy: -3).intersection(bounds).integral }
-            .filter { !$0.isNull && $0.width > 2 && $0.height > 2 }
+            if kinds.contains(.personal) || kinds.contains(.allText) {
+                let text = textRequest(correctsLanguage: false)
+                try handler.perform([text])
+                for observation in text.results ?? [] {
+                    guard let candidate = observation.topCandidates(1).first else { continue }
+                    let lineRect = pixelRect(observation.boundingBox, in: size)
+                    if kinds.contains(.allText) {
+                        areas.append(lineRect)
+                        continue
+                    }
+                    for range in sensitiveRanges(in: candidate.string) {
+                        let box = (try? candidate.boundingBox(for: range))?.boundingBox
+                        areas.append(box.map { pixelRect($0, in: size) } ?? lineRect)
+                    }
+                }
+            }
+
+            let bounds = CGRect(origin: .zero, size: size)
+            return areas
+                .map { $0.insetBy(dx: -3, dy: -3).intersection(bounds).integral }
+                .filter { !$0.isNull && $0.width > 2 && $0.height > 2 }
+        }
     }
 
     /// Emails, phone numbers, and card-like numbers in a line of text.
@@ -139,5 +149,49 @@ nonisolated enum TextRecognizer {
             ranges.append(match.range)
         }
         return ranges
+    }
+
+    // MARK: Helpers
+
+    private static func textRequest(correctsLanguage: Bool) -> VNRecognizeTextRequest {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = correctsLanguage
+        request.automaticallyDetectsLanguage = true
+        return request
+    }
+
+    /// Vision's normalized, bottom-left rectangles in top-left image pixels.
+    private static func pixelRect(_ normalized: CGRect, in size: CGSize) -> CGRect {
+        CGRect(
+            x: normalized.minX * size.width,
+            y: (1 - normalized.maxY) * size.height,
+            width: normalized.width * size.width,
+            height: normalized.height * size.height
+        )
+    }
+
+    /// Runs `work` on the Vision queue and gives up after `limit`, whichever comes first.
+    private static func run<T: Sendable>(limit: Duration, _ work: @escaping @Sendable () throws -> T) async throws -> T {
+        let started = ContinuousClock.now
+        defer { log.info("Vision work took \(started.duration(to: .now), privacy: .public)") }
+        return try await withCheckedThrowingContinuation { continuation in
+            let finished = OSAllocatedUnfairLock(initialState: false)
+            let finish: @Sendable (Result<T, any Error>) -> Void = { result in
+                let first = finished.withLock { done in
+                    defer { done = true }
+                    return !done
+                }
+                if first { continuation.resume(with: result) }
+            }
+            queue.async {
+                finish(Result { try work() })
+            }
+            let seconds = Double(limit.components.seconds)
+            DispatchQueue.global().asyncAfter(deadline: .now() + seconds) {
+                log.error("Vision work timed out")
+                finish(.failure(RecognitionError.timedOut))
+            }
+        }
     }
 }

@@ -17,27 +17,42 @@ struct AnnotationCanvas: View {
             let redactor: AnnotationRenderer.Redactor = { document.redactedImage($0, strength: $1) }
 
             ZStack(alignment: .topLeading) {
-                Image(decorative: document.image, scale: 1)
-                    .resizable()
-                    .interpolation(layout.factor * document.scale >= 2 ? .none : .high)
-                    .frame(width: layout.imageFrame.width, height: layout.imageFrame.height)
-                    .clipShape(.rect(cornerRadius: 4))
+                // A soft shadow under exactly the visible part of the image.
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(nsColor: .textBackgroundColor))
                     .shadow(color: .black.opacity(0.25), radius: 18, y: 8)
-                    .offset(x: layout.imageFrame.minX, y: layout.imageFrame.minY)
-                    .accessibilityLabel("Screenshot")
+                    .frame(width: layout.visibleFrame.width, height: layout.visibleFrame.height)
+                    .offset(x: layout.visibleFrame.minX, y: layout.visibleFrame.minY)
 
-                ForEach(document.annotations) { mark in
-                    MarkLayer(mark: mark, layout: layout, redactor: redactor)
-                        .equatable()
-                        .transition(.scale(scale: 0.6, anchor: layout.anchor(for: mark.center)).combined(with: .opacity))
+                ZStack(alignment: .topLeading) {
+                    Image(decorative: document.image, scale: 1)
+                        .resizable()
+                        .interpolation(layout.factor * document.scale >= 2 ? .none : .high)
+                        .frame(width: layout.imageFrame.width, height: layout.imageFrame.height)
+                        .offset(x: layout.imageFrame.minX, y: layout.imageFrame.minY)
+                        .accessibilityLabel("Screenshot")
+
+                    ForEach(document.annotations) { mark in
+                        MarkLayer(mark: mark, layout: layout, redactor: redactor)
+                            .equatable()
+                            .transition(.scale(scale: 0.6, anchor: layout.anchor(for: mark.center)).combined(with: .opacity))
+                    }
+
+                    if let draft = document.draft {
+                        MarkLayer(mark: draft, layout: layout, redactor: redactor)
+                    }
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+                .mask(alignment: .topLeading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .frame(width: layout.visibleFrame.width, height: layout.visibleFrame.height)
+                        .offset(x: layout.visibleFrame.minX, y: layout.visibleFrame.minY)
                 }
 
-                if let draft = document.draft {
-                    MarkLayer(mark: draft, layout: layout, redactor: redactor)
+                if document.tool == .crop {
+                    CropShade(cropRect: document.cropRect, layout: layout)
+                        .allowsHitTesting(false)
                 }
-
-                CropShade(cropRect: document.cropRect, layout: layout)
-                    .allowsHitTesting(false)
 
                 MarkSelectionOverlay(document: document, layout: layout)
                     .allowsHitTesting(false)
@@ -148,6 +163,17 @@ struct AnnotationCanvas: View {
             }
         }
 
+        if document.tool == .crop, let box = document.cropBox {
+            if let handle = MarkHandle.hit(at: point, on: box, tolerance: tolerance * 1.8) {
+                cursor(for: handle).set()
+                return
+            }
+            if box.rect.contains(point) {
+                NSCursor.openHand.set()
+                return
+            }
+        }
+
         switch document.tool {
         case .select: NSCursor.arrow.set()
         case .text: NSCursor.iBeam.set()
@@ -180,23 +206,34 @@ nonisolated struct CanvasLayout: Equatable {
 
     @MainActor
     init(document: EditorDocument, in available: CGSize) {
-        self.init(imageSize: document.imageSize, scale: document.scale, zoom: document.zoom, pan: document.pan, in: available)
+        self.init(imageSize: document.imageSize, scale: document.scale, zoom: document.zoom, pan: document.pan, focus: document.visibleRect, in: available)
     }
 
-    init(imageSize: CGSize, scale: CGFloat, zoom: CGFloat?, pan: CGSize, in available: CGSize) {
+    /// `focus` is the part of the image to frame, such as a finished crop. `nil` frames all of it.
+    init(imageSize: CGSize, scale: CGFloat, zoom: CGFloat?, pan: CGSize, focus: CGRect? = nil, in available: CGSize) {
         let padding: CGFloat = 36
         let width = max(available.width - padding * 2, 1)
         let height = max(available.height - padding * 2, 1)
+        let shown = focus ?? CGRect(origin: .zero, size: imageSize)
         // Fit the window, but never blow a small screenshot up past its real size.
-        let fit = min(width / max(imageSize.width, 1), height / max(imageSize.height, 1), 1 / scale)
+        let fit = min(width / max(shown.width, 1), height / max(shown.height, 1), 1 / scale)
         fitFactor = fit
         factor = zoom.map { $0 / scale } ?? fit
         self.imageSize = imageSize
+        self.focus = focus
         viewSize = available
         origin = CGPoint(
-            x: (available.width - imageSize.width * factor) / 2 + pan.width,
-            y: (available.height - imageSize.height * factor) / 2 + pan.height
+            x: (available.width - shown.width * factor) / 2 - shown.minX * factor + pan.width,
+            y: (available.height - shown.height * factor) / 2 - shown.minY * factor + pan.height
         )
+    }
+
+    /// The finished crop, if the canvas is framed to one.
+    let focus: CGRect?
+
+    /// The part of the view that shows image: the whole image, or just the crop.
+    var visibleFrame: CGRect {
+        focus.map(viewRect(for:)) ?? imageFrame
     }
 
     var imageFrame: CGRect {
@@ -267,6 +304,16 @@ private struct CropShade: View {
                 }
                 context.stroke(grid, with: .color(.white.opacity(0.35)), lineWidth: 0.5)
                 context.stroke(Path(frame), with: .color(.white), lineWidth: 1.5)
+                // Corner brackets show the crop can be grabbed and resized.
+                let arm = min(18, frame.width / 3, frame.height / 3)
+                var corners = Path()
+                for (x, y, dx, dy) in [(frame.minX, frame.minY, 1.0, 1.0), (frame.maxX, frame.minY, -1.0, 1.0),
+                                       (frame.maxX, frame.maxY, -1.0, -1.0), (frame.minX, frame.maxY, 1.0, -1.0)] {
+                    corners.move(to: CGPoint(x: x + dx * arm, y: y))
+                    corners.addLine(to: CGPoint(x: x, y: y))
+                    corners.addLine(to: CGPoint(x: x, y: y + dy * arm))
+                }
+                context.stroke(corners, with: .color(.white), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
             }
             .transition(.opacity)
         }

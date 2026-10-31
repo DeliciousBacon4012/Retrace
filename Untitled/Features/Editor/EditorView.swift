@@ -15,7 +15,7 @@ struct EditorView: View {
     @FocusState private var isCanvasFocused: Bool
 
     private var fitFactor: CGFloat {
-        CanvasLayout(imageSize: document.imageSize, scale: document.scale, zoom: nil, pan: .zero, in: canvasSize).fitFactor
+        CanvasLayout(imageSize: document.imageSize, scale: document.scale, zoom: nil, pan: .zero, focus: document.visibleRect, in: canvasSize).fitFactor
     }
 
     var body: some View {
@@ -62,7 +62,9 @@ struct EditorView: View {
             }
             .onDeleteCommand { document.deleteSelection() }
             .onExitCommand {
-                if document.editingTextID != nil {
+                if document.tool == .crop {
+                    document.cancelCrop()
+                } else if document.editingTextID != nil {
                     document.finishTextEditing()
                 } else {
                     document.select(nil)
@@ -202,6 +204,11 @@ struct EditorView: View {
     private func handle(_ press: KeyPress) -> KeyPress.Result {
         guard document.editingTextID == nil else { return .ignored }
 
+        if press.key == .return, document.tool == .crop {
+            document.commitCrop()
+            return .handled
+        }
+
         let step: CGFloat = press.modifiers.contains(.shift) ? 10 : 1
         switch press.key {
         case .leftArrow: return nudge(dx: -step, dy: 0)
@@ -307,13 +314,23 @@ private struct EditorStatusBar: View {
                     .padding(.vertical, 7)
                     .glassEffect(.regular, in: .capsule)
 
-                if document.cropRect != nil {
+                if document.tool == .crop {
+                    Button("Cancel") { document.cancelCrop() }
+                        .buttonStyle(.glass)
+                        .help("Put the crop back (Esc)")
+                        .transition(.scale(0.8).combined(with: .opacity))
+                    Button("Crop", systemImage: "checkmark") { document.commitCrop() }
+                        .buttonStyle(.glassProminent)
+                        .help("Apply the crop (Return)")
+                        .transition(.scale(0.8).combined(with: .opacity))
+                } else if document.cropRect != nil {
                     Button("Reset Crop", systemImage: "arrow.counterclockwise") { document.resetCrop() }
                         .buttonStyle(.glass)
                         .transition(.scale(0.8).combined(with: .opacity))
                 }
             }
         }
+        .animation(.response, value: document.tool == .crop)
         .animation(.response, value: document.cropRect == nil)
         .animation(.response, value: zoom)
     }
