@@ -10,7 +10,7 @@ struct AppCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("Annotate Image…") {
+            Button("Open…") {
                 let panel = NSOpenPanel()
                 panel.allowedContentTypes = [.image]
                 panel.allowsMultipleSelection = true
@@ -19,6 +19,9 @@ struct AppCommands: Commands {
                 panel.urls.forEach { dependencies.editor.open(fileAt: $0) }
             }
             .keyboardShortcut("o")
+            Button("Pin to the Screen…") {
+                dependencies.pins.pinFromFile()
+            }
         }
 
         CommandMenu("Capture") {
@@ -30,7 +33,7 @@ struct AppCommands: Commands {
         }
 
         CommandGroup(before: .toolbar) {
-            ForEach(Array(AppTab.allCases.enumerated()), id: \.element) { index, tab in
+            ForEach(Array(AppTab.primary.enumerated()), id: \.element) { index, tab in
                 Button(tab.title) {
                     selectedTab?.wrappedValue = tab
                 }

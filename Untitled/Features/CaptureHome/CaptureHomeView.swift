@@ -91,7 +91,6 @@ private struct CaptureHomeContent: View {
             .animation(.panel, value: library.items.isEmpty)
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
-        .background { AmbientBackground() }
         .task {
             await viewModel.watchScreenRecording()
         }

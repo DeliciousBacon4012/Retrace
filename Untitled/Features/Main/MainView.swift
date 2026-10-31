@@ -1,32 +1,83 @@
 import SwiftUI
 
-/// The main window. Navigation and actions use system containers (a tab view and
-/// the window toolbar) so macOS draws them in Liquid Glass, with its own physics,
-/// accent color, and accessibility settings.
+/// The main window: a dashboard with the capture home, the library, and every setting in
+/// one sidebar, the way a menu bar app's window usually works. The system sidebar and
+/// toolbar draw in Liquid Glass on their own.
 struct MainView: View {
     @Environment(AppDependencies.self) private var dependencies
     @SceneStorage("selectedTab") private var selection: AppTab = .capture
+    @State private var router = MainWindowRouter.shared
 
     var body: some View {
-        TabView(selection: $selection) {
-            Tab(AppTab.capture.title, systemImage: AppTab.capture.symbolName, value: AppTab.capture) {
-                CaptureHomeView(showLibrary: { selection = .library })
+        NavigationSplitView {
+            List(selection: $selection) {
+                Section {
+                    ForEach(AppTab.primary) { tab in
+                        Label(tab.title, systemImage: tab.symbolName).tag(tab)
+                    }
+                }
+                Section("Settings") {
+                    ForEach(AppTab.settings) { tab in
+                        Label(tab.title, systemImage: tab.symbolName).tag(tab)
+                    }
+                }
             }
-            Tab(AppTab.library.title, systemImage: AppTab.library.symbolName, value: AppTab.library) {
-                LibraryView()
-            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
+        } detail: {
+            detail
+                .background { AmbientBackground() }
+                .navigationTitle(selection.title)
         }
-        .tabViewStyle(.tabBarOnly)
         .focusedSceneValue(\.selectedTab, $selection)
         .toolbar {
             CaptureToolbar(capture: dependencies.capture)
         }
-        .frame(minWidth: 680, minHeight: 480)
+        .onAppear(perform: applyPendingPage)
+        .onChange(of: router.pending) { applyPendingPage() }
+        .frame(minWidth: 760, minHeight: 500)
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch selection {
+        case .capture:
+            CaptureHomeView(showLibrary: { selection = .library })
+        case .library:
+            LibraryView()
+        case .general:
+            settingsPage { GeneralSettingsView(launchAtLogin: dependencies.launchAtLogin) }
+        case .captureOptions:
+            settingsPage { CaptureSettingsView() }
+        case .output:
+            settingsPage { OutputSettingsView() }
+        case .quickAccess:
+            settingsPage { QuickAccessSettingsView() }
+        case .recording:
+            settingsPage { RecordingSettingsView() }
+        case .shortcuts:
+            settingsPage { ShortcutsSettingsView() }
+        case .advanced:
+            settingsPage { AdvancedSettingsView() }
+        }
+    }
+
+    /// Settings forms sit on the moving background with their grouped boxes kept readable.
+    private func settingsPage(@ViewBuilder _ content: () -> some View) -> some View {
+        content()
+            .scrollContentBackground(.hidden)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+    }
+
+    private func applyPendingPage() {
+        guard let page = router.pending else { return }
+        selection = page
+        router.pending = nil
     }
 }
 
 extension FocusedValues {
-    /// The main window's tab, so View menu commands can switch it.
+    /// The main window's page, so View menu commands can switch it.
     @Entry var selectedTab: Binding<AppTab>?
 }
 
@@ -53,6 +104,6 @@ private struct CaptureToolbar: ToolbarContent {
     MainView()
         .environment(dependencies)
         .environment(dependencies.settings)
-        .frame(width: 900, height: 600)
+        .frame(width: 960, height: 620)
 }
 #endif

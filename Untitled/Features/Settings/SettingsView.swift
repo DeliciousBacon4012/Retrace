@@ -12,6 +12,8 @@ struct SettingsView: View {
                 .tabItem { Label("Capture", systemImage: "camera.viewfinder") }
             OutputSettingsView()
                 .tabItem { Label("Output", systemImage: "folder") }
+            QuickAccessSettingsView()
+                .tabItem { Label("Quick Access", systemImage: "rectangle.stack") }
             RecordingSettingsView()
                 .tabItem { Label("Recording", systemImage: "record.circle") }
             ShortcutsSettingsView()
