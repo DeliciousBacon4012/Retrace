@@ -196,6 +196,8 @@ nonisolated struct MarkStyle: Hashable, Codable, Sendable {
         case .counter:
             style.fontSize = 22 * scale
         case .redact:
+            // A solid box removes the pixels outright. Blur and pixelate can leave shapes behind.
+            style.redaction = .solid
             style.color = .black
             style.shadow = false
             style.cornerRadius = 4 * scale

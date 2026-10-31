@@ -7,11 +7,21 @@ protocol ClipboardWriting: AnyObject {
     /// Copies a saved file so it pastes as a file in Finder and as its contents in most apps.
     func copyFile(at url: URL)
     func copy(text: String)
+    /// True while the clipboard still holds an image this app put there, untouched since.
+    var holdsOurImage: Bool { get }
 }
 
 final class SystemClipboard: ClipboardWriting {
+    /// The clipboard's change count right after this app last copied an image.
+    private var imageChangeCount: Int?
+
+    var holdsOurImage: Bool {
+        imageChangeCount == NSPasteboard.general.changeCount
+    }
+
     func copy(_ image: NSImage) {
         write([image])
+        imageChangeCount = NSPasteboard.general.changeCount
     }
 
     func copyFile(at url: URL) {
@@ -22,6 +32,7 @@ final class SystemClipboard: ClipboardWriting {
             item.setData(tiff, forType: .tiff)
         }
         write([item])
+        imageChangeCount = NSPasteboard.general.changeCount
     }
 
     func copy(text: String) {
@@ -40,6 +51,7 @@ final class SystemClipboard: ClipboardWriting {
 #if DEBUG
 /// A stand-in for previews and tests.
 final class PreviewClipboard: ClipboardWriting {
+    var holdsOurImage: Bool { false }
     func copy(_ image: NSImage) {}
     func copyFile(at url: URL) {}
     func copy(text: String) {}
