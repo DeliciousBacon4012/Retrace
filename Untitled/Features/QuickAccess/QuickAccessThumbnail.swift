@@ -9,6 +9,7 @@ struct QuickAccessThumbnail: View {
     let onAnnotate: () -> Void
     let onClose: () -> Void
 
+    @State private var isShown = false
     @State private var isHovering = false
     @State private var didCopy = false
 
@@ -26,17 +27,15 @@ struct QuickAccessThumbnail: View {
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: thumbnailSize.width, height: thumbnailSize.height)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(.rect(cornerRadius: Design.radiusS))
                 .overlay {
                     if isHovering {
                         hoverActions
                             .transition(.opacity)
                     }
                 }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(.white.opacity(0.25), lineWidth: 0.5)
-                }
+                .padding(5)
+                .glassEffect(.regular, in: .rect(cornerRadius: Design.radiusM))
 
             if isHovering {
                 Button(action: onClose) {
@@ -45,16 +44,22 @@ struct QuickAccessThumbnail: View {
                         .frame(width: 22, height: 22)
                 }
                 .buttonStyle(.plain)
-                .glassCircle()
-                .padding(6)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .offset(x: -6, y: -6)
+                .transition(.scale(0.5).combined(with: .opacity))
                 .help("Close")
                 .accessibilityLabel("Close")
             }
         }
-        .padding(12)
-        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+        .padding(14)
+        .scaleEffect(isShown ? 1 : 0.86, anchor: .bottomTrailing)
+        .offset(x: isShown ? 0 : 60)
+        .opacity(isShown ? 1 : 0)
+        .onAppear {
+            withAnimation(.pop) { isShown = true }
+        }
         .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.15)) { isHovering = hovering }
+            withAnimation(.response) { isHovering = hovering }
         }
         .onDrag {
             if let url = capture.fileURL {
@@ -68,48 +73,32 @@ struct QuickAccessThumbnail: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Screenshot")
+        .accessibilityLabel(capture.isVideo ? "Recording" : "Screenshot")
     }
 
     private var hoverActions: some View {
         ZStack {
-            Color.black.opacity(0.3)
-            VStack(spacing: 8) {
-                if !capture.isVideo {
-                    Button("Annotate", action: onAnnotate)
-                }
-                Button(didCopy ? "Copied" : "Copy") {
-                    onCopy()
-                    didCopy = true
-                }
-                if let url = capture.fileURL {
-                    Button("Show in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([url])
+            Rectangle().fill(.black.opacity(0.25))
+            GlassEffectContainer(spacing: 6) {
+                VStack(spacing: 6) {
+                    if !capture.isVideo {
+                        Button("Annotate", systemImage: "pencil.tip.crop.circle", action: onAnnotate)
+                    }
+                    Button(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc") {
+                        onCopy()
+                        withAnimation(.response) { didCopy = true }
+                    }
+                    .contentTransition(.symbolEffect(.replace))
+                    if let url = capture.fileURL {
+                        Button("Show in Finder", systemImage: "folder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([url])
+                        }
                     }
                 }
+                .controlSize(.small)
+                .buttonStyle(.glass)
             }
-            .controlSize(.small)
-            .glassButtons()
         }
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func glassButtons() -> some View {
-        if #available(macOS 26.0, *) {
-            buttonStyle(.glass)
-        } else {
-            buttonStyle(.bordered)
-        }
-    }
-
-    @ViewBuilder
-    func glassCircle() -> some View {
-        if #available(macOS 26.0, *) {
-            glassEffect(.regular.interactive(), in: .circle)
-        } else {
-            background(.regularMaterial, in: Circle())
-        }
+        .clipShape(.rect(cornerRadius: Design.radiusS))
     }
 }

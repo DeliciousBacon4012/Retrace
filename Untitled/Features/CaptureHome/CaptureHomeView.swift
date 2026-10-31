@@ -29,33 +29,33 @@ private struct CaptureHomeContent: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: Design.spacingXL) {
                 if viewModel.screenRecording == .notGranted {
                     PermissionCard(viewModel: viewModel)
-                        .transition(.blurReplace)
+                        .transition(.blurReplace.combined(with: .scale(0.96)))
                 }
 
-                section("Take a Screenshot") {
-                    HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: Design.spacingM) {
+                    SectionLabel("Screenshot")
+                    TileRow {
                         ForEach(QuickAction.screenshots) { action in
-                            CaptureButton(action: action, title: action.title, isDisabled: capture.isCapturing) {
+                            CaptureTile(action: action, title: action.title, isActive: false, isDisabled: capture.isCapturing) {
                                 if let mode = action.captureMode {
                                     Task { await capture.capture(mode) }
                                 }
                             }
                         }
                     }
-                    Text("Drag to capture an area, click a window to capture it, or press Escape to cancel.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
                 }
 
-                section("Record the Screen") {
-                    HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: Design.spacingM) {
+                    SectionLabel("Recording")
+                    TileRow {
                         ForEach(QuickAction.recordings) { action in
-                            CaptureButton(
+                            CaptureTile(
                                 action: action,
                                 title: recording.isRecording ? String(localized: "Stop Recording") : action.title,
+                                isActive: recording.isRecording,
                                 isDisabled: recording.recorder.state == .starting || recording.recorder.state == .finishing
                             ) {
                                 if let mode = action.recordingMode {
@@ -64,23 +64,36 @@ private struct CaptureHomeContent: View {
                             }
                         }
                     }
+                    ReplayRow()
                 }
-
-                ReplayRow()
 
                 if !library.items.isEmpty {
-                    section("Recent") {
-                        RecentCapturesRow(items: Array(library.items.prefix(8)), showLibrary: showLibrary)
+                    VStack(alignment: .leading, spacing: Design.spacingM) {
+                        HStack {
+                            SectionLabel("Recent")
+                            Spacer()
+                            Button("Show All", action: showLibrary)
+                                .buttonStyle(.link)
+                                .font(.callout)
+                        }
+                        RecentCapturesRow(items: Array(library.items.prefix(8)))
                     }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
-                SaveLocationRow()
+                VStack(alignment: .leading, spacing: Design.spacingM) {
+                    SectionLabel("Output")
+                    SaveLocationRow()
+                }
             }
-            .padding(24)
-            .frame(maxWidth: 820, alignment: .leading)
+            .padding(Design.spacingXL)
+            .frame(maxWidth: 860, alignment: .leading)
             .frame(maxWidth: .infinity)
-            .animation(.smooth, value: viewModel.screenRecording)
+            .animation(.panel, value: viewModel.screenRecording)
+            .animation(.panel, value: library.items.isEmpty)
         }
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        .background { AmbientBackground() }
         .task {
             await viewModel.watchScreenRecording()
         }
@@ -88,41 +101,63 @@ private struct CaptureHomeContent: View {
             viewModel.refresh()
         }
     }
+}
 
-    private func section(_ title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.title3.weight(.semibold))
-            content()
+/// Lays tiles out in one row of equal widths, on one shared glass layer so
+/// neighbouring tiles blend as they're pressed.
+private struct TileRow<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        GlassEffectContainer(spacing: Design.spacingM) {
+            HStack(spacing: Design.spacingM) {
+                content
+            }
         }
     }
 }
 
-/// A large button for one capture mode, with its keyboard shortcut underneath.
-private struct CaptureButton: View {
+/// A large glass button for one capture mode, with its shortcut in the corner.
+private struct CaptureTile: View {
     let action: QuickAction
     let title: String
+    let isActive: Bool
     let isDisabled: Bool
     let perform: () -> Void
 
+    @Environment(SettingsStore.self) private var settings
+
     var body: some View {
         Button(action: perform) {
-            VStack(spacing: 8) {
-                Image(systemName: action.symbolName)
-                    .font(.system(size: 26, weight: .regular))
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(height: 32)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top) {
+                    Image(systemName: isActive ? "stop.circle.fill" : action.symbolName)
+                        .font(.system(size: 24, weight: .regular))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(isActive ? AnyShapeStyle(.red) : AnyShapeStyle(.tint))
+                        .contentTransition(.symbolEffect(.replace))
+                        .frame(height: 28)
+                    Spacer(minLength: 4)
+                    if let shortcut = settings.shortcuts[action.id] {
+                        ShortcutChip(shortcut: shortcut)
+                    }
+                }
+                Spacer(minLength: Design.spacingM)
                 Text(title)
                     .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
                     .contentTransition(.interpolate)
+                    .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, minHeight: 92)
-            .contentShape(.rect)
+            .padding(Design.spacingL)
+            .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
+            .contentShape(.rect(cornerRadius: Design.radiusL))
         }
-        .buttonStyle(.bordered)
-        .controlSize(.extraLarge)
-        .buttonBorderShape(.roundedRectangle(radius: 16))
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: Design.radiusL))
         .disabled(isDisabled)
+        .opacity(isDisabled ? 0.55 : 1)
+        .animation(.response, value: isActive)
         .help(title)
     }
 }
@@ -130,30 +165,53 @@ private struct CaptureButton: View {
 /// The newest captures, side by side. Double-click opens one; drag it into any app.
 private struct RecentCapturesRow: View {
     let items: [LibraryItem]
-    let showLibrary: () -> Void
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            ScrollView(.horizontal) {
-                HStack(spacing: 12) {
-                    ForEach(items) { item in
-                        FileThumbnail(url: item.url, maximumSize: CGSize(width: 220, height: 140))
-                            .padding(6)
-                            .frame(width: 150, height: 100)
-                            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
-                            .contentShape(.rect)
-                            .onTapGesture(count: 2) { NSWorkspace.shared.open(item.url) }
-                            .onDrag { NSItemProvider(object: item.url as NSURL) }
-                            .help(item.name)
-                            .accessibilityLabel(item.name)
-                            .accessibilityAddTraits(.isButton)
-                    }
+        ScrollView(.horizontal) {
+            HStack(spacing: Design.spacingM) {
+                ForEach(items) { item in
+                    RecentThumbnail(item: item)
                 }
             }
-            .scrollIndicators(.never)
-            Button("Show All", action: showLibrary)
-                .buttonStyle(.link)
+            .padding(.vertical, 4)
         }
+        .scrollIndicators(.never)
+        .scrollClipDisabled()
+    }
+}
+
+private struct RecentThumbnail: View {
+    let item: LibraryItem
+    @State private var isHovering = false
+
+    var body: some View {
+        FileThumbnail(url: item.url, maximumSize: CGSize(width: 240, height: 150))
+            .frame(width: 156, height: 100)
+            .clipShape(.rect(cornerRadius: Design.radiusS))
+            .padding(5)
+            .glassEffect(.regular, in: .rect(cornerRadius: Design.radiusM))
+            .scaleEffect(isHovering ? 1.04 : 1)
+            .shadow(color: .black.opacity(isHovering ? 0.18 : 0), radius: 10, y: 6)
+            .animation(.response, value: isHovering)
+            .onHover { isHovering = $0 }
+            .contentShape(.rect)
+            .onTapGesture(count: 2) { NSWorkspace.shared.open(item.url) }
+            .onDrag { NSItemProvider(object: item.url as NSURL) }
+            .help(item.name)
+            .accessibilityLabel(item.name)
+            .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// A rounded glass card for a row of settings or status.
+private struct GlassCard<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .padding(Design.spacingL)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(.regular, in: .rect(cornerRadius: Design.radiusL))
     }
 }
 
@@ -165,24 +223,41 @@ private struct ReplayRow: View {
     var body: some View {
         let buffer = dependencies.replay.buffer
 
-        GroupBox {
-            HStack(spacing: 12) {
+        GlassCard {
+            HStack(spacing: Design.spacingM) {
                 Image(systemName: "gobackward")
                     .font(.title2)
                     .foregroundStyle(buffer.isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     .symbolEffect(.rotate, value: buffer.isOn)
+                    .frame(width: 32)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Replay Buffer")
-                        .font(.headline)
+                    HStack(spacing: 6) {
+                        Text("Replay Buffer")
+                            .font(.headline)
+                        if buffer.state == .running {
+                            Circle()
+                                .fill(.green)
+                                .frame(width: 7, height: 7)
+                                .shadow(color: .green.opacity(0.8), radius: 4)
+                                .transition(.scale.combined(with: .opacity))
+                                .accessibilityHidden(true)
+                        }
+                    }
                     Text(status(buffer))
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                        .contentTransition(.opacity)
                 }
                 Spacer()
+                if let shortcut = settings.shortcuts["saveReplay"], buffer.isOn {
+                    ShortcutChip(shortcut: shortcut)
+                        .transition(.opacity)
+                }
                 Button("Save Replay") {
                     Task { await dependencies.replay.saveClip() }
                 }
+                .buttonStyle(.glassProminent)
                 .disabled(!buffer.isOn || buffer.state == .saving)
                 Toggle("Replay Buffer", isOn: Binding(
                     get: { settings.replayBufferEnabled },
@@ -191,7 +266,7 @@ private struct ReplayRow: View {
                 .toggleStyle(.switch)
                 .labelsHidden()
             }
-            .padding(6)
+            .animation(.response, value: buffer.state)
         }
     }
 
@@ -200,11 +275,7 @@ private struct ReplayRow: View {
         switch buffer.state {
         case .off: return String(localized: "Off. Turn it on to always keep the last \(length).")
         case .starting: return String(localized: "Starting…")
-        case .running:
-            if let shortcut = settings.shortcuts["saveReplay"] {
-                return String(localized: "Keeping the last \(length). Press \(shortcut.displayString) to save it.")
-            }
-            return String(localized: "Keeping the last \(length).")
+        case .running: return String(localized: "Keeping the last \(length).")
         case .saving: return String(localized: "Saving…")
         }
     }
@@ -217,17 +288,19 @@ private struct SaveLocationRow: View {
     var body: some View {
         @Bindable var settings = settings
 
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
+        GlassCard {
+            VStack(alignment: .leading, spacing: Design.spacingM) {
+                HStack(spacing: Design.spacingM) {
                     Image(systemName: "folder.fill")
+                        .font(.title3)
                         .foregroundStyle(.tint)
+                        .frame(width: 32)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Save to")
                             .font(.headline)
                         Text(settings.saveFolderURL.path(percentEncoded: false))
-                            .font(.callout)
+                            .font(.system(.callout, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -238,12 +311,16 @@ private struct SaveLocationRow: View {
                             settings.saveFolderPath = folder.path(percentEncoded: false)
                         }
                     }
-                    Button("Show in Finder") {
+                    .buttonStyle(.glass)
+                    Button("Show in Finder", systemImage: "arrow.up.forward.app") {
                         NSWorkspace.shared.activateFileViewerSelecting([settings.saveFolderURL])
                     }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .help("Show in Finder")
                 }
                 Divider()
-                HStack(spacing: 16) {
+                HStack(spacing: Design.spacingL) {
                     Toggle("Save", isOn: $settings.savesToFolder)
                     Toggle("Copy to clipboard", isOn: $settings.copiesToClipboard)
                     Toggle("Show thumbnail", isOn: $settings.showsQuickAccess)
@@ -255,7 +332,6 @@ private struct SaveLocationRow: View {
                 }
                 .toggleStyle(.checkbox)
             }
-            .padding(6)
         }
     }
 }
@@ -265,13 +341,14 @@ private struct PermissionCard: View {
     let viewModel: CaptureHomeViewModel
 
     var body: some View {
-        GroupBox {
-            HStack(alignment: .top, spacing: 12) {
+        GlassCard {
+            HStack(alignment: .top, spacing: Design.spacingM) {
                 Image(systemName: "lock.shield")
                     .font(.title)
                     .foregroundStyle(.orange)
+                    .symbolEffect(.pulse, options: .repeat(2))
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Design.spacingS) {
                     Text("Screen Recording access needed")
                         .font(.headline)
                     Text("Turn on Untitled in System Settings › Privacy & Security › Screen & System Audio Recording. If macOS offers to quit and reopen, choosing Later is fine: Untitled notices on its own.")
@@ -281,10 +358,11 @@ private struct PermissionCard: View {
                         Button("Allow Access…") {
                             viewModel.requestScreenRecording()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                         Button("Open System Settings") {
                             viewModel.openScreenRecordingSettings()
                         }
+                        .buttonStyle(.glass)
                         Button {
                             Task { await viewModel.checkAgain() }
                         } label: {
@@ -294,6 +372,7 @@ private struct PermissionCard: View {
                                 Text("Check Again")
                             }
                         }
+                        .buttonStyle(.glass)
                         .disabled(viewModel.isChecking)
                     }
                     if !CodeSigningInfo.hasTeamIdentifier {
@@ -308,7 +387,7 @@ private struct PermissionCard: View {
                         .foregroundStyle(.secondary)
                     }
                     if viewModel.checkFoundNoAccess {
-                        HStack(spacing: 8) {
+                        HStack(spacing: Design.spacingS) {
                             Text("Already turned it on? Some Macs only apply it after a restart.")
                                 .foregroundStyle(.secondary)
                             Button("Restart Untitled") {
@@ -321,7 +400,6 @@ private struct PermissionCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(8)
         }
     }
 }

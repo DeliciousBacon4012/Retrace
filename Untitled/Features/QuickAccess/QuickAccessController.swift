@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 /// Shows a floating thumbnail for each new capture, stacked in the corner chosen in Settings.
@@ -61,7 +62,7 @@ final class QuickAccessController {
         while entries.count > maximumVisible, let oldest = entries.first {
             dismiss(oldest.id)
         }
-        layout()
+        layout(placingImmediately: panel)
         panel.orderFrontRegardless()
     }
 
@@ -69,12 +70,20 @@ final class QuickAccessController {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         let entry = entries.remove(at: index)
         entry.autoClose?.cancel()
-        entry.panel.orderOut(nil)
-        layout()
+        let panel = entry.panel
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().alphaValue = 0
+        } completionHandler: {
+            panel.orderOut(nil)
+        }
+        layout(placingImmediately: nil)
     }
 
     /// Stacks the panels away from the chosen corner, newest nearest the corner.
-    private func layout() {
+    /// Panels already on screen glide to their new places; a new one appears in place.
+    private func layout(placingImmediately newPanel: NSPanel?) {
         guard let screen = NSScreen.underPointer ?? NSScreen.main else { return }
         let area = screen.visibleFrame
         let corner = settings.overlayCorner
@@ -90,7 +99,17 @@ final class QuickAccessController {
             case .bottomLeft, .bottomRight: area.minY + margin + offset
             case .topLeft, .topRight: area.maxY - margin - size.height - offset
             }
-            entry.panel.setFrameOrigin(CGPoint(x: x, y: y))
+            let origin = CGPoint(x: x, y: y)
+            if entry.panel === newPanel {
+                entry.panel.setFrameOrigin(origin)
+            } else {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.35
+                    // A gentle overshoot-free ease that reads like a settling spring.
+                    context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
+                    entry.panel.animator().setFrameOrigin(origin)
+                }
+            }
             offset += size.height + spacing
         }
     }

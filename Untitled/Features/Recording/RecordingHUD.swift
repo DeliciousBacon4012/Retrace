@@ -44,26 +44,47 @@ private struct RecordingHUDView: View {
     let recorder: ScreenRecorder
     let onStop: () -> Void
 
+    @State private var isShown = false
+
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "record.circle.fill")
-                .foregroundStyle(.red)
-                .symbolEffect(.pulse)
-                .accessibilityHidden(true)
-            elapsed
-                .font(.body.monospacedDigit().weight(.medium))
-            Button(action: onStop) {
-                Label("Stop Recording", systemImage: "stop.fill")
-                    .labelStyle(.iconOnly)
+        GlassEffectContainer(spacing: Design.spacingS) {
+            HStack(spacing: Design.spacingS) {
+                HStack(spacing: Design.spacingS) {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 9, height: 9)
+                        .shadow(color: .red.opacity(0.9), radius: 5)
+                        .phaseAnimator([1.0, 0.35]) { dot, phase in
+                            dot.opacity(phase)
+                        } animation: { _ in .easeInOut(duration: 0.9) }
+                        .accessibilityHidden(true)
+                    elapsed
+                        .font(.system(.body, design: .monospaced).weight(.medium))
+                        .contentTransition(.numericText(countsDown: false))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .glassEffect(.regular, in: .capsule)
+
+                Button(action: onStop) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .glassEffect(.regular.tint(.red).interactive(), in: .circle)
+                .help("Stop recording")
+                .accessibilityLabel("Stop Recording")
+                .disabled(recorder.state == .finishing)
             }
-            .buttonStyle(.borderless)
-            .help("Stop recording")
-            .disabled(recorder.state == .finishing)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .glassCapsule()
-        .padding(8)
+        .scaleEffect(isShown ? 1 : 0.8)
+        .opacity(isShown ? 1 : 0)
+        .padding(10)
+        .onAppear {
+            withAnimation(.pop) { isShown = true }
+        }
     }
 
     @ViewBuilder
@@ -99,17 +120,5 @@ private final class FloatingPanel: NSPanel {
         isReleasedWhenClosed = false
         isMovableByWindowBackground = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-    }
-}
-
-extension View {
-    /// Liquid Glass on macOS 26 and later, a material capsule before that.
-    @ViewBuilder
-    func glassCapsule() -> some View {
-        if #available(macOS 26.0, *) {
-            glassEffect(.regular, in: .capsule)
-        } else {
-            background(.regularMaterial, in: .capsule)
-        }
     }
 }
