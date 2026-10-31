@@ -137,6 +137,40 @@ nonisolated struct MarkStyle: Hashable, Codable, Sendable {
     /// 0 is light, 1 is heavy.
     var strength: Double = 0.6
 
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case color, opacity, lineWidth, shadow, shadowRadius, shadowOpacity, dashed, route, startHead, endHead, headScale, tapered, shape, fill, cornerRadius, font, weight, fontSize, textStyle, counterStyle, redaction, strength
+    }
+
+    /// Reads saved styles leniently: a setting that's missing, or that an older or newer
+    /// version wrote differently, keeps its default instead of losing every saved style.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        color = (try? container.decodeIfPresent(type(of: color), forKey: .color)) ?? color
+        opacity = (try? container.decodeIfPresent(type(of: opacity), forKey: .opacity)) ?? opacity
+        lineWidth = (try? container.decodeIfPresent(type(of: lineWidth), forKey: .lineWidth)) ?? lineWidth
+        shadow = (try? container.decodeIfPresent(type(of: shadow), forKey: .shadow)) ?? shadow
+        shadowRadius = (try? container.decodeIfPresent(type(of: shadowRadius), forKey: .shadowRadius)) ?? shadowRadius
+        shadowOpacity = (try? container.decodeIfPresent(type(of: shadowOpacity), forKey: .shadowOpacity)) ?? shadowOpacity
+        dashed = (try? container.decodeIfPresent(type(of: dashed), forKey: .dashed)) ?? dashed
+        route = (try? container.decodeIfPresent(type(of: route), forKey: .route)) ?? route
+        startHead = (try? container.decodeIfPresent(type(of: startHead), forKey: .startHead)) ?? startHead
+        endHead = (try? container.decodeIfPresent(type(of: endHead), forKey: .endHead)) ?? endHead
+        headScale = (try? container.decodeIfPresent(type(of: headScale), forKey: .headScale)) ?? headScale
+        tapered = (try? container.decodeIfPresent(type(of: tapered), forKey: .tapered)) ?? tapered
+        shape = (try? container.decodeIfPresent(type(of: shape), forKey: .shape)) ?? shape
+        fill = (try? container.decodeIfPresent(type(of: fill), forKey: .fill)) ?? fill
+        cornerRadius = (try? container.decodeIfPresent(type(of: cornerRadius), forKey: .cornerRadius)) ?? cornerRadius
+        font = (try? container.decodeIfPresent(type(of: font), forKey: .font)) ?? font
+        weight = (try? container.decodeIfPresent(type(of: weight), forKey: .weight)) ?? weight
+        fontSize = (try? container.decodeIfPresent(type(of: fontSize), forKey: .fontSize)) ?? fontSize
+        textStyle = (try? container.decodeIfPresent(type(of: textStyle), forKey: .textStyle)) ?? textStyle
+        counterStyle = (try? container.decodeIfPresent(type(of: counterStyle), forKey: .counterStyle)) ?? counterStyle
+        redaction = (try? container.decodeIfPresent(type(of: redaction), forKey: .redaction)) ?? redaction
+        strength = (try? container.decodeIfPresent(type(of: strength), forKey: .strength)) ?? strength
+    }
+
     var counterRadius: CGFloat { fontSize * 0.75 }
 
     /// The style each tool starts with, sized for the screenshot's pixel density.

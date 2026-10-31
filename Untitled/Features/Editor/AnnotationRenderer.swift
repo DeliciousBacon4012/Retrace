@@ -349,7 +349,7 @@ enum AnnotationRenderer {
         var layers: [String: CGImage] = [:]
         for mark in annotations where mark.tool == .redact {
             let key = "\(mark.style.redaction.rawValue)-\(mark.style.strength)"
-            if layers[key] == nil, let layer = document.redactedImage(mark.style.redaction, strength: mark.style.strength) {
+            if layers[key] == nil, let layer = document.redactedImageNow(mark.style.redaction, strength: mark.style.strength) {
                 layers[key] = layer
             }
         }

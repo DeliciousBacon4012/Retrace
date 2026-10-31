@@ -37,6 +37,10 @@ final class EditorDocument {
                 zoom = nil
                 pan = .zero
             }
+            if tool == .redact {
+                let style = style(for: .redact)
+                prepareRedaction(style.redaction, around: style.strength)
+            }
         }
     }
 
@@ -92,6 +96,11 @@ final class EditorDocument {
     @ObservationIgnored private var textEditSnapshot: Snapshot?
     @ObservationIgnored private var lastStyleEdit: (id: Annotation.ID?, tool: EditorTool, date: Date)?
     @ObservationIgnored private var redactionLayers: [String: CGImage] = [:]
+    @ObservationIgnored private var pendingRedactions: Set<String> = []
+    /// Bumped when a background redaction layer is ready, so the canvas redraws with it.
+    private var redactionVersion = 0
+    /// Saves tool styles shortly after the last change, not on every slider tick.
+    @ObservationIgnored private var styleSaveTask: Task<Void, Never>?
     @ObservationIgnored private let styleStore: EditorStyleStore
 
     private struct Snapshot: Equatable {
@@ -115,6 +124,18 @@ final class EditorDocument {
         self.annotations = annotations
         self.styleStore = styleStore
         toolStyles = styleStore.load(scale: max(scale, 1))
+        observeUndoManager()
+    }
+
+    /// Edit › Undo and ⌘Z go straight to the undo manager, so listen for its changes to keep
+    /// the toolbar's Undo and Redo buttons current.
+    private func observeUndoManager() {
+        let names: [Notification.Name] = [.NSUndoManagerDidUndoChange, .NSUndoManagerDidRedoChange, .NSUndoManagerDidCloseUndoGroup]
+        for name in names {
+            NotificationCenter.default.addObserver(forName: name, object: undoManager, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.historyVersion += 1 }
+            }
+        }
     }
 
     var imageSize: CGSize { CGSize(width: image.width, height: image.height) }
@@ -141,6 +162,16 @@ final class EditorDocument {
 
     func style(for tool: EditorTool) -> MarkStyle {
         toolStyles[tool] ?? MarkStyle.defaults(for: tool, scale: scale)
+    }
+
+    /// A binding that shows a size stored in pixels as points, for the inspector.
+    func pointBinding(_ keyPath: WritableKeyPath<MarkStyle, CGFloat>) -> Binding<Double> {
+        let scale = scale
+        return Binding {
+            Double(self.style[keyPath: keyPath] / scale)
+        } set: { newValue in
+            self.style[keyPath: keyPath] = CGFloat(newValue) * scale
+        }
     }
 
     /// Puts the inspected tool back to its original look, including the selected mark.
@@ -476,14 +507,67 @@ final class EditorDocument {
     // MARK: Redaction
 
     /// The blurred or pixelated copy of the screenshot that a redaction mark reveals.
+    /// The blurred or pixelated copy of the screenshot for the canvas. A strength that isn't
+    /// ready yet is made in the background while the nearest finished one stands in, so
+    /// dragging the Strength slider never stalls the window.
     func redactedImage(_ redaction: Redaction, strength: Double) -> CGImage? {
         guard redaction != .solid else { return nil }
-        let level = Int((min(max(strength, 0), 1) * 10).rounded())
-        let key = "\(redaction.rawValue)-\(level)"
-        if let cached = redactionLayers[key] { return cached }
+        _ = redactionVersion
+        let level = Self.level(for: strength)
+        if let cached = redactionLayers[Self.key(redaction, level)] { return cached }
+        prepareRedaction(redaction, levels: [level])
+        let nearest = (0...10).sorted { abs($0 - level) < abs($1 - level) }
+        return nearest.lazy.compactMap { self.redactionLayers[Self.key(redaction, $0)] }.first
+    }
+
+    /// The exact layer, made right away if needed. Used when exporting.
+    func redactedImageNow(_ redaction: Redaction, strength: Double) -> CGImage? {
+        guard redaction != .solid else { return nil }
+        let level = Self.level(for: strength)
+        if let cached = redactionLayers[Self.key(redaction, level)] { return cached }
         let layer = Self.redacted(image, redaction: redaction, level: Double(level) / 10, scale: scale)
-        redactionLayers[key] = layer
+        redactionLayers[Self.key(redaction, level)] = layer
         return layer
+    }
+
+    /// Makes every strength of a redaction in the background, nearest to the current one first.
+    func prepareRedaction(_ redaction: Redaction, around strength: Double? = nil) {
+        guard redaction != .solid else { return }
+        let center = Self.level(for: strength ?? style(for: .redact).strength)
+        prepareRedaction(redaction, levels: (0...10).sorted { abs($0 - center) < abs($1 - center) })
+    }
+
+    private func prepareRedaction(_ redaction: Redaction, levels: [Int]) {
+        let missing = levels.filter { redactionLayers[Self.key(redaction, $0)] == nil && !pendingRedactions.contains(Self.key(redaction, $0)) }
+        guard !missing.isEmpty else { return }
+        missing.forEach { pendingRedactions.insert(Self.key(redaction, $0)) }
+        let image = image
+        let scale = scale
+        Task { [weak self] in
+            for level in missing {
+                let layer = await Self.redactedInBackground(image, redaction: redaction, level: Double(level) / 10, scale: scale)
+                guard let self else { return }
+                let key = Self.key(redaction, level)
+                self.pendingRedactions.remove(key)
+                if let layer {
+                    self.redactionLayers[key] = layer
+                    self.redactionVersion += 1
+                }
+            }
+        }
+    }
+
+    private static func level(for strength: Double) -> Int {
+        Int((min(max(strength, 0), 1) * 10).rounded())
+    }
+
+    private static func key(_ redaction: Redaction, _ level: Int) -> String {
+        "\(redaction.rawValue)-\(level)"
+    }
+
+    @concurrent
+    private static func redactedInBackground(_ image: CGImage, redaction: Redaction, level: Double, scale: CGFloat) async -> CGImage? {
+        redacted(image, redaction: redaction, level: level, scale: scale)
     }
 
     // MARK: Helpers
@@ -506,9 +590,23 @@ final class EditorDocument {
         }
     }
 
+    /// Writes tool styles now instead of waiting, for when the window closes.
+    func saveStylesNow() {
+        styleSaveTask?.cancel()
+        styleStore.save(toolStyles, scale: scale)
+    }
+
     private func remember(_ style: MarkStyle, for tool: EditorTool) {
         toolStyles[tool] = style
-        styleStore.save(toolStyles, scale: scale)
+        if tool == .redact {
+            prepareRedaction(style.redaction, around: style.strength)
+        }
+        styleSaveTask?.cancel()
+        styleSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, let self else { return }
+            self.styleStore.save(self.toolStyles, scale: self.scale)
+        }
     }
 
     /// Records one undo step for a run of quick changes to the same mark, like dragging a slider.
@@ -565,9 +663,9 @@ final class EditorDocument {
         return CGPoint(x: start.x + (dx < 0 ? -side : side), y: start.y + (dy < 0 ? -side : side))
     }
 
-    private static let ciContext = CIContext(options: [.cacheIntermediates: false])
+    nonisolated private static let ciContext = CIContext(options: [.cacheIntermediates: false])
 
-    private static func redacted(_ image: CGImage, redaction: Redaction, level: Double, scale: CGFloat) -> CGImage? {
+    nonisolated private static func redacted(_ image: CGImage, redaction: Redaction, level: Double, scale: CGFloat) -> CGImage? {
         let input = CIImage(cgImage: image)
         let output: CIImage?
         switch redaction {

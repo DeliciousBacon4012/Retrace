@@ -201,6 +201,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        editorDocument.saveStylesNow()
         onClose(self)
     }
 }
