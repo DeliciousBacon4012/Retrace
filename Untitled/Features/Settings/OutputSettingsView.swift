@@ -9,9 +9,8 @@ struct OutputSettingsView: View {
 
         Form {
             Section {
-                LabeledContent("Format") {
-                    GlassSegmentedPicker(title: "Format", selection: $settings.imageFormat, options: ImageFormat.writable, label: \.title)
-                        .frame(maxWidth: 340)
+                Picker("Format", selection: $settings.imageFormat) {
+                    ForEach(ImageFormat.writable) { Text($0.title).tag($0) }
                 }
                 if settings.imageFormat.isLossy {
                     LabeledContent("Quality") {
