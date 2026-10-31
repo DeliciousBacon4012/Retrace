@@ -33,9 +33,11 @@ struct PendingFeatureFooter: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let dependencies = AppDependencies.preview()
     SettingsView()
         .environment(dependencies)
         .environment(dependencies.settings)
 }
+#endif

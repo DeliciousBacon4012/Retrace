@@ -42,8 +42,10 @@ struct AdvancedSettingsView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     AdvancedSettingsView()
         .environment(AppDependencies.preview())
         .frame(width: 520)
 }
+#endif

@@ -173,9 +173,11 @@ private struct LibraryCell: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let dependencies = AppDependencies.preview(screenRecording: .granted)
     LibraryView()
         .environment(dependencies)
         .frame(width: 800, height: 560)
 }
+#endif

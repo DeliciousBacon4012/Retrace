@@ -62,6 +62,7 @@ struct ShortcutsSettingsView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let dependencies = AppDependencies.preview()
     ShortcutsSettingsView()
@@ -69,3 +70,4 @@ struct ShortcutsSettingsView: View {
         .environment(dependencies.settings)
         .frame(width: 520)
 }
+#endif

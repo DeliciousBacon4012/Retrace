@@ -47,6 +47,7 @@ private struct CaptureToolbar: ToolbarContent {
     }
 }
 
+#if DEBUG
 #Preview {
     let dependencies = AppDependencies.preview(screenRecording: .granted)
     MainView()
@@ -54,3 +55,4 @@ private struct CaptureToolbar: ToolbarContent {
         .environment(dependencies.settings)
         .frame(width: 900, height: 600)
 }
+#endif

@@ -60,9 +60,11 @@ private struct FeatureStatusLabel: View {
     }
 }
 
+#if DEBUG
 #Preview {
     NavigationStack {
         RoadmapView()
     }
     .frame(width: 760, height: 500)
 }
+#endif
