@@ -27,8 +27,47 @@ final class EditorDocument {
         didSet {
             guard tool != oldValue else { return }
             finishTextEditing()
-            if tool == .crop { select(nil) }
+            if tool == .crop {
+                select(nil)
+                toolBeforeCrop = oldValue
+                cropBeforeEditing = cropRect
+                zoom = nil
+                pan = .zero
+            } else if oldValue == .crop {
+                zoom = nil
+                pan = .zero
+            }
         }
+    }
+
+    /// While cropping, the whole image shows so the crop can grow; otherwise only the crop does.
+    var visibleRect: CGRect? { tool == .crop ? nil : cropRect }
+
+    @ObservationIgnored private var toolBeforeCrop: EditorTool = .arrow
+    @ObservationIgnored private var cropBeforeEditing: CGRect?
+
+    /// Return in the crop tool: keep the crop and go back to the previous tool.
+    func commitCrop() {
+        guard tool == .crop else { return }
+        withAnimation(.panel) { tool = toolBeforeCrop == .crop ? .select : toolBeforeCrop }
+    }
+
+    /// Escape in the crop tool: put the crop back the way it was and leave the tool.
+    func cancelCrop() {
+        guard tool == .crop else { return }
+        if cropRect != cropBeforeEditing {
+            pushUndo(snapshot, named: String(localized: "Crop"))
+            cropRect = cropBeforeEditing
+        }
+        withAnimation(.panel) { tool = toolBeforeCrop == .crop ? .select : toolBeforeCrop }
+    }
+
+    /// The crop as a box, so it can use the same handles as rectangles.
+    var cropBox: Annotation? {
+        guard let cropRect else { return nil }
+        var box = Annotation(tool: .shape, at: cropRect.origin, style: MarkStyle.defaults(for: .shape, scale: scale))
+        box.end = CGPoint(x: cropRect.maxX, y: cropRect.maxY)
+        return box
     }
 
     /// The zoom, as a fraction of the image's actual size. `nil` fits the image to the window.
@@ -39,8 +78,15 @@ final class EditorDocument {
     /// The last style used with each tool, so new marks look like the previous one.
     private(set) var toolStyles: [EditorTool: MarkStyle]
 
-    @ObservationIgnored private var undoStack: [Snapshot] = []
-    @ObservationIgnored private var redoStack: [Snapshot] = []
+    /// The window's undo manager, so Edit › Undo, ⌘Z, and ⇧⌘Z all work on marks,
+    /// with action names like "Undo Move".
+    @ObservationIgnored let undoManager: UndoManager = {
+        let manager = UndoManager()
+        manager.levelsOfUndo = 200
+        return manager
+    }()
+    /// Bumped on every history change so `canUndo` and `canRedo` refresh the toolbar.
+    private var historyVersion = 0
     @ObservationIgnored private var gesture: Gesture?
     @ObservationIgnored private var gestureSnapshot: Snapshot?
     @ObservationIgnored private var textEditSnapshot: Snapshot?
@@ -58,6 +104,8 @@ final class EditorDocument {
         case moving(last: CGPoint)
         case handle(MarkHandle)
         case cropping(origin: CGPoint)
+        case movingCrop(last: CGPoint)
+        case cropHandle(MarkHandle)
     }
 
     init(image: CGImage, scale: CGFloat, fileURL: URL?, annotations: [Annotation] = [], styleStore: EditorStyleStore = EditorStyleStore()) {
@@ -70,8 +118,15 @@ final class EditorDocument {
     }
 
     var imageSize: CGSize { CGSize(width: image.width, height: image.height) }
-    var canUndo: Bool { !undoStack.isEmpty }
-    var canRedo: Bool { !redoStack.isEmpty }
+    var canUndo: Bool {
+        _ = historyVersion
+        return undoManager.canUndo
+    }
+
+    var canRedo: Bool {
+        _ = historyVersion
+        return undoManager.canRedo
+    }
     var selected: Annotation? { annotations.first { $0.id == selectedID } }
 
     /// The tool whose settings the inspector shows: the selected mark's, or the current tool's.
@@ -101,7 +156,13 @@ final class EditorDocument {
         finishTextEditing()
         gestureSnapshot = snapshot
         if tool == .crop {
-            gesture = .cropping(origin: clamp(point))
+            if let box = cropBox, let handle = MarkHandle.hit(at: point, on: box, tolerance: tolerance * 1.8) {
+                gesture = .cropHandle(handle)
+            } else if let cropRect, cropRect.contains(point) {
+                gesture = .movingCrop(last: point)
+            } else {
+                gesture = .cropping(origin: clamp(point))
+            }
             return
         }
 
@@ -139,7 +200,7 @@ final class EditorDocument {
             gesture = nil
         case .counter:
             mark.number = (annotations.filter { $0.tool == .counter }.map(\.number).max() ?? 0) + 1
-            pushUndo(gestureSnapshot)
+            pushUndo(gestureSnapshot, named: String(localized: "Add Number"))
             withAnimation(.pop) { annotations.append(mark) }
             select(mark.id)
             gesture = .moving(last: point)
@@ -192,6 +253,19 @@ final class EditorDocument {
                 .union(CGRect(origin: clamp(constrained ? squared(from: origin, to: point) : point), size: .zero))
                 .intersection(CGRect(origin: .zero, size: imageSize))
 
+        case .movingCrop(let last):
+            guard let crop = cropRect else { return }
+            var moved = crop.offsetBy(dx: point.x - last.x, dy: point.y - last.y)
+            moved.origin.x = min(max(moved.minX, 0), imageSize.width - moved.width)
+            moved.origin.y = min(max(moved.minY, 0), imageSize.height - moved.height)
+            cropRect = moved
+            gesture = .movingCrop(last: point)
+
+        case .cropHandle(let handle):
+            guard var box = cropBox else { return }
+            handle.drag(&box, to: clamp(point), constrained: constrained)
+            cropRect = box.rect.intersection(CGRect(origin: .zero, size: imageSize))
+
         case nil:
             break
         }
@@ -203,7 +277,7 @@ final class EditorDocument {
             if let mark = draft {
                 draft = nil
                 if !mark.isNegligible {
-                    pushUndo(gestureSnapshot)
+                    pushUndo(gestureSnapshot, named: String(localized: "Add \(mark.tool.title)"))
                     annotations.append(mark)
                     select(mark.id)
                 }
@@ -212,10 +286,18 @@ final class EditorDocument {
             if let crop = cropRect, crop.width < 8 || crop.height < 8 {
                 cropRect = gestureSnapshot?.cropRect
             } else {
-                pushUndo(gestureSnapshot)
+                pushUndo(gestureSnapshot, named: String(localized: "Crop"))
             }
-        case .moving, .handle:
-            pushUndo(gestureSnapshot)
+        case .movingCrop, .cropHandle:
+            if let crop = cropRect, crop.width < 8 || crop.height < 8 {
+                cropRect = gestureSnapshot?.cropRect
+            } else {
+                pushUndo(gestureSnapshot, named: String(localized: "Crop"))
+            }
+        case .moving:
+            pushUndo(gestureSnapshot, named: String(localized: "Move"))
+        case .handle:
+            pushUndo(gestureSnapshot, named: String(localized: "Reshape"))
         case nil:
             break
         }
@@ -253,14 +335,14 @@ final class EditorDocument {
             withAnimation(.response) { annotations.removeAll { $0.id == id } }
             if selectedID == id { select(nil) }
         } else if let before = textEditSnapshot, before != snapshot {
-            pushUndo(before)
+            pushUndo(before, named: String(localized: "Typing"))
         }
         textEditSnapshot = nil
     }
 
     func deleteSelection() {
         guard let id = selectedID else { return }
-        pushUndo(snapshot)
+        pushUndo(snapshot, named: String(localized: "Delete"))
         editingTextID = nil
         withAnimation(.response) {
             annotations.removeAll { $0.id == id }
@@ -270,7 +352,7 @@ final class EditorDocument {
 
     func duplicateSelection() {
         guard var copy = selected else { return }
-        pushUndo(snapshot)
+        pushUndo(snapshot, named: String(localized: "Duplicate"))
         copy.id = UUID()
         let offset = 16 * scale
         copy.move(by: CGSize(width: offset, height: offset))
@@ -286,7 +368,7 @@ final class EditorDocument {
         let existing = annotations.filter { $0.tool == .redact }.map(\.rect.integral)
         let fresh = areas.filter { !existing.contains($0.integral) }
         guard !fresh.isEmpty else { return }
-        pushUndo(snapshot)
+        pushUndo(snapshot, named: String(localized: "Hide Automatically"))
         let style = style(for: .redact)
         let marks = fresh.map { area in
             var mark = Annotation(tool: .redact, at: area.origin, style: style)
@@ -299,14 +381,14 @@ final class EditorDocument {
 
     func bringSelectionToFront() {
         guard let index = selectedIndex, index < annotations.count - 1 else { return }
-        pushUndo(snapshot)
+        pushUndo(snapshot, named: String(localized: "Bring to Front"))
         let mark = annotations.remove(at: index)
         annotations.append(mark)
     }
 
     func sendSelectionToBack() {
         guard let index = selectedIndex, index > 0 else { return }
-        pushUndo(snapshot)
+        pushUndo(snapshot, named: String(localized: "Send to Back"))
         let mark = annotations.remove(at: index)
         annotations.insert(mark, at: 0)
     }
@@ -320,7 +402,7 @@ final class EditorDocument {
 
     func clearAll() {
         guard !annotations.isEmpty || cropRect != nil else { return }
-        pushUndo(snapshot)
+        pushUndo(snapshot, named: String(localized: "Clear All"))
         withAnimation(.response) {
             annotations.removeAll()
             cropRect = nil
@@ -330,7 +412,7 @@ final class EditorDocument {
 
     func resetCrop() {
         guard cropRect != nil else { return }
-        pushUndo(snapshot)
+        pushUndo(snapshot, named: String(localized: "Reset Crop"))
         withAnimation(.response) { cropRect = nil }
     }
 
@@ -343,7 +425,7 @@ final class EditorDocument {
             height = size.height
             width = height * ratio
         }
-        pushUndo(snapshot)
+        pushUndo(snapshot, named: String(localized: "Crop"))
         withAnimation(.response) {
             cropRect = CGRect(x: (size.width - width) / 2, y: (size.height - height) / 2, width: width, height: height).integral
         }
@@ -351,15 +433,16 @@ final class EditorDocument {
 
     func undo() {
         finishTextEditing()
-        guard let previous = undoStack.popLast() else { return }
-        redoStack.append(snapshot)
-        restore(previous)
+        guard undoManager.canUndo else { return }
+        undoManager.undo()
+        historyVersion += 1
     }
 
     func redo() {
-        guard let next = redoStack.popLast() else { return }
-        undoStack.append(snapshot)
-        restore(next)
+        finishTextEditing()
+        guard undoManager.canRedo else { return }
+        undoManager.redo()
+        historyVersion += 1
     }
 
     func markSaved(to url: URL) {
@@ -436,16 +519,26 @@ final class EditorDocument {
             hasUnsavedChanges = true
             return
         }
-        pushUndo(snapshot)
+        pushUndo(snapshot, named: String(localized: "Change Style"))
         lastStyleEdit = (id, tool, now)
     }
 
-    private func pushUndo(_ previous: Snapshot?) {
-        guard let previous, previous != snapshot || gesture == nil else { return }
-        undoStack.append(previous)
-        if undoStack.count > 200 { undoStack.removeFirst() }
-        redoStack.removeAll()
+    /// Records the state before a change as one undo step. Undoing it records the state it
+    /// replaces, so redo always returns to exactly where you were.
+    private func pushUndo(_ previous: Snapshot?, named name: String) {
+        guard let previous, previous != snapshot else { return }
+        registerUndo(restoring: previous, named: name)
         hasUnsavedChanges = true
+    }
+
+    private func registerUndo(restoring previous: Snapshot, named name: String) {
+        undoManager.registerUndo(withTarget: self) { document in
+            let current = document.snapshot
+            document.restore(previous)
+            document.registerUndo(restoring: current, named: name)
+        }
+        undoManager.setActionName(name)
+        historyVersion += 1
     }
 
     private func restore(_ snapshot: Snapshot) {

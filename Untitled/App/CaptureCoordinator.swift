@@ -68,11 +68,17 @@ final class CaptureCoordinator {
     func captureText() async {
         guard !isCapturing, hasPermission() else { return }
         isCapturing = true
-        defer { isCapturing = false }
 
         do {
-            guard let result = try await takeImage(.area) else { return }
-            let content = try await TextRecognizer.recognize(result.image)
+            let image: CGImage
+            do {
+                // Capture buttons come back as soon as the area is taken; reading runs on its own.
+                defer { isCapturing = false }
+                guard let result = try await takeImage(.area) else { return }
+                image = result.image
+            }
+            Log.capture.info("Reading text from a \(image.width, privacy: .public)×\(image.height, privacy: .public) area")
+            let content = try await TextRecognizer.recognize(image)
             if settings.playsSounds {
                 CaptureSound.play()
             }

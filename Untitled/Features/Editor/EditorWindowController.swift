@@ -109,7 +109,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func updateTitle() {
-        window?.title = editorDocument.fileURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Screenshot")
+        window?.title = String(localized: "Editing")
+        window?.subtitle = editorDocument.fileURL?.deletingPathExtension().lastPathComponent ?? String(localized: "New Screenshot")
         window?.representedURL = editorDocument.fileURL
     }
 
@@ -193,6 +194,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         case .alertThirdButtonReturn: return true
         default: return false
         }
+    }
+
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+        editorDocument.undoManager
     }
 
     func windowWillClose(_ notification: Notification) {
