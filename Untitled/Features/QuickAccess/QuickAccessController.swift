@@ -248,7 +248,7 @@ private final class ThumbnailPanel: NSPanel {
 /// Hosts a thumbnail and turns drags into one of two gestures: a flick toward the screen edge
 /// moves the thumbnail with the pointer and throws it away with its momentum; any other drag
 /// carries the file into another app. Clicks, hovers, and double-clicks go to SwiftUI.
-final class ThumbnailHostingView: NSHostingView<QuickAccessThumbnail>, NSDraggingSource {
+final class ThumbnailHostingView: NSHostingView<QuickAccessThumbnail> {
     var fileURL: () -> URL? = { nil }
     var dragImage: NSImage?
     /// -1 when the thumbnails sit on the left edge, 1 on the right.
@@ -394,12 +394,11 @@ final class ThumbnailHostingView: NSHostingView<QuickAccessThumbnail>, NSDraggin
             NSRect(x: origin.x - imageSize.width / 2, y: origin.y - imageSize.height / 2, width: imageSize.width, height: imageSize.height),
             contents: dragImage
         )
-        beginDraggingSession(with: [item], event: event, source: self)
+        beginDraggingSession(with: [item], event: event, source: dragSource)
     }
 
-    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .outsideApplication ? .copy : .generic
-    }
+    /// NSHostingView already acts as a drag source for SwiftUI, so file drags use their own.
+    private let dragSource = ThumbnailDragSource()
 
     /// Ends SwiftUI's press without a click, so a drag that starts on a button never fires it.
     private func cancelSwiftUIPress(with event: NSEvent) {
@@ -417,5 +416,12 @@ final class ThumbnailHostingView: NSHostingView<QuickAccessThumbnail>, NSDraggin
               )
         else { return }
         super.mouseUp(with: release)
+    }
+}
+
+/// Offers a thumbnail's file as a copy to other apps.
+private final class ThumbnailDragSource: NSObject, NSDraggingSource {
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .outsideApplication ? .copy : .generic
     }
 }
