@@ -51,8 +51,10 @@ struct RecordingSettingsView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     RecordingSettingsView()
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
         .frame(width: 520)
 }
+#endif

@@ -402,6 +402,7 @@ private struct PermissionCard: View {
     }
 }
 
+#if DEBUG
 #Preview("Needs permission") {
     let dependencies = AppDependencies.preview()
     CaptureHomeView(showLibrary: {})
@@ -417,3 +418,4 @@ private struct PermissionCard: View {
         .environment(dependencies.settings)
         .frame(width: 760, height: 620)
 }
+#endif

@@ -37,8 +37,10 @@ struct CaptureSettingsView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     CaptureSettingsView()
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
         .frame(width: 520)
 }
+#endif

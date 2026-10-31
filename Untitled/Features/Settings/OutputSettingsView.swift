@@ -55,8 +55,10 @@ struct OutputSettingsView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     OutputSettingsView()
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
         .frame(width: 520)
 }
+#endif

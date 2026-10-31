@@ -23,9 +23,11 @@ struct TierBadge: View {
     }
 }
 
+#if DEBUG
 #Preview {
     HStack {
         ForEach(FeatureTier.allCases) { TierBadge(tier: $0) }
     }
     .padding()
 }
+#endif

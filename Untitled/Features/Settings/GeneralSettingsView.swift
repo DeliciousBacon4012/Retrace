@@ -34,8 +34,10 @@ struct GeneralSettingsView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     GeneralSettingsView(launchAtLogin: PreviewLaunchAtLoginService())
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
         .frame(width: 520)
 }
+#endif
