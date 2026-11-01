@@ -74,12 +74,9 @@ struct OutputSettingsView: View {
             } header: {
                 Text("File name")
             } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Use {date} and {time} to insert when the capture was taken.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    PendingFeatureFooter()
-                }
+                Text("Use {date} and {time} to insert when the capture was taken.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

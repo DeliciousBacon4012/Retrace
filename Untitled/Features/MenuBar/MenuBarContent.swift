@@ -56,16 +56,13 @@ struct MenuBarContent: View {
 
         Section {
             Button("Capture History…", systemImage: "clock.arrow.circlepath") {
-                MainWindowRouter.shared.pending = .library
-                openWindow(id: WindowID.main)
-                NSApplication.shared.activate()
+                MainWindowRouter.shared.show(.library, using: openWindow)
             }
             Button("Open Untitled", systemImage: "macwindow") {
-                openWindow(id: WindowID.main)
-                NSApplication.shared.activate()
+                MainWindowRouter.shared.show(using: openWindow)
             }
-            SettingsLink {
-                Label("Settings…", systemImage: "gearshape")
+            Button("Settings…", systemImage: "gearshape") {
+                MainWindowRouter.shared.show(.general, using: openWindow)
             }
             .keyboardShortcut(",")
         }

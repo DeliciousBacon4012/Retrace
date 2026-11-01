@@ -31,11 +31,5 @@ struct UntitledApp: App {
         } label: {
             MenuBarLabel(recording: dependencies.recording, replay: dependencies.replay)
         }
-
-        Settings {
-            SettingsView()
-                .environment(dependencies)
-                .environment(dependencies.settings)
-        }
     }
 }

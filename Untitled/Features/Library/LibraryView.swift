@@ -83,7 +83,12 @@ struct LibraryView: View {
             } description: {
                 Text(error)
             } actions: {
-                SettingsLink { Text("Choose Another Folder…") }
+                Button("Choose Another Folder…") {
+                    let settings = dependencies.settings
+                    if let folder = FolderPicker.chooseFolder(startingAt: settings.saveFolderURL) {
+                        settings.saveFolderPath = folder.path
+                    }
+                }
             }
         } else if library.items.isEmpty {
             ContentUnavailableView {
