@@ -19,6 +19,8 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
 
     /// Whether the action saves the replay buffer.
     var savesReplay = false
+    /// For a Save Last action, how many seconds it saves. Nil saves the whole buffer.
+    var saveLastSeconds: Int?
 
     /// Whether the action does anything yet.
     var isAvailable: Bool { captureMode != nil || capturesText || repeatsArea || opensClipboard || recordingMode != nil || savesReplay }
@@ -39,7 +41,19 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
         QuickAction(id: "recordArea", title: String(localized: "Record Area"), symbolName: "rectangle.dashed.badge.record", recordingMode: .area),
         QuickAction(id: "recordWindow", title: String(localized: "Record Window"), symbolName: "macwindow.badge.plus", recordingMode: .window),
         QuickAction(id: "recordScreen", title: String(localized: "Record Screen"), symbolName: "record.circle", recordingMode: .screen),
-        QuickAction(id: "saveReplay", title: String(localized: "Save Replay"), symbolName: "gobackward", savesReplay: true),
+        QuickAction(id: "saveReplay", title: String(localized: "Save Entire Buffer"), symbolName: "gobackward", savesReplay: true),
         QuickAction(id: "openClipboard", title: String(localized: "Open from Clipboard"), symbolName: "doc.on.clipboard", opensClipboard: true),
     ]
+
+    /// Saves the last `seconds` of the replay buffer. One exists for each Save Last length,
+    /// so each can have its own shortcut.
+    static func saveLast(_ seconds: Int) -> QuickAction {
+        let length = Duration.seconds(seconds).formatted(.units(allowed: [.minutes, .seconds], width: .wide))
+        return QuickAction(id: "saveLast\(seconds)", title: String(localized: "Save Last \(length)"), symbolName: "gobackward", savesReplay: true, saveLastSeconds: seconds)
+    }
+
+    /// The action with `id`, including the Save Last lengths currently offered.
+    static func withID(_ id: String, saveLastDurations: [Int]) -> QuickAction? {
+        all.first { $0.id == id } ?? saveLastDurations.map(saveLast).first { $0.id == id }
+    }
 }

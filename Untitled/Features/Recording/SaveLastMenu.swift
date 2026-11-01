@@ -13,6 +13,7 @@ struct SaveLastMenu: View {
                 Button(Self.title(for: seconds)) {
                     Task { await dependencies.replay.saveClip(lastSeconds: seconds) }
                 }
+                .menuShortcut(settings.shortcuts[QuickAction.saveLast(seconds).id])
                 // The buffer never holds more than its own length.
                 .disabled(seconds > settings.replayBufferSeconds)
             }

@@ -66,8 +66,8 @@ final class AppDependencies {
         self.recording = recording
         let replay = ReplayCoordinator(settings: settings, permissions: permissions, storage: FileCaptureStorage(), quickAccess: quickAccess, toasts: toasts)
         self.replay = replay
-        shortcuts = GlobalShortcuts(settings: settings) { [weak capture, weak recording, weak replay] actionID in
-            guard let action = QuickAction.all.first(where: { $0.id == actionID }) else { return }
+        shortcuts = GlobalShortcuts(settings: settings) { [weak settings, weak capture, weak recording, weak replay] actionID in
+            guard let settings, let action = QuickAction.withID(actionID, saveLastDurations: settings.saveLastDurations) else { return }
             Self.perform(action, capture: capture, recording: recording, replay: replay)
         }
     }
@@ -85,7 +85,7 @@ final class AppDependencies {
         } else if let mode = action.recordingMode {
             Task { await recording?.toggle(mode) }
         } else if action.savesReplay {
-            Task { await replay?.saveClip() }
+            Task { await replay?.saveClip(lastSeconds: action.saveLastSeconds) }
         }
     }
 
