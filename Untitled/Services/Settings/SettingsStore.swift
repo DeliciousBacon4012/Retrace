@@ -47,6 +47,9 @@ final class SettingsStore {
     var textHistoryLimit = Defaults.textHistoryLimit { didSet { save(textHistoryLimit, .textHistoryLimit) } }
     /// The choices offered in Settings › Advanced.
     static let textHistoryLimits = [0, 25, 50, 100, 250]
+    /// How much memory Recents and the Capture page may use for thumbnails, in megabytes.
+    var thumbnailMemoryMB = Defaults.thumbnailMemoryMB { didSet { save(thumbnailMemoryMB, .thumbnailMemoryMB) } }
+    static let thumbnailMemoryChoices = [64, 128, 256]
     private var storedToastSeconds: [String: Int] = [:] { didSet { save(storedToastSeconds, .toastSeconds) } }
 
     // MARK: Output
@@ -180,6 +183,8 @@ final class SettingsStore {
         plainTextApp = PlainTextApp(rawValue: value(.plainTextApp, default: "")) ?? Defaults.plainTextApp
         let limit = value(.textHistoryLimit, default: Defaults.textHistoryLimit)
         textHistoryLimit = Self.textHistoryLimits.contains(limit) ? limit : Defaults.textHistoryLimit
+        let thumbnailMemory = value(.thumbnailMemoryMB, default: Defaults.thumbnailMemoryMB)
+        thumbnailMemoryMB = Self.thumbnailMemoryChoices.contains(thumbnailMemory) ? thumbnailMemory : Defaults.thumbnailMemoryMB
         // Keep only known kinds with a time Settings offers, so the picker always shows a choice.
         storedToastSeconds = value(.toastSeconds, default: [String: Int]()).filter { key, seconds in
             ToastKind(rawValue: key) != nil && ToastKind.secondsChoices.contains(seconds)
@@ -270,6 +275,7 @@ private extension SettingsStore {
         case toastPreviewLines
         case plainTextApp
         case textHistoryLimit
+        case thumbnailMemoryMB
         case imageFormat
         case downscalesRetina
         case imageQuality
@@ -312,6 +318,7 @@ private extension SettingsStore {
         static let toastPreviewLines = 2
         static let plainTextApp = PlainTextApp.textEdit
         static let textHistoryLimit = 50
+        static let thumbnailMemoryMB = 64
         static let imageFormat = ImageFormat.png
         static let downscalesRetina = false
         static let imageQuality = 0.85

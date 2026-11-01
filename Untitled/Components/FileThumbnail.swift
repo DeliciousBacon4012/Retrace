@@ -32,15 +32,25 @@ struct FileThumbnail: View {
     }
 }
 
-/// Keeps recent thumbnails in memory so scrolling back doesn't regenerate them.
+/// Keeps recent thumbnails in memory so scrolling back doesn't regenerate them, up to a
+/// memory limit set in Settings › Advanced. The oldest go first when it's reached.
 final class ThumbnailCache {
     static let shared = ThumbnailCache()
 
     private let cache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
         cache.countLimit = 400
+        cache.totalCostLimit = 64 * 1_048_576
         return cache
     }()
+
+    func setMemoryLimit(megabytes: Int) {
+        cache.totalCostLimit = megabytes * 1_048_576
+    }
+
+    func removeAll() {
+        cache.removeAllObjects()
+    }
 
     func thumbnail(for url: URL, size: CGSize, scale: CGFloat) async -> NSImage? {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
@@ -53,7 +63,8 @@ final class ThumbnailCache {
             return nil
         }
         let image = representation.nsImage
-        cache.setObject(image, forKey: key)
+        let bytes = representation.cgImage.bytesPerRow * representation.cgImage.height
+        cache.setObject(image, forKey: key, cost: bytes)
         return image
     }
 }
