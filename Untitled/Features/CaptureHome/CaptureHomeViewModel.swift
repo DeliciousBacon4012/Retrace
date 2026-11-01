@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// State and actions for the Capture tab.
+/// State and actions for the Capture page.
 @Observable
 final class CaptureHomeViewModel {
     private(set) var screenRecording: PermissionStatus

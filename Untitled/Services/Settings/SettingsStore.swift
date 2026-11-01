@@ -77,7 +77,7 @@ final class SettingsStore {
 
     static var defaultShortcuts: [String: Shortcut] { Defaults.shortcuts }
 
-    /// How captures are encoded when saved, following the Output settings.
+    /// How captures are encoded when saved, following the Files & Privacy settings.
     func exportOptions(for scale: CGFloat) -> ExportOptions {
         var options = ExportOptions(format: imageFormat)
         options.quality = imageQuality
