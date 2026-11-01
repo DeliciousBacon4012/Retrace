@@ -40,6 +40,9 @@ final class SettingsStore {
     var showsToasts = Defaults.showsToasts { didSet { save(showsToasts, .showsToasts) } }
     var toastPosition = Defaults.toastPosition { didSet { save(toastPosition.rawValue, .toastPosition) } }
     /// Seconds each kind of toast stays, for kinds changed from their default. Zero means until dismissed.
+    /// Lines of captured text a toast shows.
+    var toastPreviewLines = Defaults.toastPreviewLines { didSet { save(toastPreviewLines, .toastPreviewLines) } }
+    var plainTextApp = Defaults.plainTextApp { didSet { save(plainTextApp.rawValue, .plainTextApp) } }
     private var storedToastSeconds: [String: Int] = [:] { didSet { save(storedToastSeconds, .toastSeconds) } }
 
     // MARK: Output
@@ -169,6 +172,8 @@ final class SettingsStore {
         quickAccessMaxVisible = min(max(value(.quickAccessMaxVisible, default: Defaults.quickAccessMaxVisible), 1), 8)
         showsToasts = value(.showsToasts, default: Defaults.showsToasts)
         toastPosition = ToastPosition(rawValue: value(.toastPosition, default: "")) ?? Defaults.toastPosition
+        toastPreviewLines = min(max(value(.toastPreviewLines, default: Defaults.toastPreviewLines), 1), 5)
+        plainTextApp = PlainTextApp(rawValue: value(.plainTextApp, default: "")) ?? Defaults.plainTextApp
         // Keep only known kinds with a time Settings offers, so the picker always shows a choice.
         storedToastSeconds = value(.toastSeconds, default: [String: Int]()).filter { key, seconds in
             ToastKind(rawValue: key) != nil && ToastKind.secondsChoices.contains(seconds)
@@ -256,6 +261,8 @@ private extension SettingsStore {
         case showsToasts
         case toastPosition
         case toastSeconds
+        case toastPreviewLines
+        case plainTextApp
         case imageFormat
         case downscalesRetina
         case imageQuality
@@ -295,6 +302,8 @@ private extension SettingsStore {
         static let quickAccessMaxVisible = 5
         static let showsToasts = true
         static let toastPosition = ToastPosition.topCenter
+        static let toastPreviewLines = 2
+        static let plainTextApp = PlainTextApp.textEdit
         static let imageFormat = ImageFormat.png
         static let downscalesRetina = false
         static let imageQuality = 0.85

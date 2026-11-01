@@ -36,7 +36,7 @@ final class AppDependencies {
         self.dockIcon = dockIcon
         self.clipboard = clipboard
         library = CaptureLibrary(folder: settings.saveFolderURL)
-        let toasts = CaptureToastController(settings: settings)
+        let toasts = CaptureToastController(settings: settings, permissions: permissions)
         self.toasts = toasts
         let editor = EditorPresenter(settings: settings, clipboard: clipboard)
         self.editor = editor
@@ -67,7 +67,7 @@ final class AppDependencies {
             toasts: toasts
         )
         self.recording = recording
-        let replay = ReplayCoordinator(settings: settings, permissions: permissions, storage: FileCaptureStorage(), quickAccess: quickAccess, toasts: toasts)
+        let replay = ReplayCoordinator(settings: settings, permissions: permissions, storage: FileCaptureStorage(), clipboard: clipboard, quickAccess: quickAccess, toasts: toasts)
         self.replay = replay
         shortcuts = GlobalShortcuts(settings: settings) { [weak settings, weak capture, weak recording, weak replay] actionID in
             guard let settings, let action = QuickAction.withID(actionID, saveLastDurations: settings.saveLastDurations) else { return }

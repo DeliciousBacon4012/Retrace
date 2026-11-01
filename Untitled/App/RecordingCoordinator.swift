@@ -86,8 +86,7 @@ final class RecordingCoordinator {
             return
         }
         guard permissions.screenRecordingStatus == .granted else {
-            permissions.requestScreenRecordingAccess()
-            ErrorPresenter.present(CaptureError.permissionDenied, recovery: String(localized: "Turn on Untitled in System Settings › Privacy & Security › Screen & System Audio Recording, then try again."))
+            toasts.showScreenRecordingNeeded(then: String(localized: "Try again."))
             return
         }
         if settings.recordsMicrophone, await !microphoneAllowed() {
@@ -179,7 +178,7 @@ final class RecordingCoordinator {
                 if settings.stripsVideoMetadata { await VideoMetadata.removeAll(from: url) }
                 if settings.copiesToClipboard { clipboard.copyFile(at: url) }
                 guard settings.showsQuickAccess else {
-                    toasts.show(.init(kind: .recordingSaved, symbolName: "record.circle", title: String(localized: "Recording saved"), detail: url.lastPathComponent))
+                    toasts.show(.init(kind: .recordingSaved, symbolName: "record.circle", title: String(localized: "Recording saved"), detail: url.lastPathComponent, actions: .forMovie(at: url, clipboard: clipboard)))
                     return
                 }
                 guard let poster = await Self.posterFrame(for: url) else { return }
