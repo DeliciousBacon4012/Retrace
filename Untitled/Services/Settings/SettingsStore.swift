@@ -57,6 +57,8 @@ final class SettingsStore {
     var showsClicks = Defaults.showsClicks { didSet { save(showsClicks, .showsClicks) } }
     /// Shows a red dot and the elapsed time in the menu bar while recording.
     var showsRecordingTimeInMenuBar = Defaults.showsRecordingTimeInMenuBar { didSet { save(showsRecordingTimeInMenuBar, .showsRecordingTimeInMenuBar) } }
+    /// Seconds to count down before a recording starts. Zero starts right away.
+    var recordingCountdownSeconds = Defaults.recordingCountdownSeconds { didSet { save(recordingCountdownSeconds, .recordingCountdownSeconds) } }
 
     // MARK: Replay buffer
 
@@ -160,6 +162,7 @@ final class SettingsStore {
         recordsMicrophone = value(.recordsMicrophone, default: Defaults.recordsMicrophone)
         showsClicks = value(.showsClicks, default: Defaults.showsClicks)
         showsRecordingTimeInMenuBar = value(.showsRecordingTimeInMenuBar, default: Defaults.showsRecordingTimeInMenuBar)
+        recordingCountdownSeconds = value(.recordingCountdownSeconds, default: Defaults.recordingCountdownSeconds)
         replayBufferEnabled = value(.replayBufferEnabled, default: Defaults.replayBufferEnabled)
         replayBufferSeconds = value(.replayBufferSeconds, default: Defaults.replayBufferSeconds)
         replayDiskLimitGB = value(.replayDiskLimitGB, default: Defaults.replayDiskLimitGB)
@@ -238,6 +241,7 @@ private extension SettingsStore {
         case recordsMicrophone
         case showsClicks
         case showsRecordingTimeInMenuBar
+        case recordingCountdownSeconds
         case replayBufferEnabled
         case replayBufferSeconds
         case replayDiskLimitGB
@@ -273,6 +277,7 @@ private extension SettingsStore {
         static let recordsMicrophone = false
         static let showsClicks = false
         static let showsRecordingTimeInMenuBar = true
+        static let recordingCountdownSeconds = 3
         static let replayBufferEnabled = false
         static let replayBufferSeconds = 60
         static let replayDiskLimitGB = 4

@@ -44,7 +44,7 @@ private struct CaptureHomeContent: View {
             }
 
             Section("Recording") {
-                if recording.isRecording {
+                if recording.isRecording || recording.countdown != nil {
                     StopRecordingButton(recording: recording)
                 } else {
                     ActionGrid {
@@ -85,6 +85,7 @@ private struct CaptureHomeContent: View {
         .animation(.panel, value: viewModel.screenRecording)
         .animation(.panel, value: library.items.isEmpty)
         .animation(.panel, value: recording.isRecording)
+        .animation(.response, value: recording.countdown)
         .task {
             await viewModel.watchScreenRecording()
         }
@@ -139,6 +140,7 @@ private struct CaptureButton: View {
 }
 
 /// While recording, the recording buttons become one Stop button with the elapsed time.
+/// During the countdown it cancels instead.
 private struct StopRecordingButton: View {
     let recording: RecordingCoordinator
 
@@ -147,8 +149,12 @@ private struct StopRecordingButton: View {
             Task { await recording.toggle(.area) }
         } label: {
             HStack {
-                Image(systemName: "stop.fill")
-                if case .recording(let since) = recording.recorder.state {
+                Image(systemName: recording.countdown == nil ? "stop.fill" : "xmark")
+                if let remaining = recording.countdown {
+                    Text("Cancel · \(remaining)")
+                        .monospacedDigit()
+                        .contentTransition(.numericText(countsDown: true))
+                } else if case .recording(let since) = recording.recorder.state {
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         Text("Stop · \(Duration.seconds(max(0, context.date.timeIntervalSince(since))).formatted(.time(pattern: .minuteSecond)))")
                             .monospacedDigit()

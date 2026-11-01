@@ -11,7 +11,12 @@ struct MenuBarContent: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        if dependencies.recording.isRecording {
+        if let remaining = dependencies.recording.countdown {
+            Button("Cancel Countdown — \(remaining)", systemImage: "xmark.circle") {
+                dependencies.recording.cancelCountdown()
+            }
+            Divider()
+        } else if dependencies.recording.isRecording {
             Button(stopTitle, systemImage: "stop.circle") {
                 dependencies.recording.recorder.stop()
             }
@@ -27,7 +32,7 @@ struct MenuBarContent: View {
         }
 
         Section {
-            if !dependencies.recording.isRecording {
+            if !dependencies.recording.isRecording, dependencies.recording.countdown == nil {
                 Menu("Record", systemImage: "record.circle") {
                     ForEach(QuickAction.recordings) { action in
                         QuickActionButton(action: action)
