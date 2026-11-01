@@ -93,8 +93,9 @@ final class ReplayBuffer: NSObject {
         Log.capture.info("Replay buffer stopped")
     }
 
-    /// Saves what's buffered to `url` as a normal movie that starts at zero.
-    func save(to url: URL) async throws {
+    /// Saves what's buffered to `url` as a normal movie that starts at zero, leaving out
+    /// metadata when `stripsMetadata` is on.
+    func save(to url: URL, stripsMetadata: Bool) async throws {
         guard case .running(let since) = state, let writer else { throw ReplayError.notRunning }
         state = .saving
         defer {
@@ -105,11 +106,11 @@ final class ReplayBuffer: NSObject {
         try await Task.detached(priority: .userInitiated) {
             try writer.writeSnapshot(to: temporary)
         }.value
-        try await Self.export(temporary, to: url)
+        try await Self.export(temporary, to: url, stripsMetadata: stripsMetadata)
     }
 
     /// Rewrites the fragmented snapshot into a regular movie whose timeline starts at zero.
-    private static func export(_ source: URL, to destination: URL) async throws {
+    private static func export(_ source: URL, to destination: URL, stripsMetadata: Bool) async throws {
         let asset = AVURLAsset(url: source)
         let composition = AVMutableComposition()
         for track in try await asset.loadTracks(withMediaType: .video) + asset.loadTracks(withMediaType: .audio) {
@@ -123,6 +124,7 @@ final class ReplayBuffer: NSObject {
         guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
             throw ReplayError.empty
         }
+        if stripsMetadata { VideoMetadata.strip(session) }
         try await session.export(to: destination, as: .mov)
     }
 }

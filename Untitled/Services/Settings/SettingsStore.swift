@@ -41,6 +41,8 @@ final class SettingsStore {
     var imageQuality = Defaults.imageQuality { didSet { save(imageQuality, .imageQuality) } }
     /// Leaves EXIF, GPS, and device details out of every saved and exported image.
     var stripsMetadata = Defaults.stripsMetadata { didSet { save(stripsMetadata, .stripsMetadata) } }
+    /// Removes descriptive metadata from recordings and replay clips.
+    var stripsVideoMetadata = Defaults.stripsVideoMetadata { didSet { save(stripsVideoMetadata, .stripsVideoMetadata) } }
     var saveFolderPath = Defaults.saveFolderPath { didSet { save(saveFolderPath, .saveFolderPath) } }
     var filenameTemplate = Defaults.filenameTemplate { didSet { save(filenameTemplate, .filenameTemplate) } }
 
@@ -121,6 +123,7 @@ final class SettingsStore {
         downscalesRetina = value(.downscalesRetina, default: Defaults.downscalesRetina)
         imageQuality = value(.imageQuality, default: Defaults.imageQuality)
         stripsMetadata = value(.stripsMetadata, default: Defaults.stripsMetadata)
+        stripsVideoMetadata = value(.stripsVideoMetadata, default: Defaults.stripsVideoMetadata)
         saveFolderPath = value(.saveFolderPath, default: Defaults.saveFolderPath)
         filenameTemplate = value(.filenameTemplate, default: Defaults.filenameTemplate)
         videoCodec = VideoCodec(rawValue: value(.videoCodec, default: "")) ?? Defaults.videoCodec
@@ -195,6 +198,7 @@ private extension SettingsStore {
         case downscalesRetina
         case imageQuality
         case stripsMetadata
+        case stripsVideoMetadata
         case saveFolderPath
         case filenameTemplate
         case videoCodec
@@ -227,6 +231,7 @@ private extension SettingsStore {
         static let downscalesRetina = false
         static let imageQuality = 0.85
         static let stripsMetadata = true
+        static let stripsVideoMetadata = true
         static let filenameTemplate = "Untitled {date} at {time}"
         static let videoCodec = VideoCodec.hevc
         static let framesPerSecond = 60

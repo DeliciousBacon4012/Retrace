@@ -39,9 +39,10 @@ struct OutputSettingsView: View {
             }
 
             Section {
-                Toggle("Remove metadata", isOn: $settings.stripsMetadata)
+                Toggle("Remove metadata from images", isOn: $settings.stripsMetadata)
+                Toggle("Remove metadata from videos", isOn: $settings.stripsVideoMetadata)
             } footer: {
-                Text("Saves only the pixels: no capture date, no app name, and a standard color profile instead of your display's own. Images with redactions are always saved this way.")
+                Text("Images keep only their pixels: no capture date, no app name, and a standard color profile instead of your display's own. Images with redactions are always saved this way. Videos keep no location, device or app details.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
