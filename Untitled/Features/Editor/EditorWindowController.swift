@@ -8,11 +8,13 @@ import UniformTypeIdentifiers
 final class EditorPresenter {
     private let settings: SettingsStore
     private let clipboard: any ClipboardWriting
+    private let textHistory: TextHistory?
     private var controllers: [EditorWindowController] = []
 
-    init(settings: SettingsStore, clipboard: any ClipboardWriting) {
+    init(settings: SettingsStore, clipboard: any ClipboardWriting, textHistory: TextHistory? = nil) {
         self.settings = settings
         self.clipboard = clipboard
+        self.textHistory = textHistory
     }
 
     func open(_ capture: CapturedImage) {
@@ -38,7 +40,7 @@ final class EditorPresenter {
     }
 
     private func present(_ document: EditorDocument) {
-        let controller = EditorWindowController(document: document, settings: settings, clipboard: clipboard) { [weak self] closed in
+        let controller = EditorWindowController(document: document, settings: settings, clipboard: clipboard, textHistory: textHistory) { [weak self] closed in
             self?.controllers.removeAll { $0 === closed }
         }
         controllers.append(controller)
@@ -52,12 +54,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     let editorDocument: EditorDocument
     private let settings: SettingsStore
     private let clipboard: any ClipboardWriting
+    private let textHistory: TextHistory?
     private let onClose: (EditorWindowController) -> Void
 
-    init(document: EditorDocument, settings: SettingsStore, clipboard: any ClipboardWriting, onClose: @escaping (EditorWindowController) -> Void) {
+    init(document: EditorDocument, settings: SettingsStore, clipboard: any ClipboardWriting, textHistory: TextHistory?, onClose: @escaping (EditorWindowController) -> Void) {
         self.editorDocument = document
         self.settings = settings
         self.clipboard = clipboard
+        self.textHistory = textHistory
         self.onClose = onClose
 
         let screen = NSScreen.underPointer ?? NSScreen.main ?? NSScreen.screens.first
@@ -81,7 +85,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
             save: { [weak self] in self?.save() },
             done: { [weak self] in self?.finish() },
             render: { [weak self] in self?.renderOrWarn() },
-            copyText: { [weak self] text in self?.clipboard.copy(text: text) },
+            copyText: { [weak self] text in
+                self?.clipboard.copy(text: text)
+                self?.textHistory?.add(text)
+            },
             exportFolder: settings.saveFolderURL,
             exportOptions: settings.exportOptions(for: document.scale),
             suggestedName: document.fileURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Screenshot")

@@ -195,3 +195,29 @@ nonisolated enum TextRecognizer {
         }
     }
 }
+
+nonisolated extension CGImage {
+    /// Vision reads small crops better when they are bigger, so a small area is drawn at
+    /// up to three times its size first. Returns `nil` when the image is big enough.
+    func upscaledForReading() -> CGImage? {
+        let shortSide = min(width, height)
+        guard shortSide > 0, shortSide < 120 else { return nil }
+        let factor = min(3, (120 / CGFloat(shortSide)).rounded(.up))
+        let size = CGSize(width: CGFloat(width) * factor, height: CGFloat(height) * factor)
+        guard let context = CGContext(
+            data: nil,
+            width: Int(size.width),
+            height: Int(size.height),
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        // White behind any transparency, so text on clear pixels still has contrast.
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(origin: .zero, size: size))
+        context.interpolationQuality = .high
+        context.draw(self, in: CGRect(origin: .zero, size: size))
+        return context.makeImage()
+    }
+}

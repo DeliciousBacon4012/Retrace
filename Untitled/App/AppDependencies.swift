@@ -43,7 +43,7 @@ final class AppDependencies {
         self.toasts = toasts
         let textHistory = TextHistory(settings: settings, fileURL: textHistoryFile)
         self.textHistory = textHistory
-        let editor = EditorPresenter(settings: settings, clipboard: clipboard)
+        let editor = EditorPresenter(settings: settings, clipboard: clipboard, textHistory: textHistory)
         self.editor = editor
         let pins = PinController(clipboard: clipboard)
         pins.onEdit = { [weak editor] capture in editor?.open(capture) }

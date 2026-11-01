@@ -31,6 +31,7 @@ final class EditorDocument {
         didSet {
             guard tool != oldValue else { return }
             finishTextEditing()
+            isPickingTextArea = false
             if tool == .crop {
                 select(nil)
                 toolBeforeCrop = oldValue
@@ -46,6 +47,58 @@ final class EditorDocument {
                 prepareRedaction(style.redaction, around: style.strength)
             }
         }
+    }
+
+    // MARK: Text area
+
+    /// True while the person drags out an area to copy text from (⇧⌘T).
+    /// Drawing, selecting, and cropping pause until the area is chosen or the mode is left.
+    var isPickingTextArea = false {
+        didSet {
+            guard isPickingTextArea != oldValue else { return }
+            textArea = nil
+            textAreaStart = nil
+        }
+    }
+
+    /// The area being dragged out, in image pixels.
+    private(set) var textArea: CGRect?
+    @ObservationIgnored private var textAreaStart: CGPoint?
+    /// Called with the chosen area, in image pixels, when the drag ends.
+    @ObservationIgnored var onTextAreaChosen: ((CGRect) -> Void)?
+
+    func beginPickingTextArea() {
+        commitCrop()
+        finishTextEditing()
+        isPickingTextArea = true
+    }
+
+    func textAreaDown(at point: CGPoint) {
+        let start = clampedToVisible(point)
+        textAreaStart = start
+        textArea = CGRect(origin: start, size: .zero)
+    }
+
+    func textAreaDragged(to point: CGPoint) {
+        guard let start = textAreaStart else { return }
+        let end = clampedToVisible(point)
+        textArea = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
+    }
+
+    /// A click or a tiny drag keeps the mode on, so a slip doesn't end it.
+    func textAreaUp() {
+        textAreaStart = nil
+        guard let area = textArea, area.width >= 4, area.height >= 4 else {
+            textArea = nil
+            return
+        }
+        isPickingTextArea = false
+        onTextAreaChosen?(area)
+    }
+
+    private func clampedToVisible(_ point: CGPoint) -> CGPoint {
+        let bounds = cropRect ?? CGRect(origin: .zero, size: imageSize)
+        return CGPoint(x: min(max(point.x, bounds.minX), bounds.maxX), y: min(max(point.y, bounds.minY), bounds.maxY))
     }
 
     /// While cropping, the whole image shows so the crop can grow; otherwise only the crop does.
