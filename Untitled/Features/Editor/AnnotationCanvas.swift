@@ -124,7 +124,7 @@ struct AnnotationCanvas: View {
     private func installScrollMonitor(fitFactor: CGFloat) {
         guard scrollMonitor == nil else { return }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [document] event in
-            guard isHovering else { return event }
+            guard isHovering, !document.isPointerOverZoomControl else { return event }
             if event.modifierFlags.contains(.command) {
                 let current = document.currentZoom(fitFactor: fitFactor)
                 document.zoom = min(max(current * (1 + event.scrollingDeltaY * 0.01), 0.1), 8)
