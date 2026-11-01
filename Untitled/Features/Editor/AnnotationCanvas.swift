@@ -57,6 +57,12 @@ struct AnnotationCanvas: View {
                 MarkSelectionOverlay(document: document, layout: layout)
                     .allowsHitTesting(false)
 
+                if document.isPickingTextArea {
+                    TextAreaShade(area: document.textArea, layout: layout)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+
                 if let id = document.editingTextID, let mark = document.annotations.first(where: { $0.id == id }) {
                     TextMarkEditor(document: document, mark: mark, layout: layout)
                         .id(id)
@@ -87,6 +93,14 @@ struct AnnotationCanvas: View {
     private func drawingGesture(layout: CanvasLayout) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
+                if document.isPickingTextArea {
+                    if !isPointerDown {
+                        isPointerDown = true
+                        document.textAreaDown(at: layout.imagePoint(for: value.startLocation))
+                    }
+                    document.textAreaDragged(to: layout.imagePoint(for: value.location))
+                    return
+                }
                 if !isPointerDown {
                     isPointerDown = true
                     document.pointerDown(
@@ -104,7 +118,11 @@ struct AnnotationCanvas: View {
             }
             .onEnded { _ in
                 isPointerDown = false
-                document.pointerUp()
+                if document.isPickingTextArea {
+                    document.textAreaUp()
+                } else {
+                    document.pointerUp()
+                }
             }
     }
 
@@ -149,6 +167,10 @@ struct AnnotationCanvas: View {
 
     private func updateCursor(at location: CGPoint, layout: CanvasLayout) {
         guard !isPointerDown else { return }
+        if document.isPickingTextArea {
+            NSCursor.crosshair.set()
+            return
+        }
         let point = layout.imagePoint(for: location)
         let tolerance = 7 / layout.factor
 
@@ -278,6 +300,27 @@ private struct MarkLayer: View, Equatable {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// While choosing an area to read text from: the image dims a little, and the area being
+/// dragged shows at full brightness with an accent outline.
+private struct TextAreaShade: View {
+    let area: CGRect?
+    let layout: CanvasLayout
+
+    var body: some View {
+        Canvas { context, _ in
+            var outside = Path(layout.visibleFrame)
+            if let area {
+                let frame = layout.viewRect(for: area)
+                outside.addRect(frame)
+                context.fill(outside, with: .color(.black.opacity(0.35)), style: FillStyle(eoFill: true))
+                context.stroke(Path(frame), with: .color(.accentColor), lineWidth: 1.5)
+            } else {
+                context.fill(outside, with: .color(.black.opacity(0.18)))
+            }
+        }
     }
 }
 

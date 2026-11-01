@@ -52,13 +52,20 @@ struct EditorView: View {
         .focusable()
         .focused($isCanvasFocused)
         .focusEffectDisabled()
-        .onAppear { isCanvasFocused = true }
+        .onAppear {
+            isCanvasFocused = true
+            document.onTextAreaChosen = { area in
+                Task { await copyText(in: area) }
+            }
+        }
         .onKeyPress(phases: [.down, .repeat]) { press in
             handle(press)
         }
         .onDeleteCommand { document.deleteSelection() }
         .onExitCommand {
-            if document.tool == .crop {
+            if document.isPickingTextArea {
+                withAnimation(.response) { document.isPickingTextArea = false }
+            } else if document.tool == .crop {
                 document.cancelCrop()
             } else if document.editingTextID != nil {
                 document.finishTextEditing()
@@ -76,7 +83,11 @@ struct EditorView: View {
                     .padding(.bottom, Design.spacingL)
             }
             .overlay(alignment: .top) {
-                if let notice {
+                if document.isPickingTextArea {
+                    EditorNoticeView(notice: Self.textAreaHint)
+                        .padding(.top, Design.spacingL)
+                        .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(0.9, anchor: .top)))
+                } else if let notice {
                     EditorNoticeView(notice: notice)
                         .padding(.top, Design.spacingL)
                         .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(0.9, anchor: .top)))
@@ -84,6 +95,7 @@ struct EditorView: View {
                 }
             }
             .animation(.pop, value: notice?.id)
+            .animation(.pop, value: document.isPickingTextArea)
             .task(id: notice?.id) {
                 guard notice != nil else { return }
                 try? await Task.sleep(for: .seconds(2.4))
@@ -118,13 +130,10 @@ struct EditorView: View {
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
-            Button("Copy Text", systemImage: "text.viewfinder") {
-                Task { await copyText() }
-            }
-            .keyboardShortcut("t", modifiers: [.command, .shift])
-            .disabled(isReadingText)
-            .symbolEffect(.pulse, isActive: isReadingText)
-            .help("Copy the text in this image (⇧⌘T)")
+            Toggle("Copy Text", systemImage: "text.viewfinder", isOn: textAreaBinding)
+                .disabled(isReadingText)
+                .symbolEffect(.pulse, isActive: isReadingText)
+                .help("Copy text: drag over an area, or press Return for all of it (⇧⌘T)")
             Button("Copy", systemImage: "doc.on.doc") { actions.copy() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .help("Copy the edited image (⇧⌘C)")
@@ -158,9 +167,38 @@ struct EditorView: View {
         }
     }
 
-    /// Reads the text in the edited image on device and puts it on the clipboard.
-    private func copyText() async {
-        guard let image = actions.render() else { return }
+    private static let textAreaHint = EditorNotice(
+        symbolName: "text.viewfinder",
+        title: String(localized: "Drag over text to copy it, or press Return for all")
+    )
+
+    private var textAreaBinding: Binding<Bool> {
+        Binding {
+            document.isPickingTextArea
+        } set: { isOn in
+            if isOn {
+                notice = nil
+                document.beginPickingTextArea()
+            } else {
+                document.isPickingTextArea = false
+            }
+        }
+    }
+
+    /// Reads the text in the edited image, or in one area of it, on device and puts it on
+    /// the clipboard. Marks count: text under a redaction is never read.
+    private func copyText(in area: CGRect? = nil) async {
+        guard !isReadingText, let rendered = actions.render() else { return }
+        var image = rendered
+        if let area {
+            guard let region = Self.region(area, croppedTo: document.cropRect, in: rendered),
+                  let cropped = rendered.cropping(to: region)
+            else {
+                notice = EditorNotice(symbolName: "text.magnifyingglass", title: String(localized: "No text found"))
+                return
+            }
+            image = cropped.upscaledForReading() ?? cropped
+        }
         isReadingText = true
         defer { isReadingText = false }
         do {
@@ -183,6 +221,15 @@ struct EditorView: View {
         }
     }
 
+    /// The area in the rendered image's pixels, with a little room around it so letters cut
+    /// by the edge of the drag still read. The rendered image starts at the crop's corner.
+    private static func region(_ area: CGRect, croppedTo crop: CGRect?, in image: CGImage) -> CGRect? {
+        let origin = crop?.integral.origin ?? .zero
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let region = area.offsetBy(dx: -origin.x, dy: -origin.y).insetBy(dx: -4, dy: -4).integral.intersection(bounds)
+        return region.isEmpty ? nil : region
+    }
+
     /// The toolbar icon shows the variant each tool will draw, like a curved arrow or a mosaic.
     private func symbol(for tool: EditorTool) -> String {
         let style = document.style(for: tool)
@@ -201,6 +248,9 @@ struct EditorView: View {
     /// Keyboard shortcuts that aren't on a visible control.
     private var shortcutButtons: some View {
         Group {
+            Button("Copy Text") { textAreaBinding.wrappedValue = !document.isPickingTextArea }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+                .disabled(isReadingText)
             Button("Duplicate") { document.duplicateSelection() }
                 .keyboardShortcut("d", modifiers: .command)
             Button("Bring to Front") { document.bringSelectionToFront() }
@@ -228,6 +278,12 @@ struct EditorView: View {
 
     private func handle(_ press: KeyPress) -> KeyPress.Result {
         guard document.editingTextID == nil else { return .ignored }
+
+        if press.key == .return, document.isPickingTextArea {
+            document.isPickingTextArea = false
+            Task { await copyText() }
+            return .handled
+        }
 
         if press.key == .return, document.tool == .crop {
             document.commitCrop()
