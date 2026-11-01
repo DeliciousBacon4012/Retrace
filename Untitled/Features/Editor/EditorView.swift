@@ -62,6 +62,11 @@ struct EditorView: View {
             handle(press)
         }
         .onDeleteCommand { document.deleteSelection() }
+        .onChange(of: document.commandRequest) { _, request in
+            guard let request else { return }
+            document.clearCommandRequest()
+            perform(request.command)
+        }
         .onExitCommand {
             if document.isPickingTextArea {
                 withAnimation(.response) { document.isPickingTextArea = false }
@@ -140,11 +145,7 @@ struct EditorView: View {
             Button("Save", systemImage: "square.and.arrow.down") { actions.save() }
                 .keyboardShortcut("s", modifiers: .command)
                 .help("Save (⌘S)")
-            Button("Export", systemImage: "square.and.arrow.up") {
-                if let image = actions.render() {
-                    exportItem = ExportItem(image: image, scale: document.scale, suggestedName: actions.suggestedName, hidesContent: document.hasRedactions)
-                }
-            }
+            Button("Export", systemImage: "square.and.arrow.up") { startExport() }
             .keyboardShortcut("e", modifiers: .command)
             .help("Export with a different format, size, or quality (⌘E)")
         }
@@ -164,6 +165,22 @@ struct EditorView: View {
             }
             .keyboardShortcut("i", modifiers: [.command, .option])
             .help("Show or hide the inspector (⌥⌘I)")
+        }
+    }
+
+    private func startExport() {
+        if let image = actions.render() {
+            exportItem = ExportItem(image: image, scale: document.scale, suggestedName: actions.suggestedName, hidesContent: document.hasRedactions)
+        }
+    }
+
+    /// Carries out a command chosen in the menu bar.
+    private func perform(_ command: EditorCommand) {
+        switch command {
+        case .export: startExport()
+        case .copyText: if !isReadingText { textAreaBinding.wrappedValue = true }
+        case .zoomIn: document.zoomIn(fitFactor: fitFactor)
+        case .zoomOut: document.zoomOut(fitFactor: fitFactor)
         }
     }
 

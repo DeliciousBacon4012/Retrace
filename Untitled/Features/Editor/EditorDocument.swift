@@ -52,6 +52,20 @@ final class EditorDocument {
         }
     }
 
+    // MARK: Menu commands
+
+    /// A menu bar command for this editor that the editor view carries out, because it
+    /// needs the view's size or presents a sheet.
+    private(set) var commandRequest: EditorCommandRequest?
+
+    func send(_ command: EditorCommand) {
+        commandRequest = EditorCommandRequest(command: command)
+    }
+
+    func clearCommandRequest() {
+        commandRequest = nil
+    }
+
     // MARK: Highlighter snapping
 
     /// The preference for snapping highlighter strokes to lines of text. On unless turned off.
@@ -885,4 +899,16 @@ nonisolated enum MarkHandle: Hashable, Sendable {
             mark.end = CGPoint(x: r.maxX, y: r.maxY)
         }
     }
+}
+
+nonisolated enum EditorCommand: Equatable, Sendable {
+    case export
+    case copyText
+    case zoomIn
+    case zoomOut
+}
+
+nonisolated struct EditorCommandRequest: Equatable, Sendable {
+    let command: EditorCommand
+    let id = UUID()
 }
