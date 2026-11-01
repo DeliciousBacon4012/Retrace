@@ -62,6 +62,8 @@ final class SettingsStore {
     var replayBufferEnabled = Defaults.replayBufferEnabled { didSet { save(replayBufferEnabled, .replayBufferEnabled) } }
     var replayBufferSeconds = Defaults.replayBufferSeconds { didSet { save(replayBufferSeconds, .replayBufferSeconds) } }
     var replayDiskLimitGB = Defaults.replayDiskLimitGB { didSet { save(replayDiskLimitGB, .replayDiskLimitGB) } }
+    /// The lengths offered under Save Last, in seconds, shortest first.
+    private(set) var saveLastDurations = Defaults.saveLastDurations { didSet { save(saveLastDurations, .saveLastDurations) } }
 
     // MARK: Shortcuts
 
@@ -88,6 +90,27 @@ final class SettingsStore {
             options.scalePercent = 100 / scale
         }
         return options
+    }
+
+    /// The most Save Last lengths kept, so the menu stays short.
+    static let maximumSaveLastDurations = 8
+    /// The longest Save Last length, matching the longest buffer.
+    static let longestSaveLastDuration = 600
+
+    /// Adds a Save Last length, ignoring repeats and anything out of range.
+    func addSaveLastDuration(_ seconds: Int) {
+        guard saveLastDurations.count < Self.maximumSaveLastDurations else { return }
+        saveLastDurations = Self.cleaned(saveLastDurations + [seconds])
+    }
+
+    func removeSaveLastDuration(_ seconds: Int) {
+        saveLastDurations.removeAll { $0 == seconds }
+    }
+
+    /// Sorted, without repeats, each from 1 second to 10 minutes, and no more than the menu holds.
+    private static func cleaned(_ durations: [Int]) -> [Int] {
+        let valid = Set(durations.filter { (1...longestSaveLastDuration).contains($0) })
+        return Array(valid.sorted().prefix(maximumSaveLastDurations))
     }
 
     /// The folder captures are saved to, as a file URL.
@@ -137,6 +160,7 @@ final class SettingsStore {
         replayBufferEnabled = value(.replayBufferEnabled, default: Defaults.replayBufferEnabled)
         replayBufferSeconds = value(.replayBufferSeconds, default: Defaults.replayBufferSeconds)
         replayDiskLimitGB = value(.replayDiskLimitGB, default: Defaults.replayDiskLimitGB)
+        saveLastDurations = Self.cleaned(value(.saveLastDurations, default: Defaults.saveLastDurations))
         shortcuts = loadShortcuts()
     }
 
@@ -213,6 +237,7 @@ private extension SettingsStore {
         case replayBufferEnabled
         case replayBufferSeconds
         case replayDiskLimitGB
+        case saveLastDurations
         case shortcuts
     }
 
@@ -246,6 +271,7 @@ private extension SettingsStore {
         static let replayBufferEnabled = false
         static let replayBufferSeconds = 60
         static let replayDiskLimitGB = 4
+        static let saveLastDurations = [15, 20, 25, 30, 60]
 
         /// ⌥⇧⌘ plus the number macOS uses for the same kind of screenshot; recordings follow on 6 and 7.
         static let shortcuts: [String: Shortcut] = [

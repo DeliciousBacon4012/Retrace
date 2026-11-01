@@ -12,12 +12,14 @@ final class ReplayCoordinator {
     @ObservationIgnored private let permissions: any PermissionProviding
     @ObservationIgnored private let storage: any CaptureStoring
     @ObservationIgnored private let quickAccess: QuickAccessController
+    @ObservationIgnored private let toasts: CaptureToastController
 
-    init(settings: SettingsStore, permissions: any PermissionProviding, storage: any CaptureStoring, quickAccess: QuickAccessController) {
+    init(settings: SettingsStore, permissions: any PermissionProviding, storage: any CaptureStoring, quickAccess: QuickAccessController, toasts: CaptureToastController) {
         self.settings = settings
         self.permissions = permissions
         self.storage = storage
         self.quickAccess = quickAccess
+        self.toasts = toasts
     }
 
     /// Starts the buffer at launch if it was on last time and access is still allowed.
@@ -34,18 +36,24 @@ final class ReplayCoordinator {
         settings.replayBufferEnabled = enabled
     }
 
-    /// Saves the buffered clip to the save folder and shows it in Quick Access.
-    func saveClip() async {
+    /// Saves the buffered clip to the save folder and shows it in Quick Access: all of it,
+    /// or with `lastSeconds`, just that much from the end.
+    func saveClip(lastSeconds: Int? = nil) async {
         guard buffer.isOn else {
             ErrorPresenter.present(ReplayError.notRunning, recovery: String(localized: "Turn it on from the Capture page or the menu bar, then save a replay any time."))
             return
         }
         do {
             let url = try storage.reserveURL(template: settings.filenameTemplate + " Replay", date: .now, fileExtension: "mov", in: settings.saveFolderURL)
-            try await buffer.save(to: url)
+            let saved = try await buffer.save(to: url, lastSeconds: lastSeconds.map(Double.init))
             if settings.stripsVideoMetadata { await VideoMetadata.removeAll(from: url) }
             if settings.playsSounds { CaptureSound.play() }
             Log.capture.info("Saved a replay")
+            if let lastSeconds, saved < Double(lastSeconds) - 0.5 {
+                // Less was buffered than asked for, so say how much the clip holds.
+                let length = Duration.seconds(Int(saved.rounded())).formatted(.units(allowed: [.minutes, .seconds], width: .abbreviated))
+                toasts.show(.init(symbolName: "gobackward", title: String(localized: "Saved \(length)"), detail: String(localized: "That's all the replay buffer held so far.")))
+            }
             guard settings.showsQuickAccess else { return }
             let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
             generator.appliesPreferredTrackTransform = true

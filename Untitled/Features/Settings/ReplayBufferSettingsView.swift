@@ -4,6 +4,7 @@ import SwiftUI
 struct ReplayBufferSettingsView: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
+    @State private var newDuration = 45
 
     var body: some View {
         @Bindable var settings = settings
@@ -42,8 +43,49 @@ struct ReplayBufferSettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                ForEach(settings.saveLastDurations, id: \.self) { seconds in
+                    LabeledContent(SaveLastMenu.title(for: seconds)) {
+                        Button("Remove", systemImage: "minus.circle") {
+                            settings.removeSaveLastDuration(seconds)
+                        }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .help("Remove \(SaveLastMenu.title(for: seconds))")
+                    }
+                }
+                if settings.saveLastDurations.count < SettingsStore.maximumSaveLastDurations {
+                    LabeledContent("Add") {
+                        HStack {
+                            TextField("Seconds", value: $newDuration, format: .number)
+                                .labelsHidden()
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 56)
+                            Text("seconds")
+                                .foregroundStyle(.secondary)
+                            Button("Add") {
+                                settings.addSaveLastDuration(newDuration)
+                            }
+                            .disabled(!canAdd)
+                        }
+                    }
+                }
+            } header: {
+                Text("Save Last")
+            } footer: {
+                Text("These lengths appear under Save Last in the menu bar and on the Capture page. Lengths longer than the buffer keeps are greyed out there.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .animation(.response, value: settings.saveLastDurations)
         .formStyle(.grouped)
+    }
+
+    private var canAdd: Bool {
+        (1...SettingsStore.longestSaveLastDuration).contains(newDuration)
+            && !settings.saveLastDurations.contains(newDuration)
     }
 }
 

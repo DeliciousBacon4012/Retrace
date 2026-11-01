@@ -16,7 +16,7 @@ final class CaptureCoordinator {
     @ObservationIgnored private let quickAccess: QuickAccessController
     @ObservationIgnored private let editor: EditorPresenter
     @ObservationIgnored private let overlay = SelectionOverlay()
-    @ObservationIgnored private let toast = CaptureToastController()
+    @ObservationIgnored private let toast: CaptureToastController
     /// The last area selected, for Capture Previous Area.
     @ObservationIgnored private var lastArea: (rect: CGRect, screen: NSScreen)?
 
@@ -27,7 +27,8 @@ final class CaptureCoordinator {
         storage: any CaptureStoring,
         clipboard: any ClipboardWriting,
         quickAccess: QuickAccessController,
-        editor: EditorPresenter
+        editor: EditorPresenter,
+        toasts: CaptureToastController
     ) {
         self.settings = settings
         self.permissions = permissions
@@ -36,6 +37,7 @@ final class CaptureCoordinator {
         self.clipboard = clipboard
         self.quickAccess = quickAccess
         self.editor = editor
+        toast = toasts
     }
 
     /// Runs a screenshot quick action, including Capture Text.
