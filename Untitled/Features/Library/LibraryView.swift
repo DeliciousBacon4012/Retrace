@@ -94,7 +94,7 @@ struct LibraryView: View {
             ContentUnavailableView {
                 Label("No Captures Yet", systemImage: "photo.on.rectangle.angled")
             } description: {
-                Text("Screenshots you save appear here.")
+                Text("Screenshots and recordings you save appear here.")
             }
         } else if isFiltered {
             ContentUnavailableView.search(text: viewModel.searchText)

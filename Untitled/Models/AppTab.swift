@@ -1,10 +1,10 @@
 import Foundation
 
-/// A page in the main window's sidebar: the capture home and library first, then each
+/// A page in the main window's sidebar: the capture home and recents first, then each
 /// settings topic, so everything can be changed without opening a separate window.
 nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable {
     case capture
-    case library
+    case recents
     case general
     case captureOptions
     case output
@@ -15,13 +15,13 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     var id: String { rawValue }
 
-    static let primary: [AppTab] = [.capture, .library]
+    static let primary: [AppTab] = [.capture, .recents]
     static let settings: [AppTab] = [.general, .captureOptions, .output, .quickAccess, .recording, .shortcuts, .advanced]
 
     var title: String {
         switch self {
         case .capture: String(localized: "Capture")
-        case .library: String(localized: "Library")
+        case .recents: String(localized: "Recents")
         case .general: String(localized: "General")
         case .captureOptions: String(localized: "After Capture")
         case .output: String(localized: "Format and Output")
@@ -35,7 +35,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
     var symbolName: String {
         switch self {
         case .capture: "camera.viewfinder"
-        case .library: "photo.on.rectangle.angled"
+        case .recents: "clock"
         case .general: "gearshape"
         case .captureOptions: "checklist"
         case .output: "doc.badge.gearshape"
