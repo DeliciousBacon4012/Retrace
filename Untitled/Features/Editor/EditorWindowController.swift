@@ -60,8 +60,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         self.clipboard = clipboard
         self.onClose = onClose
 
+        let screen = NSScreen.underPointer ?? NSScreen.main ?? NSScreen.screens.first
+        let size = Self.initialSize(for: document, on: screen)
         let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: Self.initialSize(for: document)),
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -87,8 +89,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         let hosting = NSHostingController(rootView: EditorView(document: document, actions: actions))
         hosting.sceneBridgingOptions = [.toolbars, .title]
         window.contentViewController = hosting
-        window.setContentSize(Self.initialSize(for: document))
-        window.center()
+        // The hosting controller may have resized the window to its content; put it back,
+        // centered on the screen the person is working on rather than the main one.
+        let visible = screen?.visibleFrame ?? NSRect(origin: .zero, size: size)
+        window.setFrame(window.frameRect(forContentRect: NSRect(
+            x: (visible.midX - size.width / 2).rounded(),
+            y: (visible.midY - size.height / 2).rounded(),
+            width: size.width,
+            height: size.height
+        )), display: false)
     }
 
     @available(*, unavailable)
@@ -96,15 +105,28 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) is not supported")
     }
 
-    /// Big enough to show the image at its on-screen size, but never larger than most of the screen.
-    private static func initialSize(for document: EditorDocument) -> NSSize {
-        let visible = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
-        let pointSize = NSSize(width: document.imageSize.width / document.scale, height: document.imageSize.height / document.scale)
-        // Room for the canvas padding, the toolbar, and the inspector beside the image.
-        let chrome = NSSize(width: 72 + 280, height: 120)
+    /// Just big enough to show the image at 100 %. When that won't fit in 90 % of the screen,
+    /// the largest window that does, shaped to the image so no space is wasted around it.
+    static func initialSize(for document: EditorDocument, on screen: NSScreen?) -> NSSize {
+        let visible = screen?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
+        let image = NSSize(width: document.imageSize.width / document.scale, height: document.imageSize.height / document.scale)
+        let showsInspector = UserDefaults.standard.object(forKey: "editorShowsInspector") as? Bool ?? true
+        // The canvas keeps 36 pt around the image; the toolbar sits above it and the zoom bar
+        // floats at the bottom; the inspector, when shown, keeps its own column clear.
+        let chrome = NSSize(
+            width: 72 + (showsInspector ? EditorInspector.width + Design.spacingL * 2 : 0),
+            height: 72 + 52 + 40
+        )
+        let limit = NSSize(width: visible.width * 0.9, height: visible.height * 0.9)
+        let shrink = min(
+            1,
+            (limit.width - chrome.width) / max(image.width, 1),
+            (limit.height - chrome.height) / max(image.height, 1)
+        )
+        let minimum = EditorView.minimumSize
         return NSSize(
-            width: min(max(pointSize.width + chrome.width, 1080), visible.width * 0.92),
-            height: min(max(pointSize.height + chrome.height, 480), visible.height * 0.85)
+            width: min(max((image.width * max(shrink, 0) + chrome.width).rounded(), minimum.width), limit.width),
+            height: min(max((image.height * max(shrink, 0) + chrome.height).rounded(), minimum.height), limit.height)
         )
     }
 
