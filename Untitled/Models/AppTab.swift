@@ -8,6 +8,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
     case general
     case captureSettings
     case afterCapture
+    case editor
     case filesAndPrivacy
     case quickAccess
     case notifications
@@ -20,7 +21,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     static let primary: [AppTab] = [.capture, .recents]
     static let settings: [AppTab] = [
-        .general, .captureSettings, .afterCapture, .filesAndPrivacy, .quickAccess,
+        .general, .captureSettings, .afterCapture, .editor, .filesAndPrivacy, .quickAccess,
         .notifications, .recording, .replayBuffer, .shortcuts, .advanced,
     ]
 
@@ -31,6 +32,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .general: String(localized: "General")
         case .captureSettings: String(localized: "Capture")
         case .afterCapture: String(localized: "After Capture")
+        case .editor: String(localized: "Editor")
         case .filesAndPrivacy: String(localized: "Files & Privacy")
         case .quickAccess: String(localized: "Quick Access")
         case .notifications: String(localized: "Notifications")
@@ -48,6 +50,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .general: "gearshape"
         case .captureSettings: "camera"
         case .afterCapture: "checklist"
+        case .editor: "pencil.and.scribble"
         case .filesAndPrivacy: "lock.doc"
         case .quickAccess: "rectangle.stack"
         case .notifications: "bell.badge"

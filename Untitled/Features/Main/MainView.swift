@@ -49,6 +49,8 @@ struct MainView: View {
             settingsPage { CaptureSettingsView() }
         case .afterCapture:
             settingsPage { AfterCaptureSettingsView() }
+        case .editor:
+            settingsPage { EditorSettingsView() }
         case .filesAndPrivacy:
             settingsPage { FilesPrivacySettingsView() }
         case .quickAccess:
