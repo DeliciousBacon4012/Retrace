@@ -1,0 +1,69 @@
+import AVFoundation
+import Foundation
+import OSLog
+
+/// Finds and removes descriptive metadata in finished movies, such as a location, the
+/// device or app that made them, or a title.
+///
+/// Movies Untitled writes normally carry none, so the check costs only a read of the
+/// movie's header. Only when it finds something is the movie rewritten, without re-encoding.
+nonisolated enum VideoMetadata {
+    /// The identifiers of every metadata item in the movie and in its tracks.
+    static func items(in url: URL) async throws -> [String] {
+        let asset = AVURLAsset(url: url)
+        var found = try await asset.load(.metadata).map(name(of:))
+        for track in try await asset.load(.tracks) {
+            found += try await track.load(.metadata).map(name(of:))
+        }
+        return found
+    }
+
+    /// Rewrites the movie at `url` without metadata if it has any. The original is replaced
+    /// only after the new copy is complete, so a failure leaves the recording as it was.
+    static func removeAll(from url: URL) async {
+        do {
+            let found = try await items(in: url)
+            guard !found.isEmpty else { return }
+            try await rewrite(url)
+            let left = try await items(in: url)
+            if left.isEmpty {
+                Log.capture.info("Removed \(found.count) metadata items from a movie")
+            } else {
+                Log.capture.error("A movie still has metadata: \(left.joined(separator: ", "), privacy: .public)")
+            }
+        } catch {
+            Log.capture.error("Couldn't remove a movie's metadata: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Asks an export session to write no metadata of its own and to drop anything
+    /// identifying from the source.
+    static func strip(_ session: AVAssetExportSession) {
+        session.metadata = []
+        session.metadataItemFilter = .forSharing()
+    }
+
+    private static func rewrite(_ url: URL) async throws {
+        let fileManager = FileManager.default
+        // A folder on the same volume, so the finished copy can replace the original in place.
+        let folder = try fileManager.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: url, create: true)
+        defer { try? fileManager.removeItem(at: folder) }
+        let copy = folder.appendingPathComponent(url.lastPathComponent)
+
+        guard let session = AVAssetExportSession(asset: AVURLAsset(url: url), presetName: AVAssetExportPresetPassthrough) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        strip(session)
+        try await session.export(to: copy, as: fileType(for: url))
+        _ = try fileManager.replaceItemAt(url, withItemAt: copy)
+    }
+
+    private static func fileType(for url: URL) -> AVFileType {
+        url.pathExtension.lowercased() == "mp4" ? .mp4 : .mov
+    }
+
+    private static func name(of item: AVMetadataItem) -> String {
+        if let identifier = item.identifier { return identifier.rawValue }
+        return item.key.map { String(describing: $0) } ?? "unknown"
+    }
+}

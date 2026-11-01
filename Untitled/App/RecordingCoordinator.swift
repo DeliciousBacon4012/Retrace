@@ -108,10 +108,11 @@ final class RecordingCoordinator {
         switch result {
         case .success(let url):
             if settings.playsSounds { CaptureSound.play() }
-            if settings.copiesToClipboard { clipboard.copyFile(at: url) }
-            guard settings.showsQuickAccess else { return }
             Task {
-                guard let poster = await Self.posterFrame(for: url) else { return }
+                // Clean the file before it's copied or shown, so nothing hands out the original.
+                if settings.stripsVideoMetadata { await VideoMetadata.removeAll(from: url) }
+                if settings.copiesToClipboard { clipboard.copyFile(at: url) }
+                guard settings.showsQuickAccess, let poster = await Self.posterFrame(for: url) else { return }
                 var capture = CapturedImage(image: poster, scale: 2, date: .now)
                 capture.fileURL = url
                 capture.isVideo = true
