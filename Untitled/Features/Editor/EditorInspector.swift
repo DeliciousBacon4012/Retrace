@@ -169,25 +169,34 @@ private struct VariantSection: View {
 private struct ColorSection: View {
     @Bindable var document: EditorDocument
     let tool: EditorTool
+    @AppStorage(EditorPalette.storageKey) private var palette: EditorPalette = .pastel
 
     var body: some View {
         if tool != .redact || document.style.redaction == .solid {
             Section("Color") {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 8) {
-                    ForEach(Array(RGBAColor.presets.enumerated()), id: \.offset) { index, preset in
-                        Swatch(color: preset, isSelected: preset == document.style.color) {
-                            withAnimation(.response) { document.style.color = preset }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 8) {
+                    ForEach(Array(zip(palette.colors, palette.names).enumerated()), id: \.offset) { index, swatch in
+                        Swatch(color: swatch.0, name: swatch.1, isSelected: swatch.0.sameHue(as: document.style.color)) {
+                            withAnimation(.response) { document.style.color = swatch.0 }
                         }
-                        .help("Color \(index + 1) (\(index == 9 ? 0 : index + 1))")
+                        .help(helpText(name: swatch.1, index: index))
                     }
                 }
                 .padding(.vertical, 2)
                 ColorPicker("Custom", selection: customColor, supportsOpacity: false)
+                Picker("Palette", selection: $palette) {
+                    ForEach(EditorPalette.allCases) { Text($0.title).tag($0) }
+                }
                 if tool != .redact {
                     ValueSlider("Opacity", value: $document.style.opacity, in: 0.1...1, format: .percent)
                 }
             }
         }
+    }
+
+    private func helpText(name: String, index: Int) -> String {
+        guard let digit = EditorPalette.digit(forSwatchAt: index) else { return name }
+        return "\(name) (\(digit))"
     }
 
     private var customColor: Binding<Color> {
@@ -206,6 +215,7 @@ private struct ColorSection: View {
 
 private struct Swatch: View {
     let color: RGBAColor
+    let name: String
     let isSelected: Bool
     let action: () -> Void
 
@@ -225,7 +235,7 @@ private struct Swatch: View {
                 .contentShape(.circle)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Color")
+        .accessibilityLabel(name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

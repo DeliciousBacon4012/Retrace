@@ -8,6 +8,7 @@ struct EditorView: View {
     let actions: EditorActions
 
     @AppStorage("editorShowsInspector") private var showsInspector = true
+    @AppStorage(EditorPalette.storageKey) private var palette: EditorPalette = .pastel
     @State private var exportItem: ExportItem?
     @State private var canvasSize: CGSize = .zero
     @State private var notice: EditorNotice?
@@ -247,12 +248,9 @@ struct EditorView: View {
             document.tool = tool
             return .handled
         }
-        if let digit = Int(press.characters) {
-            let index = digit == 0 ? 9 : digit - 1
-            if RGBAColor.presets.indices.contains(index) {
-                document.style.color = RGBAColor.presets[index]
-                return .handled
-            }
+        if let digit = Int(press.characters), let color = palette.color(forDigit: digit) {
+            document.style.color = color
+            return .handled
         }
         return .ignored
     }

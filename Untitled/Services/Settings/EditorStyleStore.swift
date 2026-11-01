@@ -13,6 +13,8 @@ final class EditorStyleStore {
     private let cloud: NSUbiquitousKeyValueStore?
     private let key = "editorToolStyles"
     private let dateKey = "editorToolStylesDate"
+    /// 1 once saved colors have moved from the old vivid swatches to the pastel ones.
+    private let paletteVersionKey = "editorToolStylesPaletteVersion"
     private let log = Logger(subsystem: Log.subsystem, category: "styles")
 
     init(defaults: UserDefaults = .standard, usesCloud: Bool = true) {
@@ -29,12 +31,15 @@ final class EditorStyleStore {
 
     func load(scale: CGFloat) -> [EditorTool: MarkStyle] {
         guard let data = defaults.data(forKey: key) else { return [:] }
-        let stored: [String: MarkStyle]
+        var stored: [String: MarkStyle]
         do {
             stored = try JSONDecoder().decode([String: MarkStyle].self, from: data)
         } catch {
             log.error("Saved tool styles couldn't be read: \(error.localizedDescription, privacy: .public)")
             return [:]
+        }
+        if defaults.integer(forKey: paletteVersionKey) < 1 {
+            stored = movedToPastel(stored)
         }
         var styles: [EditorTool: MarkStyle] = [:]
         for (name, style) in stored {
@@ -47,12 +52,38 @@ final class EditorStyleStore {
 
     func save(_ styles: [EditorTool: MarkStyle], scale: CGFloat) {
         let stored = Dictionary(uniqueKeysWithValues: styles.map { ($0.key.rawValue, $0.value.scaled(by: 1 / scale)) })
+        write(stored)
+    }
+
+    /// Anything written by this version already uses the palette the person picked,
+    /// so it never needs moving.
+    private func write(_ stored: [String: MarkStyle]) {
         guard let data = try? JSONEncoder().encode(stored) else { return }
+        defaults.set(1, forKey: paletteVersionKey)
         let now = Date().timeIntervalSince1970
         defaults.set(data, forKey: key)
         defaults.set(now, forKey: dateKey)
         cloud?.set(data, forKey: key)
         cloud?.set(now, forKey: dateKey)
+    }
+
+    /// Runs once: styles saved with the old vivid swatches move to the matching pastel,
+    /// so the new look applies without resetting anything. Custom colors stay as they are.
+    /// Picking a vivid color afterwards is the person's choice and is kept.
+    private func movedToPastel(_ stored: [String: MarkStyle]) -> [String: MarkStyle] {
+        var moved = stored
+        for (name, style) in stored {
+            if let pastel = EditorPalette.pastelReplacement(forLegacy: style.color) {
+                moved[name]?.color = pastel
+            }
+        }
+        if moved != stored {
+            write(moved)
+            log.info("Moved saved tool colors to the pastel palette")
+        } else {
+            defaults.set(1, forKey: paletteVersionKey)
+        }
+        return moved
     }
 
     func reset() {
