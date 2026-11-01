@@ -37,13 +37,17 @@ struct AppCommands: Commands {
             }
         }
 
-        // Every capture and recording. Opening the clipboard's image is under File.
+        // Every capture and recording, then Save Last. Opening the clipboard's image is under File.
         CommandMenu("Capture") {
-            ForEach(QuickAction.all.filter { !$0.opensClipboard }) { action in
+            ForEach(QuickAction.all.filter { !$0.opensClipboard && !$0.savesReplay }) { action in
                 QuickActionButton(action: action)
                     .environment(dependencies)
                     .menuShortcut(dependencies.settings.shortcuts[action.id])
             }
+            Divider()
+            SaveLastMenu()
+                .environment(dependencies)
+                .environment(dependencies.settings)
         }
 
         CommandGroup(before: .toolbar) {

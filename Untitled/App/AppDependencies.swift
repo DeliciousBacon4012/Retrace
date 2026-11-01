@@ -20,6 +20,8 @@ final class AppDependencies {
     let shortcuts: GlobalShortcuts
     let editor: EditorPresenter
     let pins: PinController
+    /// The short notices at the top of the screen, shared so they never stack up.
+    let toasts = CaptureToastController()
 
     init(
         settings: SettingsStore,
@@ -49,7 +51,8 @@ final class AppDependencies {
             storage: FileCaptureStorage(),
             clipboard: clipboard,
             quickAccess: quickAccess,
-            editor: editor
+            editor: editor,
+            toasts: toasts
         )
         self.capture = capture
         quickAccess.onSave = { [weak capture] image in capture?.save(image) }
@@ -61,7 +64,7 @@ final class AppDependencies {
             quickAccess: quickAccess
         )
         self.recording = recording
-        let replay = ReplayCoordinator(settings: settings, permissions: permissions, storage: FileCaptureStorage(), quickAccess: quickAccess)
+        let replay = ReplayCoordinator(settings: settings, permissions: permissions, storage: FileCaptureStorage(), quickAccess: quickAccess, toasts: toasts)
         self.replay = replay
         shortcuts = GlobalShortcuts(settings: settings) { [weak capture, weak recording, weak replay] actionID in
             guard let action = QuickAction.all.first(where: { $0.id == actionID }) else { return }

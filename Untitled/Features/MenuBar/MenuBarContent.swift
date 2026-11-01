@@ -31,14 +31,11 @@ struct MenuBarContent: View {
                         .menuShortcut(settings.shortcuts[action.id])
                 }
             }
-            ForEach(QuickAction.all.filter(\.savesReplay)) { action in
-                QuickActionButton(action: action)
-                    .menuShortcut(settings.shortcuts[action.id])
-            }
             Toggle("Replay Buffer", isOn: Binding(
                 get: { settings.replayBufferEnabled },
                 set: { dependencies.replay.setEnabled($0) }
             ))
+            SaveLastMenu()
         }
 
         Section {

@@ -216,11 +216,9 @@ private struct ReplayRow: View {
         LabeledContent {
             HStack {
                 if buffer.isOn {
-                    Button("Save Replay") {
-                        Task { await dependencies.replay.saveClip() }
-                    }
-                    .disabled(buffer.state == .saving)
-                    .help(settings.shortcuts["saveReplay"].map { "Save Replay (\($0.displayString))" } ?? "Save Replay")
+                    SaveLastMenu()
+                        .labelStyle(.titleOnly)
+                        .fixedSize()
                 }
                 Toggle("Replay Buffer", isOn: Binding(
                     get: { settings.replayBufferEnabled },
@@ -231,20 +229,37 @@ private struct ReplayRow: View {
             }
         } label: {
             Text("Replay Buffer")
-            Text(status(buffer))
-                .contentTransition(.opacity)
+            // Ticks once a second while running, so the buffered amount counts up until full.
+            TimelineView(.animation(minimumInterval: 1, paused: !isRunning(buffer))) { context in
+                Text(status(buffer, at: context.date))
+                    .monospacedDigit()
+                    .contentTransition(.opacity)
+            }
         }
         .animation(.response, value: buffer.state)
     }
 
-    private func status(_ buffer: ReplayBuffer) -> String {
-        let length = Duration.seconds(settings.replayBufferSeconds).formatted(.units(allowed: [.minutes, .seconds], width: .wide))
+    private func status(_ buffer: ReplayBuffer, at now: Date) -> String {
+        let capacity = settings.replayBufferSeconds
+        let length = Self.format(capacity)
         switch buffer.state {
         case .off: return String(localized: "Off. Turn it on to always keep the last \(length).")
         case .starting: return String(localized: "Starting…")
-        case .running: return String(localized: "Keeping the last \(length).")
+        case .running(let since):
+            let held = min(max(Int(now.timeIntervalSince(since)), 0), capacity)
+            return held < capacity
+                ? String(localized: "\(Self.format(held)) of \(length) buffered")
+                : String(localized: "Keeping the last \(length)")
         case .saving: return String(localized: "Saving…")
         }
+    }
+
+    private func isRunning(_ buffer: ReplayBuffer) -> Bool {
+        if case .running = buffer.state { true } else { false }
+    }
+
+    private static func format(_ seconds: Int) -> String {
+        Duration.seconds(seconds).formatted(.units(allowed: [.minutes, .seconds], width: .abbreviated))
     }
 }
 
