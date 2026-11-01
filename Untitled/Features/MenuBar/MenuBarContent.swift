@@ -2,8 +2,9 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The menu shown from the menu bar icon: every capture, then opening and pinning images,
-/// then history and settings. Each item shows its global shortcut.
+/// The menu shown from the menu bar icon: stopping a recording, every screenshot, the
+/// Record and Save Last menus, opening and pinning images, then the window and settings.
+/// Each item shows its global shortcut.
 struct MenuBarContent: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
@@ -11,9 +12,10 @@ struct MenuBarContent: View {
 
     var body: some View {
         if dependencies.recording.isRecording {
-            Button("Stop Recording", systemImage: "stop.circle") {
+            Button(stopTitle, systemImage: "stop.circle") {
                 dependencies.recording.recorder.stop()
             }
+            .disabled(dependencies.recording.recorder.state == .finishing)
             Divider()
         }
 
@@ -26,9 +28,11 @@ struct MenuBarContent: View {
 
         Section {
             if !dependencies.recording.isRecording {
-                ForEach(QuickAction.recordings) { action in
-                    QuickActionButton(action: action)
-                        .menuShortcut(settings.shortcuts[action.id])
+                Menu("Record", systemImage: "record.circle") {
+                    ForEach(QuickAction.recordings) { action in
+                        QuickActionButton(action: action)
+                            .menuShortcut(settings.shortcuts[action.id])
+                    }
                 }
             }
             Toggle("Replay Buffer", isOn: Binding(
@@ -70,6 +74,19 @@ struct MenuBarContent: View {
         .keyboardShortcut("q")
     }
 
+    /// "Stop Recording — 0:42", as of when the menu opened.
+    private var stopTitle: String {
+        switch dependencies.recording.recorder.state {
+        case .recording(let since):
+            let elapsed = Duration.seconds(max(0, Date.now.timeIntervalSince(since)).rounded(.down)).formatted(.time(pattern: .minuteSecond))
+            return String(localized: "Stop Recording — \(elapsed)")
+        case .finishing:
+            return String(localized: "Saving Recording…")
+        default:
+            return String(localized: "Stop Recording")
+        }
+    }
+
     private func openImages() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
@@ -81,14 +98,17 @@ struct MenuBarContent: View {
     }
 }
 
-/// The menu bar icon, which turns into a red record symbol while recording.
-/// While the replay buffer runs, it shows a rewind symbol so it's never on unnoticed.
+/// The menu bar icon. While recording it turns into a red record symbol, unless the time
+/// has its own item. While the replay buffer runs, it shows a rewind symbol so it's never
+/// on unnoticed.
 struct MenuBarLabel: View {
     let recording: RecordingCoordinator
     let replay: ReplayCoordinator
+    let settings: SettingsStore
 
     var body: some View {
-        if recording.isRecording {
+        // With the time shown in its own menu bar item, this icon doesn't need to say it too.
+        if recording.isRecording, !settings.showsRecordingTimeInMenuBar {
             Image(systemName: "record.circle.fill")
                 .symbolRenderingMode(.multicolor)
                 .accessibilityLabel("Untitled, recording")
