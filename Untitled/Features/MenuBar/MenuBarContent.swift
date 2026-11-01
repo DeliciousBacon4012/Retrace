@@ -49,7 +49,7 @@ struct MenuBarContent: View {
                 QuickActionButton(action: action)
                     .menuShortcut(settings.shortcuts[action.id])
             }
-            Button("Pin to the Screen…", systemImage: "pin") {
+            Button("Pin to Screen…", systemImage: "pin") {
                 dependencies.pins.pinFromFile()
             }
         }

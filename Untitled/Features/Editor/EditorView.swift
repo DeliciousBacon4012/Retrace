@@ -203,14 +203,19 @@ struct EditorView: View {
                 .keyboardShortcut("]", modifiers: .command)
             Button("Send to Back") { document.sendSelectionToBack() }
                 .keyboardShortcut("[", modifiers: .command)
+            // ⌘= and ⌘+ are the same key; both are listed so either reading works.
             Button("Zoom In") { document.zoomIn(fitFactor: fitFactor) }
                 .keyboardShortcut("=", modifiers: .command)
+            Button("Zoom In") { document.zoomIn(fitFactor: fitFactor) }
+                .keyboardShortcut("+", modifiers: .command)
             Button("Zoom Out") { document.zoomOut(fitFactor: fitFactor) }
                 .keyboardShortcut("-", modifiers: .command)
-            Button("Zoom to Fit") { document.zoomToFit() }
-                .keyboardShortcut("0", modifiers: .command)
+            // Preview's keys: ⌘0 for actual size and ⌘9 to fit. ⌘1 and ⌘2 belong to the
+            // main window's pages.
             Button("Actual Size") { document.zoomToActualSize() }
-                .keyboardShortcut("1", modifiers: .command)
+                .keyboardShortcut("0", modifiers: .command)
+            Button("Zoom to Fit") { document.zoomToFit() }
+                .keyboardShortcut("9", modifiers: .command)
         }
         .opacity(0)
         .frame(width: 0, height: 0)
@@ -311,9 +316,9 @@ private struct EditorStatusBar: View {
                             .frame(minWidth: 46)
                             .contentTransition(.numericText(value: zoom))
                     }
-                    .help("Zoom to fit (⌘0)")
+                    .help("Zoom to fit (⌘9)")
                     Button("Zoom In", systemImage: "plus") { document.zoomIn(fitFactor: fitFactor) }
-                        .help("Zoom in (⌘=)")
+                        .help("Zoom in (⌘+)")
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
