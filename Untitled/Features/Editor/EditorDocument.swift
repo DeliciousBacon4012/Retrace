@@ -353,7 +353,8 @@ final class EditorDocument {
         }
     }
 
-    func pointerDragged(to point: CGPoint, constrained: Bool) {
+    /// `freehand` (⌥ held) keeps a highlighter stroke from snapping to text.
+    func pointerDragged(to point: CGPoint, constrained: Bool, freehand: Bool = false) {
         switch gesture {
         case .drawing:
             guard var mark = draft else { return }
@@ -371,7 +372,7 @@ final class EditorDocument {
                     // Shift draws one perfectly straight stroke.
                     mark.points = [first, Geometry.snapped(from: first, to: point)]
                     mark.style.lineWidth = drawnWidth
-                } else if Self.highlighterSnapsToText, let lines = textLines,
+                } else if !freehand, Self.highlighterSnapsToText, let lines = textLines,
                           let band = HighlightSnapping.band(for: rawHighlight, lines: lines) {
                     mark.points = [band.start, band.end]
                     mark.style.lineWidth = band.thickness
