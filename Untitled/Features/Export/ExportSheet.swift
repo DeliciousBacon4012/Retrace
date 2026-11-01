@@ -9,6 +9,8 @@ struct ExportItem: Identifiable {
     /// Pixels per point of the original capture.
     let scale: CGFloat
     let suggestedName: String
+    /// Hidden areas were drawn over. The file then never carries metadata.
+    var hidesContent = false
 }
 
 /// Export with a live preview of the result: format, quality, size, color, and metadata,
@@ -35,6 +37,7 @@ struct ExportSheet: View {
     private var effectiveOptions: ExportOptions {
         var result = options
         result.maximumBytes = limitsSize && options.format.isLossy ? Int(limitKilobytes * 1000) : nil
+        if item.hidesContent { result.stripsMetadata = true }
         return result
     }
 
@@ -73,7 +76,9 @@ struct ExportSheet: View {
                         }
                     }
                     Section("Privacy and Color") {
-                        Toggle("Remove metadata", isOn: $options.stripsMetadata)
+                        Toggle("Remove metadata", isOn: item.hidesContent ? .constant(true) : $options.stripsMetadata)
+                            .disabled(item.hidesContent)
+                            .help(item.hidesContent ? "Always on for images with redactions" : "")
                         Toggle("Convert to sRGB", isOn: $options.convertsToSRGB)
                     }
                 }

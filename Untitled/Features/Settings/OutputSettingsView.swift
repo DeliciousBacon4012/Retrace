@@ -41,7 +41,7 @@ struct OutputSettingsView: View {
             Section {
                 Toggle("Remove metadata", isOn: $settings.stripsMetadata)
             } footer: {
-                Text("Leaves out location, camera, and device details when saving or exporting.")
+                Text("Saves only the pixels: no capture date, no app name, and a standard color profile instead of your display's own. Images with redactions are always saved this way.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

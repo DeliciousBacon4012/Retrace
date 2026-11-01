@@ -81,21 +81,43 @@ nonisolated enum ImageEncoder {
     }
 
     private static func prepare(_ image: CGImage, options: ExportOptions) -> CGImage {
-        var result = image
         let size = outputSize(of: image, options: options)
-        if Int(size.width) != image.width || Int(size.height) != image.height {
-            result = resized(image, to: size) ?? image
-        }
-        if options.convertsToSRGB, let sRGB = CGColorSpace(name: CGColorSpace.sRGB),
-           result.colorSpace?.name != CGColorSpace.sRGB,
-           let converted = result.copy(colorSpace: sRGB) {
-            result = converted
-        }
-        return result
+        let resizes = Int(size.width) != image.width || Int(size.height) != image.height
+        let target = targetColorSpace(for: image, options: options)
+        guard resizes || target != nil else { return image }
+        return redrawn(image, size: size, in: target ?? image.colorSpace) ?? image
     }
 
-    private static func resized(_ image: CGImage, to size: CGSize) -> CGImage? {
-        let space = image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
+    /// The color space to convert to, or nil to keep the image's own.
+    ///
+    /// Captures arrive tagged with the display's own ICC profile, whose name can identify the
+    /// screen. Converting to sRGB, or to the standard Display P3 profile when stripping
+    /// metadata, leaves a generic profile in the file instead.
+    private static func targetColorSpace(for image: CGImage, options: ExportOptions) -> CGColorSpace? {
+        let current = image.colorSpace?.name as String?
+        if options.convertsToSRGB {
+            return current == CGColorSpace.sRGB as String ? nil : CGColorSpace(name: CGColorSpace.sRGB)
+        }
+        if options.stripsMetadata, !genericSpaceNames.contains(current ?? "") {
+            return CGColorSpace(name: CGColorSpace.displayP3)
+        }
+        return nil
+    }
+
+    private static let genericSpaceNames: Set<String> = [
+        CGColorSpace.sRGB as String,
+        CGColorSpace.displayP3 as String,
+        CGColorSpace.extendedSRGB as String,
+        CGColorSpace.extendedDisplayP3 as String,
+        CGColorSpace.linearSRGB as String,
+        CGColorSpace.genericGrayGamma2_2 as String,
+    ]
+
+    /// Draws the image into a new bitmap. Drawing into a context with another color space
+    /// converts the colors, unlike `copy(colorSpace:)`, which only relabels them.
+    private static func redrawn(_ image: CGImage, size: CGSize, in space: CGColorSpace?) -> CGImage? {
+        // Gray or indexed sources draw into sRGB, since the bitmap below is always RGBA.
+        guard let space = space.flatMap({ $0.model == .rgb ? $0 : nil }) ?? CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
         guard let context = CGContext(
             data: nil,
             width: Int(size.width),
@@ -123,37 +145,21 @@ nonisolated enum ImageEncoder {
             properties[kCGImageDestinationLossyCompressionQuality] = quality
         }
         if !options.stripsMetadata {
-            let now = ISO8601DateFormatter().string(from: Date())
+            // EXIF and TIFF dates use "2026:10:31 15:24:00" in local time, not ISO 8601.
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+            let date = formatter.string(from: .now)
             properties[kCGImagePropertyTIFFDictionary] = [
                 kCGImagePropertyTIFFSoftware: "Untitled",
-                kCGImagePropertyTIFFDateTime: now,
+                kCGImagePropertyTIFFDateTime: date,
+            ]
+            properties[kCGImagePropertyExifDictionary] = [
+                kCGImagePropertyExifDateTimeOriginal: date,
             ]
         }
         CGImageDestinationAddImage(destination, image, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
-            throw EncodingError.encodingFailed
-        }
-        return data as Data
-    }
-
-    /// Rewrites an existing image file without its metadata, keeping the pixels as they are.
-    static func strippingMetadata(from url: URL) throws -> Data {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let type = CGImageSourceGetType(source)
-        else { throw EncodingError.unsupportedFormat }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, type, 1, nil) else {
-            throw EncodingError.unsupportedFormat
-        }
-        let options: [CFString: Any] = [
-            kCGImageDestinationMetadata: CGImageMetadataCreateMutable(),
-            kCGImageDestinationMergeMetadata: false,
-            kCGImageMetadataShouldExcludeGPS: true,
-            kCGImageMetadataShouldExcludeXMP: true,
-        ]
-        var error: Unmanaged<CFError>?
-        guard CGImageDestinationCopyImageSource(destination, source, options as CFDictionary, &error) else {
-            if let error { throw error.takeRetainedValue() }
             throw EncodingError.encodingFailed
         }
         return data as Data
