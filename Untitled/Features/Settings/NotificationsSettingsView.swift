@@ -23,19 +23,25 @@ struct NotificationsSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Captured Text") {
-                Picker("Lines of text shown", selection: $settings.toastPreviewLines) {
+            Section {
+                Picker("Lines of captured text shown", selection: $settings.toastPreviewLines) {
                     ForEach(1...5, id: \.self) { lines in
                         Text(lines, format: .number).tag(lines)
                     }
                 }
+                .disabled(!settings.showsToasts)
                 Picker("Open text in", selection: $settings.plainTextApp) {
                     ForEach(PlainTextApp.allCases) { app in
                         Text(app.title).tag(app)
                     }
                 }
+            } header: {
+                Text("Captured Text")
+            } footer: {
+                Text("Text opens as a plain .txt file, from toasts and from Recents.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-            .disabled(!settings.showsToasts)
 
             Section {
                 ForEach(ToastKind.allCases) { kind in

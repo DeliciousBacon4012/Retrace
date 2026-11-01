@@ -1,55 +1,56 @@
 import Foundation
 import Observation
 
-/// Search, filtering, and selection for the Library tab.
+/// Search, filtering, and selection for Recents.
 @Observable
 final class LibraryViewModel {
     enum KindFilter: String, CaseIterable, Identifiable {
         case all
         case screenshots
         case recordings
+        case text
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .all: String(localized: "All Captures")
+            case .all: String(localized: "All")
             case .screenshots: String(localized: "Screenshots")
             case .recordings: String(localized: "Recordings")
-            }
-        }
-
-        var symbolName: String {
-            switch self {
-            case .all: "square.grid.2x2"
-            case .screenshots: "photo"
-            case .recordings: "video"
+            case .text: String(localized: "Text")
             }
         }
     }
 
     var searchText = ""
     var kindFilter: KindFilter = .all
-    var selection: Set<LibraryItem.ID> = []
+    var selection: Set<RecentItem.ID> = []
     var previewURL: URL?
 
-    func visibleItems(from items: [LibraryItem]) -> [LibraryItem] {
+    /// Files and snippets that match the filter and search, newest first. Snippets match
+    /// on their text, files on their name.
+    func visibleItems(files: [LibraryItem], snippets: [TextSnippet]) -> [RecentItem] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
-        return items.filter { item in
+        let files = files.filter { item in
             switch kindFilter {
-            case .all: break
-            case .screenshots: if item.kind != .image { return false }
-            case .recordings: if item.kind != .video { return false }
+            case .all: true
+            case .screenshots: item.kind == .image
+            case .recordings: item.kind == .video
+            case .text: false
             }
-            return query.isEmpty || item.name.localizedStandardContains(query)
         }
+        let snippets = kindFilter == .all || kindFilter == .text ? snippets : []
+        return RecentItem.merged(
+            files: query.isEmpty ? files : files.filter { $0.name.localizedStandardContains(query) },
+            snippets: query.isEmpty ? snippets : snippets.filter { $0.text.localizedStandardContains(query) }
+        )
     }
 
-    func select(_ item: LibraryItem) {
+    func select(_ item: RecentItem) {
         selection = [item.id]
     }
 
-    func toggle(_ item: LibraryItem) {
+    func toggle(_ item: RecentItem) {
         if selection.contains(item.id) {
             selection.remove(item.id)
         } else {
@@ -57,26 +58,26 @@ final class LibraryViewModel {
         }
     }
 
-    func selectedItems(in items: [LibraryItem]) -> [LibraryItem] {
+    func selectedItems(in items: [RecentItem]) -> [RecentItem] {
         items.filter { selection.contains($0.id) }
     }
 
     /// A context menu acts on the whole selection when the clicked item is part of it,
     /// and on just that item otherwise, like Finder.
-    func targets(for item: LibraryItem, in items: [LibraryItem]) -> [LibraryItem] {
+    func targets(for item: RecentItem, in items: [RecentItem]) -> [RecentItem] {
         selection.contains(item.id) ? selectedItems(in: items) : [item]
     }
 
-    func togglePreview(in items: [LibraryItem]) {
+    /// Quick Look shows files only; text is already readable on its card.
+    func togglePreview(in items: [RecentItem]) {
         if previewURL != nil {
             previewURL = nil
         } else {
-            previewURL = selectedItems(in: items).first?.url ?? items.first?.url
+            previewURL = selectedItems(in: items).compactMap(\.file).first?.url ?? items.compactMap(\.file).first?.url
         }
     }
 
-    func pruneSelection(keeping items: [LibraryItem]) {
-        let ids = Set(items.map(\.id))
-        selection.formIntersection(ids)
+    func pruneSelection(keeping items: [RecentItem]) {
+        selection.formIntersection(items.map(\.id))
     }
 }
