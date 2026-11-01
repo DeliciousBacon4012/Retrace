@@ -17,8 +17,6 @@ struct CaptureSettingsView: View {
             Section {
                 Toggle("Include the pointer", isOn: $settings.includesCursor)
                 Toggle("Include window shadow", isOn: $settings.includesWindowShadow)
-            } footer: {
-                PendingFeatureFooter()
             }
         }
         .formStyle(.grouped)
