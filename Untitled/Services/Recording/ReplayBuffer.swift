@@ -93,8 +93,11 @@ final class ReplayBuffer: NSObject {
         Log.capture.info("Replay buffer stopped")
     }
 
-    /// Saves what's buffered to `url` as a normal movie that starts at zero.
-    func save(to url: URL) async throws {
+    /// Saves what's buffered to `url` as a normal movie that starts at zero: everything, or
+    /// with `lastSeconds`, exactly that much from the end, if that much has been buffered.
+    /// Returns the length saved, in seconds.
+    @discardableResult
+    func save(to url: URL, lastSeconds: Double? = nil) async throws -> Double {
         guard case .running(let since) = state, let writer else { throw ReplayError.notRunning }
         state = .saving
         defer {
@@ -103,27 +106,43 @@ final class ReplayBuffer: NSObject {
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("replay-\(UUID().uuidString).mp4")
         defer { try? FileManager.default.removeItem(at: temporary) }
         try await Task.detached(priority: .userInitiated) {
-            try writer.writeSnapshot(to: temporary)
+            try writer.writeSnapshot(to: temporary, lastSeconds: lastSeconds)
         }.value
-        try await Self.export(temporary, to: url)
+        return try await Self.export(temporary, to: url, lastSeconds: lastSeconds)
     }
 
-    /// Rewrites the fragmented snapshot into a regular movie whose timeline starts at zero.
-    private static func export(_ source: URL, to destination: URL) async throws {
+    /// Rewrites the fragmented snapshot into a regular movie whose timeline starts at zero,
+    /// keeping only the last `lastSeconds` when given. The cut can fall between keyframes:
+    /// the movie's edit list starts playback exactly there without re-encoding.
+    private static func export(_ source: URL, to destination: URL, lastSeconds: Double?) async throws -> Double {
         let asset = AVURLAsset(url: source)
+        let tracks = try await asset.loadTracks(withMediaType: .video) + asset.loadTracks(withMediaType: .audio)
+        var ranges: [CMTimeRange] = []
+        for track in tracks {
+            ranges.append(try await track.load(.timeRange))
+        }
+        guard let first = ranges.first else { throw ReplayError.empty }
+        let end = ranges.dropFirst().reduce(first.end) { CMTimeMaximum($0, $1.end) }
+        let earliest = ranges.dropFirst().reduce(first.start) { CMTimeMinimum($0, $1.start) }
+        var start = earliest
+        if let lastSeconds {
+            start = CMTimeMaximum(earliest, CMTimeSubtract(end, CMTime(seconds: lastSeconds, preferredTimescale: 600)))
+        }
+        let window = CMTimeRange(start: start, end: end)
+
         let composition = AVMutableComposition()
-        for track in try await asset.loadTracks(withMediaType: .video) + asset.loadTracks(withMediaType: .audio) {
-            let range = try await track.load(.timeRange)
-            let mediaType = track.mediaType
-            guard range.duration.seconds > 0,
-                  let compositionTrack = composition.addMutableTrack(withMediaType: mediaType, preferredTrackID: kCMPersistentTrackID_Invalid)
+        for (track, range) in zip(tracks, ranges) {
+            let kept = range.intersection(window)
+            guard kept.duration.seconds > 0,
+                  let compositionTrack = composition.addMutableTrack(withMediaType: track.mediaType, preferredTrackID: kCMPersistentTrackID_Invalid)
             else { continue }
-            try compositionTrack.insertTimeRange(range, of: track, at: .zero)
+            try compositionTrack.insertTimeRange(kept, of: track, at: CMTimeSubtract(kept.start, start))
         }
         guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
             throw ReplayError.empty
         }
         try await session.export(to: destination, as: .mov)
+        return window.duration.seconds
     }
 }
 

@@ -40,6 +40,11 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
     private var initializationSegment: Data?
     private var segments: [Segment] = []
     private var segmentCounter = 0
+    /// Snapshots being written. While any are, segments that age out are kept on disk until
+    /// they finish, so a save never loses a piece it's reading.
+    private var snapshotsInProgress = 0
+    private var agedOutFiles: [URL] = []
+    private var removesDirectoryAfterSnapshots = false
 
     init(configuration: Configuration) throws {
         self.configuration = configuration
@@ -172,15 +177,24 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
             let oldest = segments.removeFirst()
             seconds -= oldest.seconds
             bytes -= oldest.bytes
-            try? FileManager.default.removeItem(at: oldest.url)
+            if snapshotsInProgress > 0 {
+                agedOutFiles.append(oldest.url)
+            } else {
+                try? FileManager.default.removeItem(at: oldest.url)
+            }
         }
     }
 
     // MARK: Saving and stopping
 
-    /// Writes the buffered segments into one playable fragmented MP4 file.
-    func writeSnapshot(to url: URL) throws {
-        let (header, files) = lock.withLock { (initializationSegment, segments.map(\.url)) }
+    /// Writes the buffered segments into one playable fragmented MP4 file: all of them, or
+    /// with `lastSeconds`, just enough of the newest to cover that long.
+    func writeSnapshot(to url: URL, lastSeconds: Double? = nil) throws {
+        let (header, files) = lock.withLock {
+            snapshotsInProgress += 1
+            return (initializationSegment, Self.newest(segments, covering: lastSeconds).map(\.url))
+        }
+        defer { lock.withLock { finishSnapshot() } }
         guard let header, !files.isEmpty else { throw ReplayError.empty }
         FileManager.default.createFile(atPath: url.path(percentEncoded: false), contents: nil)
         let handle = try FileHandle(forWritingTo: url)
@@ -191,7 +205,34 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
         }
     }
 
-    /// Stops encoding and deletes every buffered segment.
+    /// The newest segments that together last at least `seconds`, plus one more so the
+    /// exact cut always has a whole keyframe interval before it. All of them when nil.
+    private static func newest(_ segments: [Segment], covering seconds: Double?) -> [Segment] {
+        guard let seconds else { return segments }
+        var total = 0.0
+        var count = 0
+        for segment in segments.reversed() {
+            count += 1
+            if total >= seconds { break }
+            total += segment.seconds
+        }
+        return Array(segments.suffix(count))
+    }
+
+    /// Call with `lock` held when a snapshot is done, to delete what aged out meanwhile.
+    private func finishSnapshot() {
+        snapshotsInProgress -= 1
+        guard snapshotsInProgress == 0 else { return }
+        for file in agedOutFiles {
+            try? FileManager.default.removeItem(at: file)
+        }
+        agedOutFiles.removeAll()
+        if removesDirectoryAfterSnapshots {
+            try? FileManager.default.removeItem(at: directory)
+        }
+    }
+
+    /// Stops encoding and deletes every buffered segment, once any save in progress is done.
     func shutDown() {
         sampleQueue.async { [self] in
             videoInput?.markAsFinished()
@@ -201,8 +242,12 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
             lock.withLock {
                 segments.removeAll()
                 initializationSegment = nil
+                if snapshotsInProgress > 0 {
+                    removesDirectoryAfterSnapshots = true
+                } else {
+                    try? FileManager.default.removeItem(at: directory)
+                }
             }
-            try? FileManager.default.removeItem(at: directory)
         }
     }
 }
