@@ -35,6 +35,7 @@ struct UntitledApp: App {
         } label: {
             MenuBarLabel(recording: dependencies.recording, replay: dependencies.replay, settings: dependencies.settings)
                 .modifier(LaunchWindowPresenter(launch: appDelegate.launch))
+                .modifier(WindowRequestPresenter())
         }
     }
 }
