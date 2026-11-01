@@ -42,7 +42,7 @@ final class ReplayCoordinator {
         }
         do {
             let url = try storage.reserveURL(template: settings.filenameTemplate + " Replay", date: .now, fileExtension: "mov", in: settings.saveFolderURL)
-            try await buffer.save(to: url, stripsMetadata: settings.stripsVideoMetadata)
+            try await buffer.save(to: url)
             if settings.stripsVideoMetadata { await VideoMetadata.removeAll(from: url) }
             if settings.playsSounds { CaptureSound.play() }
             Log.capture.info("Saved a replay")

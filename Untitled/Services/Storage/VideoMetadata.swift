@@ -6,7 +6,8 @@ import OSLog
 /// device or app that made them, or a title.
 ///
 /// Movies Untitled writes normally carry none, so the check costs only a read of the
-/// movie's header. Only when it finds something is the movie rewritten, without re-encoding.
+/// movie's header. Only when it finds something is the movie rewritten, copying its
+/// samples without re-encoding.
 nonisolated enum VideoMetadata {
     /// The identifiers of every metadata item in the movie and in its tracks.
     static func items(in url: URL) async throws -> [String] {
@@ -36,13 +37,9 @@ nonisolated enum VideoMetadata {
         }
     }
 
-    /// Asks an export session to write no metadata of its own and to drop anything
-    /// identifying from the source.
-    static func strip(_ session: AVAssetExportSession) {
-        session.metadata = []
-        session.metadataItemFilter = .forSharing()
-    }
-
+    /// Copies the movie's samples, unchanged, into a new movie that has no metadata at the
+    /// movie or track level, then swaps it in. An export session can't do this: it carries
+    /// the source's software, device and date items through even with its sharing filter.
     private static func rewrite(_ url: URL) async throws {
         let fileManager = FileManager.default
         // A folder on the same volume, so the finished copy can replace the original in place.
@@ -50,11 +47,17 @@ nonisolated enum VideoMetadata {
         defer { try? fileManager.removeItem(at: folder) }
         let copy = folder.appendingPathComponent(url.lastPathComponent)
 
-        guard let session = AVAssetExportSession(asset: AVURLAsset(url: url), presetName: AVAssetExportPresetPassthrough) else {
-            throw CocoaError(.fileWriteUnknown)
+        let source = AVMovie(url: url)
+        let duration = try await source.load(.duration)
+        let movie = AVMutableMovie()
+        movie.defaultMediaDataStorage = AVMediaDataStorage(url: copy)
+        try movie.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: source, at: .zero, copySampleData: true)
+        movie.metadata = []
+        for track in movie.tracks {
+            track.metadata = []
         }
-        strip(session)
-        try await session.export(to: copy, as: fileType(for: url))
+        // The samples are already in `copy`; this adds the movie header after them.
+        try movie.writeHeader(to: copy, fileType: fileType(for: url), options: .addMovieHeaderToDestination)
         _ = try fileManager.replaceItemAt(url, withItemAt: copy)
     }
 
