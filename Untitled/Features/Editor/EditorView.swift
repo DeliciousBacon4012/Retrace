@@ -311,15 +311,7 @@ private struct EditorStatusBar: View {
                 HStack(spacing: 2) {
                     Button("Zoom Out", systemImage: "minus") { document.zoomOut(fitFactor: fitFactor) }
                         .help("Zoom out (⌘−)")
-                    Button {
-                        document.zoomToFit()
-                    } label: {
-                        Text(zoom, format: .percent.precision(.fractionLength(0)))
-                            .monospacedDigit()
-                            .frame(minWidth: 46)
-                            .contentTransition(.numericText(value: zoom))
-                    }
-                    .help("Zoom to fit (⌘9)")
+                    ZoomScrubber(document: document, fitFactor: fitFactor)
                     Button("Zoom In", systemImage: "plus") { document.zoomIn(fitFactor: fitFactor) }
                         .help("Zoom in (⌘+)")
                 }
@@ -357,5 +349,138 @@ private struct EditorStatusBar: View {
         .animation(.response, value: document.tool == .crop)
         .animation(.response, value: document.cropRect == nil)
         .animation(.response, value: zoom)
+    }
+}
+
+/// The zoom percentage, which is also a control: press and drag right or up to zoom in,
+/// left or down to zoom out, holding ⌥ for finer steps. It catches gently at Fit, 50 %,
+/// 100 % and 200 % with a haptic tick. Click to fit, double-click for 100 %, or scroll
+/// over it to zoom.
+private struct ZoomScrubber: View {
+    let document: EditorDocument
+    let fitFactor: CGFloat
+
+    /// Where the current drag is measured from. It moves when ⌥ is pressed or released
+    /// mid-drag, so changing speed never makes the zoom jump.
+    @State private var anchor: (zoom: CGFloat, distance: CGFloat, isFine: Bool)?
+    /// The stop the zoom is resting on, so the haptic tick plays once per stop.
+    @State private var restingStop: CGFloat?
+
+    /// Points of drag that double or halve the zoom.
+    private static let pointsPerDoubling: CGFloat = 140
+    private static let fineSlowdown: CGFloat = 4
+    /// How close, as a power of two, counts as on a stop. About 3 %.
+    private static let catchRange: CGFloat = 0.04
+
+    var body: some View {
+        let zoom = document.currentZoom(fitFactor: fitFactor)
+
+        Text(zoom, format: .percent.precision(.fractionLength(0)))
+            .monospacedDigit()
+            .frame(minWidth: 46)
+            .contentTransition(.numericText(value: zoom))
+            .padding(.vertical, 4)
+            .contentShape(.rect)
+            .pointerStyle(.columnResize)
+            .onHover { document.isPointerOverZoomControl = $0 }
+            .onDisappear { document.isPointerOverZoomControl = false }
+            .gesture(drag.exclusively(before: taps))
+            .background { ScrollWheelCatcher { scroll($0) } }
+            .help("Drag to zoom. Click to fit (⌘9), double-click for 100 % (⌘0).")
+            .accessibilityElement()
+            .accessibilityLabel("Zoom")
+            .accessibilityValue(Text(zoom, format: .percent.precision(.fractionLength(0))))
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: document.zoomIn(fitFactor: fitFactor)
+                case .decrement: document.zoomOut(fitFactor: fitFactor)
+                @unknown default: break
+                }
+            }
+    }
+
+    private var taps: some Gesture {
+        TapGesture(count: 2)
+            .onEnded { document.zoomToActualSize() }
+            .exclusively(before: TapGesture().onEnded { document.zoomToFit() })
+    }
+
+    private var drag: some Gesture {
+        DragGesture(minimumDistance: 3)
+            .onChanged { value in
+                // Right and up zoom in; SwiftUI measures down as positive.
+                let distance = value.translation.width - value.translation.height
+                let isFine = NSEvent.modifierFlags.contains(.option)
+                let current = document.currentZoom(fitFactor: fitFactor)
+                if anchor == nil {
+                    anchor = (current, distance, isFine)
+                } else if anchor?.isFine != isFine {
+                    anchor = (current, distance, isFine)
+                }
+                guard let anchor else { return }
+                let perDoubling = Self.pointsPerDoubling * (isFine ? Self.fineSlowdown : 1)
+                set(anchor.zoom * pow(2, (distance - anchor.distance) / perDoubling))
+            }
+            .onEnded { _ in
+                anchor = nil
+                restingStop = nil
+            }
+    }
+
+    /// Scrolling over the number zooms, like dragging does. Trackpads send many small
+    /// steps and mouse wheels a few large ones, so each is scaled to feel the same.
+    private func scroll(_ event: NSEvent) {
+        let step = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 120 : event.scrollingDeltaY / 8
+        let direction: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
+        set(document.currentZoom(fitFactor: fitFactor) * pow(2, step * direction))
+        restingStop = nil
+    }
+
+    /// Sets the zoom straight away, catching on a nearby stop. Fit stays "fit", so it keeps
+    /// fitting when the window is resized.
+    private func set(_ proposed: CGFloat) {
+        let fit = fitFactor * document.scale
+        let clamped = min(max(proposed, 0.1), 8)
+        let stops = [fit, 0.5, 1, 2]
+        let stop = stops.min { abs(log2($0 / clamped)) < abs(log2($1 / clamped)) }
+        if let stop, abs(log2(stop / clamped)) < Self.catchRange {
+            if restingStop != stop {
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                restingStop = stop
+            }
+            document.zoom = stop == fit ? nil : stop
+            if stop == fit { document.pan = .zero }
+        } else {
+            restingStop = nil
+            document.zoom = clamped
+        }
+    }
+}
+
+/// Passes scroll-wheel events over its area to `onScroll`, and lets every other event
+/// through to the views underneath, so clicks and drags still reach them.
+private struct ScrollWheelCatcher: NSViewRepresentable {
+    let onScroll: (NSEvent) -> Void
+
+    func makeNSView(context: Context) -> CatcherView {
+        let view = CatcherView()
+        view.onScroll = onScroll
+        return view
+    }
+
+    func updateNSView(_ view: CatcherView, context: Context) {
+        view.onScroll = onScroll
+    }
+
+    final class CatcherView: NSView {
+        var onScroll: ((NSEvent) -> Void)?
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            NSApp.currentEvent?.type == .scrollWheel ? super.hitTest(point) : nil
+        }
+
+        override func scrollWheel(with event: NSEvent) {
+            onScroll?(event)
+        }
     }
 }

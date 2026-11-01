@@ -80,6 +80,9 @@ final class EditorDocument {
 
     /// The zoom, as a fraction of the image's actual size. `nil` fits the image to the window.
     var zoom: CGFloat?
+    /// Whether the pointer is over the zoom percentage, which scrolls to zoom; the canvas
+    /// leaves those scroll events alone.
+    @ObservationIgnored var isPointerOverZoomControl = false
     /// How far the image is scrolled from center, in view points.
     var pan: CGSize = .zero
 
