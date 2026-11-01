@@ -78,8 +78,10 @@ private struct CaptureHomeContent: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .frame(maxWidth: 760)
         .frame(maxWidth: .infinity)
+        .background { AmbientBackground() }
         .animation(.panel, value: viewModel.screenRecording)
         .animation(.panel, value: library.items.isEmpty)
         .animation(.panel, value: recording.isRecording)
