@@ -24,9 +24,15 @@ struct RecordingSettingsView: View {
             }
 
             Section {
+                Picker("Countdown", selection: $settings.recordingCountdownSeconds) {
+                    Text("Off").tag(0)
+                    Text("3 s").tag(3)
+                    Text("5 s").tag(5)
+                }
+                .pickerStyle(.segmented)
                 Toggle("Show time in the menu bar", isOn: $settings.showsRecordingTimeInMenuBar)
             } footer: {
-                Text("A red dot and the time recorded so far appear in the menu bar. Click them to stop.")
+                Text("The countdown appears in the menu bar; click it to cancel. While recording, a red dot and the time so far appear there; click them to stop.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

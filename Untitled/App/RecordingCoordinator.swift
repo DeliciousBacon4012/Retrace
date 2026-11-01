@@ -17,6 +17,10 @@ final class RecordingCoordinator {
     @ObservationIgnored private let overlay = SelectionOverlay()
     @ObservationIgnored private let hud = RecordingHUDController()
     @ObservationIgnored private let statusItem = RecordingStatusItem()
+    @ObservationIgnored private var countdownTask: Task<Bool, Never>?
+
+    /// Seconds left before a recording starts, while its countdown runs.
+    private(set) var countdown: Int?
 
     init(
         settings: SettingsStore,
@@ -37,22 +41,29 @@ final class RecordingCoordinator {
             self?.recorder.stop()
         }
         statusItem.onClick = { [weak self] in
-            self?.recorder.stop()
+            guard let self else { return }
+            if countdown != nil {
+                cancelCountdown()
+            } else {
+                recorder.stop()
+            }
         }
         followRecorderState()
     }
 
-    /// Shows the elapsed time in the menu bar while recording, if that's turned on, and
-    /// removes it the moment recording stops, however it was stopped.
+    /// Shows the countdown, then the elapsed time if that's turned on, in the menu bar,
+    /// and removes it the moment recording stops, however it was stopped.
     private func followRecorderState() {
-        let (state, showsTime) = withObservationTracking {
-            (recorder.state, settings.showsRecordingTimeInMenuBar)
+        let (state, remaining, showsTime) = withObservationTracking {
+            (recorder.state, countdown, settings.showsRecordingTimeInMenuBar)
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.followRecorderState()
             }
         }
-        if case .recording(let since) = state, showsTime {
+        if let remaining {
+            statusItem.showCountdown(remaining)
+        } else if case .recording(let since) = state, showsTime {
             statusItem.showElapsed(since: since)
         } else {
             statusItem.hide()
@@ -61,8 +72,12 @@ final class RecordingCoordinator {
 
     var isRecording: Bool { recorder.isActive }
 
-    /// Starts a recording, or stops the one in progress.
+    /// Starts a recording, or stops the one in progress. During the countdown, cancels it.
     func toggle(_ mode: CaptureMode) async {
+        if countdown != nil {
+            cancelCountdown()
+            return
+        }
         if recorder.isActive {
             recorder.stop()
             return
@@ -79,6 +94,7 @@ final class RecordingCoordinator {
 
         guard let picked = await pickTarget(mode) else { return }
         let (target, screen, area) = picked
+        guard await runCountdown(settings.recordingCountdownSeconds) else { return }
         do {
             let url = try storage.reserveURL(template: settings.filenameTemplate, date: .now, fileExtension: "mov", in: settings.saveFolderURL)
             let scale = settings.downscalesRetina ? 1 : (screen?.backingScaleFactor ?? 2)
@@ -97,6 +113,31 @@ final class RecordingCoordinator {
             Log.capture.error("Recording couldn't start: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
         }
+    }
+
+    func cancelCountdown() {
+        countdownTask?.cancel()
+    }
+
+    /// Counts down a second at a time. Returns false if it was cancelled.
+    private func runCountdown(_ seconds: Int) async -> Bool {
+        guard seconds > 0 else { return true }
+        let task = Task { [weak self] () -> Bool in
+            for remaining in stride(from: seconds, to: 0, by: -1) {
+                self?.countdown = remaining
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    return false
+                }
+            }
+            return true
+        }
+        countdownTask = task
+        let finished = await task.value
+        countdownTask = nil
+        countdown = nil
+        return finished
     }
 
     /// Returns what to record, the screen it's on, and the area to outline (for area recordings).

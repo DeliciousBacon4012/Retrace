@@ -1,7 +1,7 @@
 import AppKit
 
 /// A second menu bar item shown while recording: a red dot and the elapsed time, like 0:42.
-/// Clicking it stops the recording.
+/// Clicking it stops the recording. Before that, it counts down 3, 2, 1, and clicking cancels.
 final class RecordingStatusItem: NSObject {
     var onClick: (() -> Void)?
 
@@ -26,6 +26,17 @@ final class RecordingStatusItem: NSObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
+    }
+
+    /// Shows the seconds left before recording starts. Clicking cancels.
+    func showCountdown(_ remaining: Int) {
+        timer?.invalidate()
+        timer = nil
+        let button = makeItem()
+        button.image = nil
+        button.toolTip = String(localized: "Cancel Countdown")
+        button.setAccessibilityLabel(String(localized: "Recording starts in \(remaining). Click to cancel."))
+        setTitle(remaining.formatted())
     }
 
     func hide() {
