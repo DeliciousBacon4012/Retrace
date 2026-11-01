@@ -46,6 +46,27 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
     private var agedOutFiles: [URL] = []
     private var removesDirectoryAfterSnapshots = false
 
+    /// Deletes replay folders and save files that a crash or force quit left in the temporary
+    /// folder. Anything touched in the last 10 minutes is left alone, in case another copy of
+    /// the app, such as a development build, is buffering right now.
+    static func removeLeftovers() {
+        let fileManager = FileManager.default
+        let folder = fileManager.temporaryDirectory
+        guard let items = try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
+        let cutoff = Date.now.addingTimeInterval(-10 * 60)
+        var removed = 0
+        for item in items {
+            let name = item.lastPathComponent
+            guard name.hasPrefix("Replay-") || (name.hasPrefix("replay-") && name.hasSuffix(".mp4")) else { continue }
+            let modified = (try? item.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            guard modified < cutoff else { continue }
+            if (try? fileManager.removeItem(at: item)) != nil { removed += 1 }
+        }
+        if removed > 0 {
+            Logger(subsystem: Log.subsystem, category: "replay").info("Removed \(removed, privacy: .public) leftover replay files")
+        }
+    }
+
     init(configuration: Configuration) throws {
         self.configuration = configuration
         directory = FileManager.default.temporaryDirectory
