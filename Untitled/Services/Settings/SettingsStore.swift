@@ -107,8 +107,10 @@ final class SettingsStore {
         saveLastDurations = Self.cleaned(saveLastDurations + [seconds])
     }
 
+    /// Removes a Save Last length and its shortcut.
     func removeSaveLastDuration(_ seconds: Int) {
         saveLastDurations.removeAll { $0 == seconds }
+        shortcuts[QuickAction.saveLast(seconds).id] = nil
     }
 
     /// Sorted, without repeats, each from 1 second to 10 minutes, and no more than the menu holds.
@@ -190,7 +192,8 @@ final class SettingsStore {
     private func saveShortcuts() {
         do {
             var stored: [String: Shortcut?] = [:]
-            for action in QuickAction.all {
+            // Only actions that still exist are kept, so a removed Save Last length leaves nothing behind.
+            for action in QuickAction.all + saveLastDurations.map(QuickAction.saveLast) {
                 stored[action.id] = .some(shortcuts[action.id])
             }
             defaults.set(try JSONEncoder().encode(stored), forKey: Key.shortcuts.rawValue)

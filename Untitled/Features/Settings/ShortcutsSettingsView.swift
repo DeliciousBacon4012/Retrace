@@ -7,10 +7,26 @@ struct ShortcutsSettingsView: View {
 
     var body: some View {
         Form {
+            Section("Screenshots") {
+                ForEach(QuickAction.all.filter(\.isScreenshot)) { row(for: $0) }
+            }
+            Section("Recording") {
+                ForEach(QuickAction.recordings) { row(for: $0) }
+            }
             Section {
-                ForEach(QuickAction.all) { action in
-                    row(for: action)
-                }
+                ForEach(QuickAction.all.filter(\.savesReplay)) { row(for: $0) }
+                ForEach(settings.saveLastDurations.map(QuickAction.saveLast)) { row(for: $0) }
+            } header: {
+                Text("Replay")
+            } footer: {
+                Text("Each Save Last length can have its own shortcut. Change the lengths in Replay Buffer.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                ForEach(QuickAction.all.filter(\.opensClipboard)) { row(for: $0) }
+            } header: {
+                Text("Other")
             } footer: {
                 Text("Shortcuts work from any app. Press Delete while recording to remove one.")
                     .font(.footnote)
