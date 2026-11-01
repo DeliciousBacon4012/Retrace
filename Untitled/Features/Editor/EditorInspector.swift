@@ -1,11 +1,14 @@
 import AppKit
 import SwiftUI
 
-/// Every setting for the selected mark, or for the next mark the current tool draws.
-/// It lives in the window's system inspector column and uses only standard controls,
-/// so macOS draws it in Liquid Glass. Changes apply live and become the tool's style for next time.
+/// Every setting for the selected mark, or for the next mark the current tool draws, in a
+/// grouped form of standard controls on a floating panel of system Liquid Glass.
+/// Changes apply live and become the tool's style for next time.
 struct EditorInspector: View {
     @Bindable var document: EditorDocument
+
+    static let width: CGFloat = 280
+    private static let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
 
     var body: some View {
         let tool = document.inspectedTool
@@ -48,8 +51,13 @@ struct EditorInspector: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .scrollEdgeEffectStyle(.soft, for: .vertical)
         .controlSize(.small)
         .animation(.smooth(duration: 0.22), value: tool)
+        .frame(width: Self.width)
+        .clipShape(Self.shape)
+        .glassEffect(.regular, in: Self.shape)
     }
 }
 
@@ -267,12 +275,18 @@ private struct ToolSection: View {
             }
         case .redact:
             if document.style.redaction != .solid || document.style.shape == .rectangle {
-                Section("Amount") {
+                Section {
                     if document.style.redaction != .solid {
                         ValueSlider("Strength", value: $document.style.strength, in: 0...1, format: .percent)
                     }
                     if document.style.shape == .rectangle {
                         ValueSlider("Roundness", value: points(\.cornerRadius), in: 0...80, unit: "pt")
+                    }
+                } header: {
+                    Text("Amount")
+                } footer: {
+                    if document.style.redaction != .solid {
+                        Text("Blur and pixelate can sometimes be partly undone. Use Solid for passwords, numbers and anything private.")
                     }
                 }
             }

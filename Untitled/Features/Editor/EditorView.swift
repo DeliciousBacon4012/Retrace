@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// The annotation editor: tools in the window toolbar, the image in the middle,
-/// and the system inspector column with every setting for the selected mark or tool.
+/// and a floating glass inspector with every setting for the selected mark or tool.
 struct EditorView: View {
     @Bindable var document: EditorDocument
     let actions: EditorActions
@@ -18,38 +18,50 @@ struct EditorView: View {
         CanvasLayout(imageSize: document.imageSize, scale: document.scale, zoom: nil, pan: .zero, focus: document.visibleRect, in: canvasSize).fitFactor
     }
 
+    /// Room kept clear on the right for the floating inspector, so it never covers the image.
+    private var inspectorInset: CGFloat {
+        showsInspector ? EditorInspector.width + Design.spacingL * 2 : 0
+    }
+
     var body: some View {
-        canvas
-            .background(Color(nsColor: .underPageBackgroundColor))
-            .inspector(isPresented: $showsInspector) {
+        ZStack(alignment: .topTrailing) {
+            canvas
+                .padding(.trailing, inspectorInset)
+
+            if showsInspector {
                 EditorInspector(document: document)
-                    .inspectorColumnWidth(min: 260, ideal: 290, max: 360)
+                    .padding(.vertical, Design.spacingL)
+                    .padding(.trailing, Design.spacingL)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
-            .background { shortcutButtons }
-            .frame(minWidth: 720, minHeight: 440)
-            .toolbar { toolbar }
-            .sheet(item: $exportItem) { item in
-                ExportSheet(item: item, folder: actions.exportFolder, options: actions.exportOptions) { url in
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                }
+        }
+        .background(Color(nsColor: .underPageBackgroundColor))
+        .animation(.panel, value: showsInspector)
+        .background { shortcutButtons }
+        .frame(minWidth: 720, minHeight: 440)
+        .toolbar { toolbar }
+        .sheet(item: $exportItem) { item in
+            ExportSheet(item: item, folder: actions.exportFolder, options: actions.exportOptions) { url in
+                NSWorkspace.shared.activateFileViewerSelecting([url])
             }
-            .focusable()
-            .focused($isCanvasFocused)
-            .focusEffectDisabled()
-            .onAppear { isCanvasFocused = true }
-            .onKeyPress(phases: [.down, .repeat]) { press in
-                handle(press)
+        }
+        .focusable()
+        .focused($isCanvasFocused)
+        .focusEffectDisabled()
+        .onAppear { isCanvasFocused = true }
+        .onKeyPress(phases: [.down, .repeat]) { press in
+            handle(press)
+        }
+        .onDeleteCommand { document.deleteSelection() }
+        .onExitCommand {
+            if document.tool == .crop {
+                document.cancelCrop()
+            } else if document.editingTextID != nil {
+                document.finishTextEditing()
+            } else {
+                document.select(nil)
             }
-            .onDeleteCommand { document.deleteSelection() }
-            .onExitCommand {
-                if document.tool == .crop {
-                    document.cancelCrop()
-                } else if document.editingTextID != nil {
-                    document.finishTextEditing()
-                } else {
-                    document.select(nil)
-                }
-            }
+        }
     }
 
     private var canvas: some View {
