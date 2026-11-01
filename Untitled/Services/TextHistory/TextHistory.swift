@@ -59,10 +59,10 @@ final class TextHistory {
         withObservationTracking {
             _ = settings.textHistoryLimit
         } onChange: { [weak self] in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
-                if trimToLimit() { save() }
-                followLimit()
+                if self.trimToLimit() { self.save() }
+                self.followLimit()
             }
         }
     }
