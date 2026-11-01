@@ -664,6 +664,19 @@ final class EditorDocument {
     /// The most layers kept beyond the ones marks on the canvas are showing.
     private static let spareRedactionLayers = 3
 
+    /// Lets go of every layer no mark is showing, when memory is short.
+    func dropSpareRedactionLayers() {
+        var inUse = Set(annotations.filter { $0.tool == .redact }.map { Self.key($0.style.redaction, Self.level(for: $0.style.strength)) })
+        if tool == .redact {
+            let toolStyle = style(for: .redact)
+            inUse.insert(Self.key(toolStyle.redaction, Self.level(for: toolStyle.strength)))
+        }
+        for key in redactionLayers.keys where !inUse.contains(key) {
+            redactionLayers[key] = nil
+        }
+        redactionLayerUse.removeAll { !inUse.contains($0) }
+    }
+
     private func touchRedactionLayer(_ key: String) {
         guard redactionLayerUse.last != key else { return }
         redactionLayerUse.removeAll { $0 == key }

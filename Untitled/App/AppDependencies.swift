@@ -24,6 +24,7 @@ final class AppDependencies {
     let toasts: CaptureToastController
     /// Text read by Capture Text, for Recents and the menu bar.
     let textHistory: TextHistory
+    let memory = MemoryMonitor()
 
     init(
         settings: SettingsStore,
@@ -115,7 +116,29 @@ final class AppDependencies {
         followSaveFolderSetting()
         shortcuts.start()
         replay.start()
+        followThumbnailMemorySetting()
+        memory.onPressure = { [weak self] pressure in self?.relieveMemory(pressure) }
+        memory.start()
         Log.app.info("Untitled \(Bundle.main.displayVersion, privacy: .public) started")
+    }
+
+    /// Lets go of caches, cheapest to rebuild first: thumbnails, then the editor's spare
+    /// blur and pixelation layers. Each comes back on its own when it's next needed.
+    func relieveMemory(_ pressure: MemoryPressure = .critical) {
+        ThumbnailCache.shared.removeAll()
+        if pressure == .critical {
+            editor.dropSpareCaches()
+        }
+    }
+
+    private func followThumbnailMemorySetting() {
+        withObservationTracking {
+            ThumbnailCache.shared.setMemoryLimit(megabytes: settings.thumbnailMemoryMB)
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.followThumbnailMemorySetting()
+            }
+        }
     }
 
     /// Applies the Dock icon setting now and again whenever it changes.

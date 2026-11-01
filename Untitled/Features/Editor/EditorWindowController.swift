@@ -27,6 +27,11 @@ final class EditorPresenter {
         }
     }
 
+    /// Lets go of blur and pixelation layers that open editors aren't showing.
+    func dropSpareCaches() {
+        controllers.forEach { $0.editorDocument.dropSpareRedactionLayers() }
+    }
+
     /// Puts every tool back to its original look, here and in editors already open.
     func resetToolStyles() {
         controllers.forEach { $0.editorDocument.forgetToolStyles() }
