@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The main window: a dashboard with the capture home, the library, and every setting in
+/// The main window: a dashboard with the capture home, recents, and every setting in
 /// one sidebar, the way a menu bar app's window usually works. The system sidebar and
 /// toolbar draw in Liquid Glass on their own.
 struct MainView: View {
@@ -40,8 +40,8 @@ struct MainView: View {
     private var detail: some View {
         switch selection {
         case .capture:
-            CaptureHomeView(showLibrary: { selection = .library })
-        case .library:
+            CaptureHomeView(showRecents: { selection = .recents })
+        case .recents:
             LibraryView()
         case .general:
             settingsPage { GeneralSettingsView(launchAtLogin: dependencies.launchAtLogin) }

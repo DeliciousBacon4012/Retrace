@@ -5,7 +5,7 @@ import SwiftUI
 /// The Capture page: permission status, the capture buttons, the replay buffer,
 /// recent captures, and where new ones are saved, all in standard grouped sections.
 struct CaptureHomeView: View {
-    let showLibrary: () -> Void
+    let showRecents: () -> Void
 
     @Environment(AppDependencies.self) private var dependencies
 
@@ -15,7 +15,7 @@ struct CaptureHomeView: View {
             capture: dependencies.capture,
             recording: dependencies.recording,
             library: dependencies.library,
-            showLibrary: showLibrary
+            showRecents: showRecents
         )
     }
 }
@@ -25,7 +25,7 @@ private struct CaptureHomeContent: View {
     let capture: CaptureCoordinator
     let recording: RecordingCoordinator
     let library: CaptureLibrary
-    let showLibrary: () -> Void
+    let showRecents: () -> Void
 
     var body: some View {
         Form {
@@ -65,9 +65,9 @@ private struct CaptureHomeContent: View {
                     RecentCapturesRow(items: Array(library.items.prefix(8)))
                 } header: {
                     HStack {
-                        Text("Recent")
+                        Text("Recents")
                         Spacer()
-                        Button("Show All", action: showLibrary)
+                        Button("Show All", action: showRecents)
                             .buttonStyle(.link)
                     }
                 }
@@ -330,7 +330,7 @@ private struct PermissionSection: View {
 #if DEBUG
 #Preview("Needs permission") {
     let dependencies = AppDependencies.preview()
-    CaptureHomeView(showLibrary: {})
+    CaptureHomeView(showRecents: {})
         .environment(dependencies)
         .environment(dependencies.settings)
         .frame(width: 760, height: 620)
@@ -338,7 +338,7 @@ private struct PermissionSection: View {
 
 #Preview("Granted") {
     let dependencies = AppDependencies.preview(screenRecording: .granted)
-    CaptureHomeView(showLibrary: {})
+    CaptureHomeView(showRecents: {})
         .environment(dependencies)
         .environment(dependencies.settings)
         .frame(width: 760, height: 620)

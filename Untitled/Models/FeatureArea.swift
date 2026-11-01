@@ -23,7 +23,7 @@ nonisolated enum FeatureArea: String, CaseIterable, Identifiable, Hashable, Send
         case .editor: String(localized: "Editor")
         case .recording: String(localized: "Recording")
         case .replayBuffer: String(localized: "Replay Buffer")
-        case .library: String(localized: "Library")
+        case .library: String(localized: "Recents")
         case .shelf: String(localized: "Shelf")
         case .storage: String(localized: "iCloud and Storage")
         case .utilities: String(localized: "Utilities")
@@ -38,7 +38,7 @@ nonisolated enum FeatureArea: String, CaseIterable, Identifiable, Hashable, Send
         case .editor: "pencil.and.outline"
         case .recording: "record.circle"
         case .replayBuffer: "gobackward"
-        case .library: "photo.on.rectangle.angled"
+        case .library: "clock"
         case .shelf: "tray.and.arrow.down"
         case .storage: "icloud"
         case .utilities: "wrench.and.screwdriver"

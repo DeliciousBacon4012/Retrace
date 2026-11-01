@@ -55,8 +55,8 @@ struct MenuBarContent: View {
         }
 
         Section {
-            Button("Capture History…", systemImage: "clock.arrow.circlepath") {
-                MainWindowRouter.shared.show(.library, using: openWindow)
+            Button("Show Recents", systemImage: "clock") {
+                MainWindowRouter.shared.show(.recents, using: openWindow)
             }
             Button("Open Untitled", systemImage: "macwindow") {
                 MainWindowRouter.shared.show(using: openWindow)
