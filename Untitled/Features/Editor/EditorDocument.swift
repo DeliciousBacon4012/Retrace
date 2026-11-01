@@ -719,6 +719,12 @@ final class EditorDocument {
         styleStore.save(toolStyles, scale: scale)
     }
 
+    /// Every tool goes back to its original look. Marks already drawn keep theirs.
+    func forgetToolStyles() {
+        styleSaveTask?.cancel()
+        toolStyles = [:]
+    }
+
     private func remember(_ style: MarkStyle, for tool: EditorTool) {
         toolStyles[tool] = style
         if tool == .redact {

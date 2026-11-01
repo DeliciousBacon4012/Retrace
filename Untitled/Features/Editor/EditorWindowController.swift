@@ -27,6 +27,12 @@ final class EditorPresenter {
         }
     }
 
+    /// Puts every tool back to its original look, here and in editors already open.
+    func resetToolStyles() {
+        controllers.forEach { $0.editorDocument.forgetToolStyles() }
+        EditorStyleStore().reset()
+    }
+
     private func followKeyWindow(_ window: NSWindow?) {
         let editor = controllers.first { $0.window === window }
         if active !== editor { active = editor }
