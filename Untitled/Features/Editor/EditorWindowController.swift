@@ -5,16 +5,31 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Opens annotation editor windows, one per image, and keeps them alive until closed.
+@Observable
 final class EditorPresenter {
-    private let settings: SettingsStore
-    private let clipboard: any ClipboardWriting
-    private let textHistory: TextHistory?
-    private var controllers: [EditorWindowController] = []
+    @ObservationIgnored private let settings: SettingsStore
+    @ObservationIgnored private let clipboard: any ClipboardWriting
+    @ObservationIgnored private let textHistory: TextHistory?
+    @ObservationIgnored private var controllers: [EditorWindowController] = []
+    @ObservationIgnored private var keyWindowObserver: (any NSObjectProtocol)?
+
+    /// The editor whose window is key, for the menu bar's editor commands. `nil` while any
+    /// other window, or one of the editor's own sheets, has focus.
+    private(set) var active: EditorWindowController?
 
     init(settings: SettingsStore, clipboard: any ClipboardWriting, textHistory: TextHistory? = nil) {
         self.settings = settings
         self.clipboard = clipboard
         self.textHistory = textHistory
+        keyWindowObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] notification in
+            let window = notification.object as? NSWindow
+            MainActor.assumeIsolated { self?.followKeyWindow(window) }
+        }
+    }
+
+    private func followKeyWindow(_ window: NSWindow?) {
+        let editor = controllers.first { $0.window === window }
+        if active !== editor { active = editor }
     }
 
     func open(_ capture: CapturedImage) {
@@ -42,9 +57,11 @@ final class EditorPresenter {
     private func present(_ document: EditorDocument) {
         let controller = EditorWindowController(document: document, settings: settings, clipboard: clipboard, textHistory: textHistory) { [weak self] closed in
             self?.controllers.removeAll { $0 === closed }
+            if self?.active === closed { self?.active = nil }
         }
         controllers.append(controller)
         controller.showWindow(nil)
+        followKeyWindow(NSApp.keyWindow)
         NSApp.activate()
     }
 }
@@ -145,7 +162,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: Actions
 
-    private func copyImage() {
+    func copyImage() {
         guard let image = renderOrWarn() else { return }
         let size = NSSize(width: CGFloat(image.width) / editorDocument.scale, height: CGFloat(image.height) / editorDocument.scale)
         clipboard.copy(NSImage(cgImage: image, size: size))
@@ -153,12 +170,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
 
     /// Saves over the original file, or asks where to save if there isn't one.
     @discardableResult
-    private func save() -> Bool {
+    func save() -> Bool {
         guard let url = editorDocument.fileURL ?? askForSaveLocation() else { return false }
         return write(to: url)
     }
 
-    private func finish() {
+    func finish() {
         guard editorDocument.hasUnsavedChanges || editorDocument.fileURL == nil else {
             copyImage()
             close()

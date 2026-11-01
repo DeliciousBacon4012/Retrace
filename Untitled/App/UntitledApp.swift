@@ -19,6 +19,7 @@ struct UntitledApp: App {
         .restorationBehavior(.disabled)
         .commands {
             AppCommands(dependencies: dependencies)
+            EditorCommands(editors: dependencies.editor)
         }
 
         Window("Feature Roadmap", id: WindowID.roadmap) {
