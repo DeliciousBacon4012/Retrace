@@ -14,6 +14,7 @@ final class RecordingCoordinator {
     @ObservationIgnored private let storage: any CaptureStoring
     @ObservationIgnored private let clipboard: any ClipboardWriting
     @ObservationIgnored private let quickAccess: QuickAccessController
+    @ObservationIgnored private let toasts: CaptureToastController
     @ObservationIgnored private let overlay = SelectionOverlay()
     @ObservationIgnored private let hud = RecordingHUDController()
     @ObservationIgnored private let statusItem = RecordingStatusItem()
@@ -27,13 +28,15 @@ final class RecordingCoordinator {
         permissions: any PermissionProviding,
         storage: any CaptureStoring,
         clipboard: any ClipboardWriting,
-        quickAccess: QuickAccessController
+        quickAccess: QuickAccessController,
+        toasts: CaptureToastController
     ) {
         self.settings = settings
         self.permissions = permissions
         self.storage = storage
         self.clipboard = clipboard
         self.quickAccess = quickAccess
+        self.toasts = toasts
         recorder.onFinish = { [weak self] result in
             self?.finish(result)
         }
@@ -175,7 +178,11 @@ final class RecordingCoordinator {
                 // Clean the file before it's copied or shown, so nothing hands out the original.
                 if settings.stripsVideoMetadata { await VideoMetadata.removeAll(from: url) }
                 if settings.copiesToClipboard { clipboard.copyFile(at: url) }
-                guard settings.showsQuickAccess, let poster = await Self.posterFrame(for: url) else { return }
+                guard settings.showsQuickAccess else {
+                    toasts.show(.init(kind: .recordingSaved, symbolName: "record.circle", title: String(localized: "Recording saved"), detail: url.lastPathComponent))
+                    return
+                }
+                guard let poster = await Self.posterFrame(for: url) else { return }
                 var capture = CapturedImage(image: poster, scale: 2, date: .now)
                 capture.fileURL = url
                 capture.isVideo = true

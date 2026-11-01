@@ -53,6 +53,8 @@ struct MainView: View {
             settingsPage { FilesPrivacySettingsView() }
         case .quickAccess:
             settingsPage { QuickAccessSettingsView() }
+        case .notifications:
+            settingsPage { NotificationsSettingsView() }
         case .recording:
             settingsPage { RecordingSettingsView() }
         case .replayBuffer:

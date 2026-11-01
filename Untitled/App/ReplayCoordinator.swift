@@ -52,7 +52,9 @@ final class ReplayCoordinator {
             if let lastSeconds, saved < Double(lastSeconds) - 0.5 {
                 // Less was buffered than asked for, so say how much the clip holds.
                 let length = Duration.seconds(Int(saved.rounded())).formatted(.units(allowed: [.minutes, .seconds], width: .abbreviated))
-                toasts.show(.init(symbolName: "gobackward", title: String(localized: "Saved \(length)"), detail: String(localized: "That's all the replay buffer held so far.")))
+                toasts.show(.init(kind: .recordingSaved, symbolName: "gobackward", title: String(localized: "Saved \(length)"), detail: String(localized: "That's all the replay buffer held so far.")))
+            } else if !settings.showsQuickAccess {
+                toasts.show(.init(kind: .recordingSaved, symbolName: "gobackward", title: String(localized: "Replay saved"), detail: url.lastPathComponent))
             }
             guard settings.showsQuickAccess else { return }
             let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))

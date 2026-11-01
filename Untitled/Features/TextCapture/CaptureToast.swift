@@ -2,9 +2,11 @@ import AppKit
 import SwiftUI
 
 /// A short glass notice at the top of the screen, such as "Copied 4 lines",
-/// with an optional button. It springs in and fades away on its own.
+/// with an optional button. It springs in and fades away after the time set for its kind,
+/// or stays until it's clicked.
 final class CaptureToastController {
     struct Toast {
+        var kind: ToastKind
         var symbolName: String
         var title: String
         var detail: String?
@@ -12,15 +14,23 @@ final class CaptureToastController {
         var action: (() -> Void)?
     }
 
+    private let settings: SettingsStore
     private var panel: FloatingPanel?
     private var dismissTask: Task<Void, Never>?
 
+    init(settings: SettingsStore) {
+        self.settings = settings
+    }
+
     func show(_ toast: Toast, on screen: NSScreen? = NSScreen.underPointer ?? NSScreen.main) {
+        guard settings.showsToasts else { return }
         hide(animated: false)
         guard let screen else { return }
 
         let view = CaptureToastView(toast: toast) { [weak self] in
             toast.action?()
+            self?.hide(animated: true)
+        } dismiss: { [weak self] in
             self?.hide(animated: true)
         }
         let hosting = NSHostingView(rootView: view)
@@ -28,11 +38,16 @@ final class CaptureToastController {
         let panel = FloatingPanel(contentRect: CGRect(origin: .zero, size: size))
         panel.contentView = hosting
         let visible = screen.visibleFrame
-        panel.setFrameOrigin(CGPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - 12))
+        let x = switch settings.toastPosition {
+        case .topCenter: visible.midX - size.width / 2
+        case .topRight: visible.maxX - size.width - 12
+        }
+        panel.setFrameOrigin(CGPoint(x: x, y: visible.maxY - size.height - 12))
         panel.orderFrontRegardless()
         self.panel = panel
 
-        let seconds = toast.actionTitle == nil ? 2.4 : 5.0
+        let seconds = settings.toastSeconds(for: toast.kind)
+        guard seconds > 0 else { return }
         dismissTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
@@ -61,6 +76,7 @@ final class CaptureToastController {
 private struct CaptureToastView: View {
     let toast: CaptureToastController.Toast
     let perform: () -> Void
+    let dismiss: () -> Void
 
     @State private var isShown = false
 
@@ -89,6 +105,10 @@ private struct CaptureToastView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .glassEffect(.regular, in: .capsule)
+                .contentShape(.capsule)
+                .onTapGesture(perform: dismiss)
+                .accessibilityElement(children: .combine)
+                .accessibilityAction(named: Text("Dismiss"), dismiss)
 
                 if let actionTitle = toast.actionTitle {
                     Button(actionTitle, action: perform)
