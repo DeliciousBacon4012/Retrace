@@ -117,7 +117,7 @@ struct EditorView: View {
                 .help("Save (⌘S)")
             Button("Export", systemImage: "square.and.arrow.up") {
                 if let image = actions.render() {
-                    exportItem = ExportItem(image: image, scale: document.scale, suggestedName: actions.suggestedName)
+                    exportItem = ExportItem(image: image, scale: document.scale, suggestedName: actions.suggestedName, hidesContent: document.hasRedactions)
                 }
             }
             .keyboardShortcut("e", modifiers: .command)
