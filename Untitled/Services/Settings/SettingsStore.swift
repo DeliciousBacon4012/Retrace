@@ -14,6 +14,8 @@ final class SettingsStore {
 
     var showsDockIcon = Defaults.showsDockIcon { didSet { save(showsDockIcon, .showsDockIcon) } }
     var playsSounds = Defaults.playsSounds { didSet { save(playsSounds, .playsSounds) } }
+    /// Opens the main window when you start Untitled yourself. Starting at login never does.
+    var opensWindowAtLaunch = Defaults.opensWindowAtLaunch { didSet { save(opensWindowAtLaunch, .opensWindowAtLaunch) } }
 
     // MARK: After capture
 
@@ -107,6 +109,7 @@ final class SettingsStore {
     private func load() {
         showsDockIcon = value(.showsDockIcon, default: Defaults.showsDockIcon)
         playsSounds = value(.playsSounds, default: Defaults.playsSounds)
+        opensWindowAtLaunch = value(.opensWindowAtLaunch, default: Defaults.opensWindowAtLaunch)
         copiesToClipboard = value(.copiesToClipboard, default: Defaults.copiesToClipboard)
         savesToFolder = value(.savesToFolder, default: Defaults.savesToFolder)
         showsQuickAccess = value(.showsQuickAccess, default: Defaults.showsQuickAccess)
@@ -182,6 +185,7 @@ private extension SettingsStore {
     enum Key: String, CaseIterable {
         case showsDockIcon
         case playsSounds
+        case opensWindowAtLaunch
         case copiesToClipboard
         case savesToFolder
         case showsQuickAccess
@@ -215,6 +219,7 @@ private extension SettingsStore {
     enum Defaults {
         static let showsDockIcon = true
         static let playsSounds = true
+        static let opensWindowAtLaunch = true
         static let copiesToClipboard = true
         static let savesToFolder = true
         static let showsQuickAccess = true

@@ -13,6 +13,10 @@ struct UntitledApp: App {
                 .environment(dependencies.settings)
         }
         .defaultSize(width: 920, height: 600)
+        // The launch decides whether this opens (see LaunchContext), not window restoration,
+        // so starting at login stays in the menu bar.
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .commands {
             AppCommands(dependencies: dependencies)
         }
@@ -30,6 +34,7 @@ struct UntitledApp: App {
                 .environment(dependencies.settings)
         } label: {
             MenuBarLabel(recording: dependencies.recording, replay: dependencies.replay)
+                .modifier(LaunchWindowPresenter(launch: appDelegate.launch))
         }
     }
 }
