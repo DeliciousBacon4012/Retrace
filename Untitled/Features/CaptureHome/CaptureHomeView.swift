@@ -15,6 +15,7 @@ struct CaptureHomeView: View {
             capture: dependencies.capture,
             recording: dependencies.recording,
             library: dependencies.library,
+            textHistory: dependencies.textHistory,
             showRecents: showRecents
         )
     }
@@ -25,9 +26,12 @@ private struct CaptureHomeContent: View {
     let capture: CaptureCoordinator
     let recording: RecordingCoordinator
     let library: CaptureLibrary
+    let textHistory: TextHistory
     let showRecents: () -> Void
 
     var body: some View {
+        let recents = Array(RecentItem.merged(files: library.items, snippets: textHistory.snippets).prefix(8))
+
         Form {
             if viewModel.screenRecording == .notGranted {
                 PermissionSection(viewModel: viewModel)
@@ -60,9 +64,9 @@ private struct CaptureHomeContent: View {
                 ReplayRow()
             }
 
-            if !library.items.isEmpty {
+            if !recents.isEmpty {
                 Section {
-                    RecentCapturesRow(items: Array(library.items.prefix(8)))
+                    RecentCapturesRow(items: recents)
                 } header: {
                     HStack {
                         Text("Recents")
@@ -83,7 +87,7 @@ private struct CaptureHomeContent: View {
         .frame(maxWidth: .infinity)
         .background { AmbientBackground() }
         .animation(.panel, value: viewModel.screenRecording)
-        .animation(.panel, value: library.items.isEmpty)
+        .animation(.panel, value: recents.isEmpty)
         .animation(.panel, value: recording.isRecording)
         .animation(.response, value: recording.countdown)
         .task {
@@ -174,15 +178,19 @@ private struct StopRecordingButton: View {
     }
 }
 
-/// The newest captures, side by side. Double-click opens one; drag it into any app.
+/// The newest captures and text, side by side. Double-click a capture to open it, click
+/// text to copy it again, or drag either into any app.
 private struct RecentCapturesRow: View {
-    let items: [LibraryItem]
+    let items: [RecentItem]
 
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Design.spacingM) {
                 ForEach(items) { item in
-                    RecentThumbnail(item: item)
+                    switch item {
+                    case .file(let file): RecentThumbnail(item: file)
+                    case .text(let snippet): RecentTextThumbnail(snippet: snippet)
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -207,6 +215,54 @@ private struct RecentThumbnail: View {
             .onDrag { NSItemProvider(object: item.url as NSURL) }
             .help(item.name)
             .accessibilityLabel(item.name)
+            .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// Captured text at thumbnail size. Clicking copies it and says so for a moment.
+private struct RecentTextThumbnail: View {
+    let snippet: TextSnippet
+
+    @Environment(AppDependencies.self) private var dependencies
+    @State private var isCopied = false
+
+    var body: some View {
+        Text(snippet.text)
+            .font(.caption2)
+            .lineLimit(5)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(8)
+            .frame(width: 128, height: 80)
+            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: Design.radiusS))
+            .overlay {
+                RoundedRectangle(cornerRadius: Design.radiusS)
+                    .strokeBorder(.separator, lineWidth: 0.5)
+            }
+            .overlay {
+                if isCopied {
+                    Label("Copied", systemImage: "checkmark")
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.thinMaterial, in: .capsule)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.response, value: isCopied)
+            .contentShape(.rect)
+            .onTapGesture {
+                dependencies.clipboard.copy(text: snippet.text)
+                isCopied = true
+            }
+            .task(id: isCopied) {
+                guard isCopied else { return }
+                try? await Task.sleep(for: .seconds(1.2))
+                isCopied = false
+            }
+            .onDrag { NSItemProvider(object: snippet.text as NSString) }
+            .help(snippet.summary)
+            .accessibilityLabel(snippet.summary)
+            .accessibilityHint("Copies the text")
             .accessibilityAddTraits(.isButton)
     }
 }
