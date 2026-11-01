@@ -16,6 +16,7 @@ final class RecordingCoordinator {
     @ObservationIgnored private let quickAccess: QuickAccessController
     @ObservationIgnored private let overlay = SelectionOverlay()
     @ObservationIgnored private let hud = RecordingHUDController()
+    @ObservationIgnored private let statusItem = RecordingStatusItem()
 
     init(
         settings: SettingsStore,
@@ -34,6 +35,27 @@ final class RecordingCoordinator {
         }
         hud.onStop = { [weak self] in
             self?.recorder.stop()
+        }
+        statusItem.onClick = { [weak self] in
+            self?.recorder.stop()
+        }
+        followRecorderState()
+    }
+
+    /// Shows the elapsed time in the menu bar while recording, if that's turned on, and
+    /// removes it the moment recording stops, however it was stopped.
+    private func followRecorderState() {
+        let (state, showsTime) = withObservationTracking {
+            (recorder.state, settings.showsRecordingTimeInMenuBar)
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.followRecorderState()
+            }
+        }
+        if case .recording(let since) = state, showsTime {
+            statusItem.showElapsed(since: since)
+        } else {
+            statusItem.hide()
         }
     }
 

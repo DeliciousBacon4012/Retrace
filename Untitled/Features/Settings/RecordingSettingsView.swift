@@ -22,6 +22,14 @@ struct RecordingSettingsView: View {
                 Toggle("Record system audio", isOn: $settings.recordsSystemAudio)
                 Toggle("Record microphone", isOn: $settings.recordsMicrophone)
             }
+
+            Section {
+                Toggle("Show time in the menu bar", isOn: $settings.showsRecordingTimeInMenuBar)
+            } footer: {
+                Text("A red dot and the time recorded so far appear in the menu bar. Click them to stop.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }
