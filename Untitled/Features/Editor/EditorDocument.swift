@@ -46,6 +46,35 @@ final class EditorDocument {
                 let style = style(for: .redact)
                 prepareRedaction(style.redaction, around: style.strength)
             }
+            if tool == .highlighter {
+                prepareTextLines()
+            }
+        }
+    }
+
+    // MARK: Highlighter snapping
+
+    /// The preference for snapping highlighter strokes to lines of text. On unless turned off.
+    static let highlighterSnapsKey = "editorHighlighterSnaps"
+    static var highlighterSnapsToText: Bool {
+        UserDefaults.standard.object(forKey: highlighterSnapsKey) as? Bool ?? true
+    }
+
+    /// Lines and words in the screenshot, read on device the first time the highlighter is
+    /// picked. Until they arrive, strokes stay freehand.
+    @ObservationIgnored private var textLines: [TextLine]?
+    @ObservationIgnored private var isReadingTextLines = false
+    /// The highlighter stroke as drawn, before any snapping.
+    @ObservationIgnored private var rawHighlight: [CGPoint] = []
+
+    func prepareTextLines() {
+        guard textLines == nil, !isReadingTextLines, Self.highlighterSnapsToText else { return }
+        isReadingTextLines = true
+        let image = image
+        Task { [weak self] in
+            let lines = (try? await TextRecognizer.textLayout(in: image)) ?? []
+            self?.textLines = lines
+            self?.isReadingTextLines = false
         }
     }
 
@@ -297,6 +326,10 @@ final class EditorDocument {
             gesture = .moving(last: point)
             gestureSnapshot = nil
         default:
+            if tool == .highlighter {
+                prepareTextLines()
+                rawHighlight = mark.points
+            }
             draft = mark
             gesture = .drawing
         }
@@ -312,11 +345,21 @@ final class EditorDocument {
                     mark.points.append(point)
                 }
             case .highlighter:
-                if constrained, let first = mark.points.first {
+                if let last = rawHighlight.last, hypot(point.x - last.x, point.y - last.y) >= 1.5 {
+                    rawHighlight.append(point)
+                }
+                let drawnWidth = style(for: .highlighter).lineWidth
+                if constrained, let first = rawHighlight.first {
                     // Shift draws one perfectly straight stroke.
                     mark.points = [first, Geometry.snapped(from: first, to: point)]
-                } else if let last = mark.points.last, hypot(point.x - last.x, point.y - last.y) >= 1.5 {
-                    mark.points.append(point)
+                    mark.style.lineWidth = drawnWidth
+                } else if Self.highlighterSnapsToText, let lines = textLines,
+                          let band = HighlightSnapping.band(for: rawHighlight, lines: lines) {
+                    mark.points = [band.start, band.end]
+                    mark.style.lineWidth = band.thickness
+                } else {
+                    mark.points = rawHighlight
+                    mark.style.lineWidth = drawnWidth
                 }
             case .arrow:
                 mark.end = constrained ? Geometry.snapped(from: mark.start, to: point) : point
@@ -644,7 +687,13 @@ final class EditorDocument {
             if mark.style.route != newStyle.route, newStyle.route == .curved, annotations[index].control == nil {
                 annotations[index].control = ArrowGeometry.defaultBend(from: mark.start, to: mark.end)
             }
-            remember(newStyle, for: mark.tool)
+            var remembered = newStyle
+            if mark.tool == .highlighter, mark.style.lineWidth == newStyle.lineWidth {
+                // A highlight snapped to text is as thick as that text. Recoloring it shouldn't
+                // make every later stroke that thick.
+                remembered.lineWidth = style(for: .highlighter).lineWidth
+            }
+            remember(remembered, for: mark.tool)
         } else {
             remember(newStyle, for: tool)
         }

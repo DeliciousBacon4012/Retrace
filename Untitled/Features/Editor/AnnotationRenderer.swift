@@ -222,11 +222,13 @@ enum AnnotationRenderer {
     private static func drawHighlighter(_ mark: Annotation, in layer: inout GraphicsContext) {
         let color = mark.style.color.swiftUIColor
         if mark.isStraightStroke {
-            // A straight stroke gets crisp square ends, like a real marker pulled along a ruler.
-            var path = Path()
-            path.move(to: mark.points[0])
-            path.addLine(to: mark.points[1])
-            layer.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: mark.style.lineWidth, lineCap: .butt))
+            // A straight band with just-softened corners, like a chisel marker pulled along a ruler.
+            let a = mark.points[0]
+            let b = mark.points[1]
+            let width = mark.style.lineWidth
+            let band = CGRect(x: 0, y: -width / 2, width: hypot(b.x - a.x, b.y - a.y), height: width)
+            let turn = CGAffineTransform(translationX: a.x, y: a.y).rotated(by: atan2(b.y - a.y, b.x - a.x))
+            layer.fill(Path(roundedRect: band, cornerRadius: width * 0.18).applying(turn), with: .color(color))
         } else {
             layer.stroke(smoothPath(through: mark.points), with: .color(color), style: StrokeStyle(lineWidth: mark.style.lineWidth, lineCap: .round, lineJoin: .round))
         }

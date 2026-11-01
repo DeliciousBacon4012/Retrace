@@ -25,6 +25,12 @@ nonisolated struct RecognizedContent: Sendable {
     }
 }
 
+/// A line of text in an image and the words in it, in image pixels, origin at the top left.
+nonisolated struct TextLine: Sendable {
+    let rect: CGRect
+    let words: [CGRect]
+}
+
 /// What the editor can hide automatically.
 nonisolated enum SensitiveKind: String, CaseIterable, Identifiable, Sendable {
     case personal
@@ -83,6 +89,29 @@ nonisolated enum TextRecognizer {
             content.codes = (codes.results ?? []).compactMap(\.payloadStringValue).filter { seen.insert($0).inserted }
             log.info("Read \(content.lines.count, privacy: .public) lines and \(content.codes.count, privacy: .public) codes")
             return content
+        }
+    }
+
+    /// Where each line of text sits, with a box for every word, for snapping marks to text.
+    /// In image pixels with the origin at the top left.
+    static func textLayout(in image: CGImage) async throws -> [TextLine] {
+        try await run(limit: .seconds(20)) {
+            let size = CGSize(width: image.width, height: image.height)
+            let request = textRequest(correctsLanguage: false)
+            try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+            return (request.results ?? []).compactMap { observation in
+                guard let candidate = observation.topCandidates(1).first else { return nil }
+                let line = pixelRect(observation.boundingBox, in: size)
+                var words: [CGRect] = []
+                let text = candidate.string
+                text.enumerateSubstrings(in: text.startIndex..., options: .byWords) { _, range, _, _ in
+                    guard let box = (try? candidate.boundingBox(for: range))?.boundingBox else { return }
+                    let word = pixelRect(box, in: size)
+                    // Vision sometimes answers with the whole line; that box says nothing about the word.
+                    if word.width < line.width * 0.98 { words.append(word) }
+                }
+                return TextLine(rect: line, words: words)
+            }
         }
     }
 
