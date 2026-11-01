@@ -27,13 +27,19 @@ struct AppCommands: Commands {
                 panel.urls.forEach { dependencies.editor.open(fileAt: $0) }
             }
             .keyboardShortcut("o")
-            Button("Pin to the Screen…") {
+            ForEach(QuickAction.all.filter(\.opensClipboard)) { action in
+                QuickActionButton(action: action)
+                    .environment(dependencies)
+                    .keyboardShortcut("v", modifiers: [.command, .shift])
+            }
+            Button("Pin to Screen…") {
                 dependencies.pins.pinFromFile()
             }
         }
 
+        // Every capture and recording. Opening the clipboard's image is under File.
         CommandMenu("Capture") {
-            ForEach(QuickAction.all) { action in
+            ForEach(QuickAction.all.filter { !$0.opensClipboard }) { action in
                 QuickActionButton(action: action)
                     .environment(dependencies)
                     .menuShortcut(dependencies.settings.shortcuts[action.id])
