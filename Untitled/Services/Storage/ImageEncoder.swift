@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import OSLog
 import UniformTypeIdentifiers
 
 /// How an image is written out: format, compression, size, color, and metadata.
@@ -23,11 +24,14 @@ nonisolated enum ImageEncoder {
     enum EncodingError: LocalizedError {
         case unsupportedFormat
         case encodingFailed
+        /// The finished file still held metadata that should have been removed.
+        case metadataLeft([String])
 
         var errorDescription: String? {
             switch self {
             case .unsupportedFormat: String(localized: "This Mac can't write that image format.")
             case .encodingFailed: String(localized: "The image couldn't be encoded.")
+            case .metadataLeft(let found): String(localized: "The image wasn't saved because its metadata couldn't be fully removed (\(found.joined(separator: ", "))).")
             }
         }
     }
@@ -39,7 +43,22 @@ nonisolated enum ImageEncoder {
 
     /// Encodes `image` following `options`. `pointScale` is the capture's pixels per point,
     /// written as the file's resolution so it opens at the right size.
+    ///
+    /// With `stripsMetadata`, the finished data is read back and checked, and the call throws
+    /// rather than return a file that still says more than its pixels.
     static func data(for image: CGImage, options: ExportOptions, pointScale: CGFloat = 1) throws -> Data {
+        let data = try encoded(image, options: options, pointScale: pointScale)
+        if options.stripsMetadata {
+            let found = MetadataAudit.leftovers(in: data)
+            guard found.isEmpty else {
+                Log.capture.error("Refused to write an image with metadata left: \(found.joined(separator: ", "), privacy: .public)")
+                throw EncodingError.metadataLeft(found)
+            }
+        }
+        return data
+    }
+
+    private static func encoded(_ image: CGImage, options: ExportOptions, pointScale: CGFloat) throws -> Data {
         let prepared = prepare(image, options: options)
         let factor = max(options.scalePercent, 1) / 100
         let dpi = 72 * max(pointScale * factor, 1)
