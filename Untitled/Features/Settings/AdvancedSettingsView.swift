@@ -2,11 +2,44 @@ import SwiftUI
 
 struct AdvancedSettingsView: View {
     @Environment(AppDependencies.self) private var dependencies
+    @Environment(SettingsStore.self) private var settings
     @State private var isConfirmingReset = false
+    @State private var isConfirmingClearText = false
     @State private var screenRecording: PermissionStatus = .notGranted
 
     var body: some View {
+        @Bindable var settings = settings
+
         Form {
+            Section {
+                Picker("Text history", selection: $settings.textHistoryLimit) {
+                    ForEach(SettingsStore.textHistoryLimits, id: \.self) { limit in
+                        if limit == 0 {
+                            Text("Off").tag(limit)
+                        } else {
+                            Text("Last \(limit)").tag(limit)
+                        }
+                    }
+                }
+                Button("Clear Text History…") {
+                    isConfirmingClearText = true
+                }
+                .disabled(dependencies.textHistory.snippets.isEmpty)
+                .confirmationDialog("Clear text history?", isPresented: $isConfirmingClearText) {
+                    Button("Clear", role: .destructive) {
+                        dependencies.textHistory.removeAll()
+                    }
+                } message: {
+                    Text("Every saved snippet is removed from Recents and the menu bar. Your clipboard isn't affected.")
+                }
+            } header: {
+                Text("History")
+            } footer: {
+                Text("Text you capture stays on this Mac, in Untitled's own folder rather than your save folder. Lowering the number removes the oldest snippets.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Permissions") {
                 LabeledContent("Screen Recording") {
                     HStack {
@@ -44,8 +77,10 @@ struct AdvancedSettingsView: View {
 
 #if DEBUG
 #Preview {
+    let dependencies = AppDependencies.preview()
     AdvancedSettingsView()
-        .environment(AppDependencies.preview())
+        .environment(dependencies)
+        .environment(dependencies.settings)
         .frame(width: 520)
 }
 #endif

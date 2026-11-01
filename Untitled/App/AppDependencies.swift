@@ -22,13 +22,16 @@ final class AppDependencies {
     let pins: PinController
     /// The short notices at the top of the screen, shared so they never stack up.
     let toasts: CaptureToastController
+    /// Text read by Capture Text, for Recents and the menu bar.
+    let textHistory: TextHistory
 
     init(
         settings: SettingsStore,
         permissions: any PermissionProviding,
         launchAtLogin: any LaunchAtLoginControlling,
         dockIcon: any DockIconControlling,
-        clipboard: any ClipboardWriting
+        clipboard: any ClipboardWriting,
+        textHistoryFile: URL? = TextHistory.defaultFileURL
     ) {
         self.settings = settings
         self.permissions = permissions
@@ -38,6 +41,8 @@ final class AppDependencies {
         library = CaptureLibrary(folder: settings.saveFolderURL)
         let toasts = CaptureToastController(settings: settings, permissions: permissions)
         self.toasts = toasts
+        let textHistory = TextHistory(settings: settings, fileURL: textHistoryFile)
+        self.textHistory = textHistory
         let editor = EditorPresenter(settings: settings, clipboard: clipboard)
         self.editor = editor
         let pins = PinController(clipboard: clipboard)
@@ -54,7 +59,8 @@ final class AppDependencies {
             clipboard: clipboard,
             quickAccess: quickAccess,
             editor: editor,
-            toasts: toasts
+            toasts: toasts,
+            textHistory: textHistory
         )
         self.capture = capture
         quickAccess.onSave = { [weak capture] image in capture?.save(image) }
@@ -144,7 +150,8 @@ extension AppDependencies {
             permissions: PreviewPermissionService(status: screenRecording),
             launchAtLogin: PreviewLaunchAtLoginService(),
             dockIcon: PreviewDockIconService(),
-            clipboard: PreviewClipboard()
+            clipboard: PreviewClipboard(),
+            textHistoryFile: nil
         )
     }
 }

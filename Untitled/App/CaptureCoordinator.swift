@@ -17,6 +17,7 @@ final class CaptureCoordinator {
     @ObservationIgnored private let editor: EditorPresenter
     @ObservationIgnored private let overlay = SelectionOverlay()
     @ObservationIgnored private let toast: CaptureToastController
+    @ObservationIgnored private let textHistory: TextHistory
     /// The last area selected, for Capture Previous Area.
     @ObservationIgnored private var lastArea: (rect: CGRect, screen: NSScreen)?
 
@@ -28,7 +29,8 @@ final class CaptureCoordinator {
         clipboard: any ClipboardWriting,
         quickAccess: QuickAccessController,
         editor: EditorPresenter,
-        toasts: CaptureToastController
+        toasts: CaptureToastController,
+        textHistory: TextHistory
     ) {
         self.settings = settings
         self.permissions = permissions
@@ -38,6 +40,7 @@ final class CaptureCoordinator {
         self.quickAccess = quickAccess
         self.editor = editor
         toast = toasts
+        self.textHistory = textHistory
     }
 
     /// Runs a screenshot quick action, including Capture Text.
@@ -144,6 +147,7 @@ final class CaptureCoordinator {
         }
         let copied = content.lines.isEmpty ? content.codes.joined(separator: "\n") : content.text
         clipboard.copy(text: copied)
+        textHistory.add(copied)
 
         let title: String
         if content.lines.isEmpty {
@@ -163,6 +167,11 @@ final class CaptureCoordinator {
                 clipboard.copy(text: copied)
             },
         ]
+        if settings.textHistoryLimit > 0 {
+            actions.append(.init(title: String(localized: "Show in Recents"), systemImage: "clock") {
+                MainWindowRouter.shared.request(.recents, recentsFilter: .text)
+            })
+        }
         if let link = content.link {
             actions.insert(.init(title: String(localized: "Open Link"), systemImage: "safari") { NSWorkspace.shared.open(link) }, at: 0)
         }

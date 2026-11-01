@@ -61,9 +61,16 @@ struct MenuBarContent: View {
         }
 
         Section {
-            Button("Show Recents", systemImage: "clock") {
-                MainWindowRouter.shared.show(.recents, using: openWindow)
+            if settings.textHistoryLimit > 0 {
+                RecentTextMenu()
+            } else {
+                Button("Show Recents", systemImage: "clock") {
+                    MainWindowRouter.shared.show(.recents, using: openWindow)
+                }
             }
+        }
+
+        Section {
             Button("Open Untitled", systemImage: "macwindow") {
                 MainWindowRouter.shared.show(using: openWindow)
             }
@@ -144,5 +151,30 @@ struct QuickActionButton: View {
         action.recordingMode != nil && dependencies.recording.isRecording
             ? String(localized: "Stop Recording")
             : action.title
+    }
+}
+
+/// The last few snippets Capture Text copied. Choosing one copies it again.
+private struct RecentTextMenu: View {
+    @Environment(AppDependencies.self) private var dependencies
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Menu("Recent Text", systemImage: "text.quote") {
+            let snippets = dependencies.textHistory.snippets.prefix(5)
+            if snippets.isEmpty {
+                Text("Text you capture appears here")
+            } else {
+                ForEach(snippets) { snippet in
+                    Button(snippet.summary) {
+                        dependencies.clipboard.copy(text: snippet.text)
+                    }
+                }
+            }
+            Divider()
+            Button("Show All in Recents") {
+                MainWindowRouter.shared.show(.recents, recentsFilter: .text, using: openWindow)
+            }
+        }
     }
 }
