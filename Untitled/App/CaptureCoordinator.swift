@@ -258,12 +258,12 @@ final class CaptureCoordinator {
         let fallback = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first?
             .appendingPathComponent("Untitled", isDirectory: true)
         guard let fallback, fallback.standardizedFileURL != preferred.standardizedFileURL else {
-            ErrorPresenter.present(String(localized: "The screenshot couldn't be saved."), recovery: String(localized: "Choose another folder in Settings › Output. It's still on the clipboard if copying is on."))
+            ErrorPresenter.present(String(localized: "The screenshot couldn't be saved."), recovery: String(localized: "Choose another folder in Settings › Files & Privacy. It's still on the clipboard if copying is on."))
             return nil
         }
         do {
             let url = try storage.save(data, template: settings.filenameTemplate, date: capture.date, fileExtension: format.fileExtension, in: fallback)
-            ErrorPresenter.present(String(localized: "Saved to Pictures › Untitled instead."), recovery: String(localized: "The chosen folder couldn't be written to. You can pick another one in Settings › Output."))
+            ErrorPresenter.present(String(localized: "Saved to Pictures › Untitled instead."), recovery: String(localized: "The chosen folder couldn't be written to. You can pick another one in Settings › Files & Privacy."))
             return url
         } catch {
             ErrorPresenter.present(error)

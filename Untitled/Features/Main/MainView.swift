@@ -45,14 +45,18 @@ struct MainView: View {
             LibraryView()
         case .general:
             settingsPage { GeneralSettingsView(launchAtLogin: dependencies.launchAtLogin) }
-        case .captureOptions:
+        case .captureSettings:
             settingsPage { CaptureSettingsView() }
-        case .output:
-            settingsPage { OutputSettingsView() }
+        case .afterCapture:
+            settingsPage { AfterCaptureSettingsView() }
+        case .filesAndPrivacy:
+            settingsPage { FilesPrivacySettingsView() }
         case .quickAccess:
             settingsPage { QuickAccessSettingsView() }
         case .recording:
             settingsPage { RecordingSettingsView() }
+        case .replayBuffer:
+            settingsPage { ReplayBufferSettingsView() }
         case .shortcuts:
             settingsPage { ShortcutsSettingsView() }
         case .advanced:

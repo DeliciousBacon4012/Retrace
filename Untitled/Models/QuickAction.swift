@@ -26,7 +26,7 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
     /// Whether the action takes a screenshot of some kind.
     var isScreenshot: Bool { captureMode != nil || capturesText || repeatsArea }
 
-    /// The screenshot actions, including Capture Text, for toolbars and the Capture tab.
+    /// The screenshot actions, including Capture Text, for toolbars and the Capture page.
     static var screenshots: [QuickAction] { all.filter { $0.captureMode != nil || $0.capturesText } }
     static var recordings: [QuickAction] { all.filter { $0.recordingMode != nil } }
 

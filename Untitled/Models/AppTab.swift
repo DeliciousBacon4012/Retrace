@@ -6,27 +6,34 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
     case capture
     case recents
     case general
-    case captureOptions
-    case output
+    case captureSettings
+    case afterCapture
+    case filesAndPrivacy
     case quickAccess
     case recording
+    case replayBuffer
     case shortcuts
     case advanced
 
     var id: String { rawValue }
 
     static let primary: [AppTab] = [.capture, .recents]
-    static let settings: [AppTab] = [.general, .captureOptions, .output, .quickAccess, .recording, .shortcuts, .advanced]
+    static let settings: [AppTab] = [
+        .general, .captureSettings, .afterCapture, .filesAndPrivacy, .quickAccess,
+        .recording, .replayBuffer, .shortcuts, .advanced,
+    ]
 
     var title: String {
         switch self {
         case .capture: String(localized: "Capture")
         case .recents: String(localized: "Recents")
         case .general: String(localized: "General")
-        case .captureOptions: String(localized: "After Capture")
-        case .output: String(localized: "Format and Output")
+        case .captureSettings: String(localized: "Capture")
+        case .afterCapture: String(localized: "After Capture")
+        case .filesAndPrivacy: String(localized: "Files & Privacy")
         case .quickAccess: String(localized: "Quick Access")
         case .recording: String(localized: "Recording")
+        case .replayBuffer: String(localized: "Replay Buffer")
         case .shortcuts: String(localized: "Shortcuts")
         case .advanced: String(localized: "Advanced")
         }
@@ -37,10 +44,12 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .capture: "camera.viewfinder"
         case .recents: "clock"
         case .general: "gearshape"
-        case .captureOptions: "checklist"
-        case .output: "doc.badge.gearshape"
+        case .captureSettings: "camera"
+        case .afterCapture: "checklist"
+        case .filesAndPrivacy: "lock.doc"
         case .quickAccess: "rectangle.stack"
         case .recording: "record.circle"
+        case .replayBuffer: "gobackward"
         case .shortcuts: "command"
         case .advanced: "slider.horizontal.3"
         }

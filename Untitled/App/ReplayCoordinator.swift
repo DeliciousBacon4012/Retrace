@@ -37,7 +37,7 @@ final class ReplayCoordinator {
     /// Saves the buffered clip to the save folder and shows it in Quick Access.
     func saveClip() async {
         guard buffer.isOn else {
-            ErrorPresenter.present(ReplayError.notRunning, recovery: String(localized: "Turn it on from the Capture tab or the menu bar, then save a replay any time."))
+            ErrorPresenter.present(ReplayError.notRunning, recovery: String(localized: "Turn it on from the Capture page or the menu bar, then save a replay any time."))
             return
         }
         do {
