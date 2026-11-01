@@ -35,6 +35,13 @@ final class SettingsStore {
     /// The most thumbnails shown at once; older ones close first.
     var quickAccessMaxVisible = Defaults.quickAccessMaxVisible { didSet { save(quickAccessMaxVisible, .quickAccessMaxVisible) } }
 
+    // MARK: Notifications
+
+    var showsToasts = Defaults.showsToasts { didSet { save(showsToasts, .showsToasts) } }
+    var toastPosition = Defaults.toastPosition { didSet { save(toastPosition.rawValue, .toastPosition) } }
+    /// Seconds each kind of toast stays, for kinds changed from their default. Zero means until dismissed.
+    private var storedToastSeconds: [String: Int] = [:] { didSet { save(storedToastSeconds, .toastSeconds) } }
+
     // MARK: Output
 
     var imageFormat = Defaults.imageFormat { didSet { save(imageFormat.rawValue, .imageFormat) } }
@@ -119,6 +126,15 @@ final class SettingsStore {
         return Array(valid.sorted().prefix(maximumSaveLastDurations))
     }
 
+    /// How long a kind of toast stays, in seconds. Zero means until it's clicked.
+    func toastSeconds(for kind: ToastKind) -> Int {
+        storedToastSeconds[kind.rawValue] ?? kind.defaultSeconds
+    }
+
+    func setToastSeconds(_ seconds: Int, for kind: ToastKind) {
+        storedToastSeconds[kind.rawValue] = seconds == kind.defaultSeconds ? nil : seconds
+    }
+
     /// The folder captures are saved to, as a file URL.
     var saveFolderURL: URL {
         URL(fileURLWithPath: saveFolderPath, isDirectory: true)
@@ -151,6 +167,12 @@ final class SettingsStore {
         quickAccessLayout = QuickAccessLayout(rawValue: value(.quickAccessLayout, default: "")) ?? Defaults.quickAccessLayout
         quickAccessSize = QuickAccessSize(rawValue: value(.quickAccessSize, default: "")) ?? Defaults.quickAccessSize
         quickAccessMaxVisible = min(max(value(.quickAccessMaxVisible, default: Defaults.quickAccessMaxVisible), 1), 8)
+        showsToasts = value(.showsToasts, default: Defaults.showsToasts)
+        toastPosition = ToastPosition(rawValue: value(.toastPosition, default: "")) ?? Defaults.toastPosition
+        // Keep only known kinds with a time Settings offers, so the picker always shows a choice.
+        storedToastSeconds = value(.toastSeconds, default: [String: Int]()).filter { key, seconds in
+            ToastKind(rawValue: key) != nil && ToastKind.secondsChoices.contains(seconds)
+        }
         imageFormat = ImageFormat(rawValue: value(.imageFormat, default: "")) ?? Defaults.imageFormat
         downscalesRetina = value(.downscalesRetina, default: Defaults.downscalesRetina)
         imageQuality = value(.imageQuality, default: Defaults.imageQuality)
@@ -231,6 +253,9 @@ private extension SettingsStore {
         case quickAccessLayout
         case quickAccessSize
         case quickAccessMaxVisible
+        case showsToasts
+        case toastPosition
+        case toastSeconds
         case imageFormat
         case downscalesRetina
         case imageQuality
@@ -268,6 +293,8 @@ private extension SettingsStore {
         static let quickAccessLayout = QuickAccessLayout.stack
         static let quickAccessSize = QuickAccessSize.medium
         static let quickAccessMaxVisible = 5
+        static let showsToasts = true
+        static let toastPosition = ToastPosition.topCenter
         static let imageFormat = ImageFormat.png
         static let downscalesRetina = false
         static let imageQuality = 0.85

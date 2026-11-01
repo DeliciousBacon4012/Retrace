@@ -21,7 +21,7 @@ final class AppDependencies {
     let editor: EditorPresenter
     let pins: PinController
     /// The short notices at the top of the screen, shared so they never stack up.
-    let toasts = CaptureToastController()
+    let toasts: CaptureToastController
 
     init(
         settings: SettingsStore,
@@ -36,6 +36,8 @@ final class AppDependencies {
         self.dockIcon = dockIcon
         self.clipboard = clipboard
         library = CaptureLibrary(folder: settings.saveFolderURL)
+        let toasts = CaptureToastController(settings: settings)
+        self.toasts = toasts
         let editor = EditorPresenter(settings: settings, clipboard: clipboard)
         self.editor = editor
         let pins = PinController(clipboard: clipboard)
@@ -61,7 +63,8 @@ final class AppDependencies {
             permissions: permissions,
             storage: FileCaptureStorage(),
             clipboard: clipboard,
-            quickAccess: quickAccess
+            quickAccess: quickAccess,
+            toasts: toasts
         )
         self.recording = recording
         let replay = ReplayCoordinator(settings: settings, permissions: permissions, storage: FileCaptureStorage(), quickAccess: quickAccess, toasts: toasts)

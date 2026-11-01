@@ -86,7 +86,7 @@ final class CaptureCoordinator {
             image = NSImage(pasteboard: pasteboard)
         }
         guard let image, let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            toast.show(.init(symbolName: "clipboard", title: String(localized: "No image on the clipboard"), detail: String(localized: "Copy an image, then try again.")))
+            toast.show(.init(kind: .error, symbolName: "clipboard", title: String(localized: "No image on the clipboard"), detail: String(localized: "Copy an image, then try again.")))
             return
         }
         let scale = image.size.width > 0 ? max(CGFloat(cgImage.width) / image.size.width, 1) : 1
@@ -139,7 +139,7 @@ final class CaptureCoordinator {
 
     private func showTextResult(_ content: RecognizedContent) {
         guard !content.isEmpty else {
-            toast.show(.init(symbolName: "text.magnifyingglass", title: String(localized: "No text found"), detail: String(localized: "Try a larger or sharper area.")))
+            toast.show(.init(kind: .error, symbolName: "text.magnifyingglass", title: String(localized: "No text found"), detail: String(localized: "Try a larger or sharper area.")))
             return
         }
         let copied = content.lines.isEmpty ? content.codes.joined(separator: "\n") : content.text
@@ -155,11 +155,11 @@ final class CaptureCoordinator {
         }
         let detail = copied.split(whereSeparator: \.isNewline).first.map(String.init)
         if let link = content.link {
-            toast.show(.init(symbolName: "qrcode.viewfinder", title: title, detail: link.absoluteString, actionTitle: String(localized: "Open Link")) {
+            toast.show(.init(kind: .textCopied, symbolName: "qrcode.viewfinder", title: title, detail: link.absoluteString, actionTitle: String(localized: "Open Link")) {
                 NSWorkspace.shared.open(link)
             })
         } else {
-            toast.show(.init(symbolName: "text.viewfinder", title: title, detail: detail))
+            toast.show(.init(kind: .textCopied, symbolName: "text.viewfinder", title: title, detail: detail))
         }
     }
 
@@ -234,6 +234,18 @@ final class CaptureCoordinator {
             editor.open(capture)
         } else if settings.showsQuickAccess {
             quickAccess.show(capture)
+        } else {
+            confirm(capture)
+        }
+    }
+
+    /// With Quick Access and the editor both off, a toast is the only sign the capture worked.
+    private func confirm(_ capture: CapturedImage) {
+        if let url = capture.fileURL {
+            let title = settings.copiesToClipboard ? String(localized: "Saved and copied") : String(localized: "Saved")
+            toast.show(.init(kind: .saved, symbolName: "checkmark.circle", title: title, detail: url.lastPathComponent))
+        } else if settings.copiesToClipboard {
+            toast.show(.init(kind: .imageCopied, symbolName: "doc.on.clipboard", title: String(localized: "Image copied")))
         }
     }
 

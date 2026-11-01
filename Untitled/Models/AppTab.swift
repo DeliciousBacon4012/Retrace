@@ -10,6 +10,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
     case afterCapture
     case filesAndPrivacy
     case quickAccess
+    case notifications
     case recording
     case replayBuffer
     case shortcuts
@@ -20,7 +21,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
     static let primary: [AppTab] = [.capture, .recents]
     static let settings: [AppTab] = [
         .general, .captureSettings, .afterCapture, .filesAndPrivacy, .quickAccess,
-        .recording, .replayBuffer, .shortcuts, .advanced,
+        .notifications, .recording, .replayBuffer, .shortcuts, .advanced,
     ]
 
     var title: String {
@@ -32,6 +33,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .afterCapture: String(localized: "After Capture")
         case .filesAndPrivacy: String(localized: "Files & Privacy")
         case .quickAccess: String(localized: "Quick Access")
+        case .notifications: String(localized: "Notifications")
         case .recording: String(localized: "Recording")
         case .replayBuffer: String(localized: "Replay Buffer")
         case .shortcuts: String(localized: "Shortcuts")
@@ -48,6 +50,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .afterCapture: "checklist"
         case .filesAndPrivacy: "lock.doc"
         case .quickAccess: "rectangle.stack"
+        case .notifications: "bell.badge"
         case .recording: "record.circle"
         case .replayBuffer: "gobackward"
         case .shortcuts: "command"
