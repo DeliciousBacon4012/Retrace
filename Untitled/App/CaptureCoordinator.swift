@@ -153,20 +153,31 @@ final class CaptureCoordinator {
         } else {
             title = String(localized: "Copied \(content.lines.count) lines")
         }
-        let detail = copied.split(whereSeparator: \.isNewline).first.map(String.init)
+        let app = settings.plainTextApp
+        let clipboard = clipboard
+        var actions: [CaptureToastController.Action] = [
+            .init(title: String(localized: "Open in \(PlainTextOpener.appName(for: app))"), systemImage: "doc.text") {
+                PlainTextOpener.open(copied, in: app)
+            },
+            .init(title: String(localized: "Copy Again"), systemImage: "doc.on.doc") {
+                clipboard.copy(text: copied)
+            },
+        ]
         if let link = content.link {
-            toast.show(.init(kind: .textCopied, symbolName: "qrcode.viewfinder", title: title, detail: link.absoluteString, actionTitle: String(localized: "Open Link")) {
-                NSWorkspace.shared.open(link)
-            })
-        } else {
-            toast.show(.init(kind: .textCopied, symbolName: "text.viewfinder", title: title, detail: detail))
+            actions.insert(.init(title: String(localized: "Open Link"), systemImage: "safari") { NSWorkspace.shared.open(link) }, at: 0)
         }
+        toast.show(.init(
+            kind: .textCopied,
+            symbolName: content.link == nil ? "text.viewfinder" : "qrcode.viewfinder",
+            title: title,
+            detail: copied,
+            actions: actions
+        ))
     }
 
     private func hasPermission() -> Bool {
         guard permissions.screenRecordingStatus == .granted else {
-            permissions.requestScreenRecordingAccess()
-            ErrorPresenter.present(CaptureError.permissionDenied, recovery: String(localized: "Turn on Untitled in System Settings › Privacy & Security › Screen & System Audio Recording, then try again."))
+            toast.showScreenRecordingNeeded(then: String(localized: "Try again."))
             return false
         }
         return true
@@ -241,11 +252,24 @@ final class CaptureCoordinator {
 
     /// With Quick Access and the editor both off, a toast is the only sign the capture worked.
     private func confirm(_ capture: CapturedImage) {
+        let editor = editor
+        let edit = CaptureToastController.Action(title: String(localized: "Edit"), systemImage: "pencil.and.outline") {
+            editor.open(capture)
+        }
         if let url = capture.fileURL {
             let title = settings.copiesToClipboard ? String(localized: "Saved and copied") : String(localized: "Saved")
-            toast.show(.init(kind: .saved, symbolName: "checkmark.circle", title: title, detail: url.lastPathComponent))
+            let showInFinder = CaptureToastController.Action(title: String(localized: "Show in Finder"), systemImage: "folder") {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+            toast.show(.init(kind: .saved, symbolName: "checkmark.circle", title: title, detail: url.lastPathComponent, actions: [showInFinder, edit]))
         } else if settings.copiesToClipboard {
-            toast.show(.init(kind: .imageCopied, symbolName: "doc.on.clipboard", title: String(localized: "Image copied")))
+            let save = CaptureToastController.Action(title: String(localized: "Save"), systemImage: "square.and.arrow.down") { [weak self] in
+                guard let self else { return }
+                var saved = capture
+                saved.fileURL = self.save(capture)
+                if saved.fileURL != nil { confirm(saved) }
+            }
+            toast.show(.init(kind: .imageCopied, symbolName: "doc.on.clipboard", title: String(localized: "Image copied"), actions: [edit, save]))
         }
     }
 

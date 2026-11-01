@@ -18,10 +18,24 @@ struct NotificationsSettingsView: View {
                 .pickerStyle(.segmented)
                 .disabled(!settings.showsToasts)
             } footer: {
-                Text("Toasts are short notices at the top of the screen, such as “Copied 3 lines”. Click one to close it.")
+                Text("Toasts are short notices at the top of the screen, such as “Copied 3 lines”. Hover over one to keep it and see what you can do with it, or click it to close it.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Captured Text") {
+                Picker("Lines of text shown", selection: $settings.toastPreviewLines) {
+                    ForEach(1...5, id: \.self) { lines in
+                        Text(lines, format: .number).tag(lines)
+                    }
+                }
+                Picker("Open text in", selection: $settings.plainTextApp) {
+                    ForEach(PlainTextApp.allCases) { app in
+                        Text(app.title).tag(app)
+                    }
+                }
+            }
+            .disabled(!settings.showsToasts)
 
             Section {
                 ForEach(ToastKind.allCases) { kind in

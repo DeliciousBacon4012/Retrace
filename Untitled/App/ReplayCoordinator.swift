@@ -11,13 +11,15 @@ final class ReplayCoordinator {
     @ObservationIgnored private let settings: SettingsStore
     @ObservationIgnored private let permissions: any PermissionProviding
     @ObservationIgnored private let storage: any CaptureStoring
+    @ObservationIgnored private let clipboard: any ClipboardWriting
     @ObservationIgnored private let quickAccess: QuickAccessController
     @ObservationIgnored private let toasts: CaptureToastController
 
-    init(settings: SettingsStore, permissions: any PermissionProviding, storage: any CaptureStoring, quickAccess: QuickAccessController, toasts: CaptureToastController) {
+    init(settings: SettingsStore, permissions: any PermissionProviding, storage: any CaptureStoring, clipboard: any ClipboardWriting, quickAccess: QuickAccessController, toasts: CaptureToastController) {
         self.settings = settings
         self.permissions = permissions
         self.storage = storage
+        self.clipboard = clipboard
         self.quickAccess = quickAccess
         self.toasts = toasts
     }
@@ -29,8 +31,7 @@ final class ReplayCoordinator {
 
     func setEnabled(_ enabled: Bool) {
         if enabled, permissions.screenRecordingStatus != .granted {
-            permissions.requestScreenRecordingAccess()
-            ErrorPresenter.present(CaptureError.permissionDenied, recovery: String(localized: "Turn on Untitled in System Settings › Privacy & Security › Screen & System Audio Recording, then turn the replay buffer on again."))
+            toasts.showScreenRecordingNeeded(then: String(localized: "Turn the replay buffer on again."))
             return
         }
         settings.replayBufferEnabled = enabled
@@ -52,9 +53,9 @@ final class ReplayCoordinator {
             if let lastSeconds, saved < Double(lastSeconds) - 0.5 {
                 // Less was buffered than asked for, so say how much the clip holds.
                 let length = Duration.seconds(Int(saved.rounded())).formatted(.units(allowed: [.minutes, .seconds], width: .abbreviated))
-                toasts.show(.init(kind: .recordingSaved, symbolName: "gobackward", title: String(localized: "Saved \(length)"), detail: String(localized: "That's all the replay buffer held so far.")))
+                toasts.show(.init(kind: .recordingSaved, symbolName: "gobackward", title: String(localized: "Saved \(length)"), detail: String(localized: "That's all the replay buffer held so far."), actions: .forMovie(at: url, clipboard: clipboard)))
             } else if !settings.showsQuickAccess {
-                toasts.show(.init(kind: .recordingSaved, symbolName: "gobackward", title: String(localized: "Replay saved"), detail: url.lastPathComponent))
+                toasts.show(.init(kind: .recordingSaved, symbolName: "gobackward", title: String(localized: "Replay saved"), detail: url.lastPathComponent, actions: .forMovie(at: url, clipboard: clipboard)))
             }
             guard settings.showsQuickAccess else { return }
             let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
