@@ -219,18 +219,29 @@ enum AnnotationRenderer {
         )
     }
 
+    /// Like a real marker, ink pools a little at the edges: the rim is drawn at full strength,
+    /// then the middle is replaced with a lighter coat. The mark's opacity applies on top.
     private static func drawHighlighter(_ mark: Annotation, in layer: inout GraphicsContext) {
         let color = mark.style.color.swiftUIColor
+        let width = mark.style.lineWidth
+        let rim = max(width * 0.08, 1)
+        var middle = layer
+        middle.blendMode = .copy
+        let lighter = color.opacity(0.8)
         if mark.isStraightStroke {
             // A straight band with just-softened corners, like a chisel marker pulled along a ruler.
             let a = mark.points[0]
             let b = mark.points[1]
-            let width = mark.style.lineWidth
-            let band = CGRect(x: 0, y: -width / 2, width: hypot(b.x - a.x, b.y - a.y), height: width)
+            let length = hypot(b.x - a.x, b.y - a.y)
             let turn = CGAffineTransform(translationX: a.x, y: a.y).rotated(by: atan2(b.y - a.y, b.x - a.x))
+            let band = CGRect(x: 0, y: -width / 2, width: length, height: width)
             layer.fill(Path(roundedRect: band, cornerRadius: width * 0.18).applying(turn), with: .color(color))
+            let inner = CGRect(x: 0, y: -width / 2 + rim, width: length, height: max(width - rim * 2, 0))
+            middle.fill(Path(inner).applying(turn).intersection(Path(roundedRect: band, cornerRadius: width * 0.18).applying(turn)), with: .color(lighter))
         } else {
-            layer.stroke(smoothPath(through: mark.points), with: .color(color), style: StrokeStyle(lineWidth: mark.style.lineWidth, lineCap: .round, lineJoin: .round))
+            let path = smoothPath(through: mark.points)
+            layer.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
+            middle.stroke(path, with: .color(lighter), style: StrokeStyle(lineWidth: max(width - rim * 2, 0), lineCap: .round, lineJoin: .round))
         }
     }
 

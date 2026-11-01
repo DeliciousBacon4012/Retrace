@@ -112,7 +112,8 @@ struct AnnotationCanvas: View {
                 if value.translation != .zero {
                     document.pointerDragged(
                         to: layout.imagePoint(for: value.location),
-                        constrained: NSEvent.modifierFlags.contains(.shift)
+                        constrained: NSEvent.modifierFlags.contains(.shift),
+                        freehand: NSEvent.modifierFlags.contains(.option)
                     )
                 }
             }
