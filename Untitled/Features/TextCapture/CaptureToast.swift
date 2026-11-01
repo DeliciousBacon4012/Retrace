@@ -244,15 +244,15 @@ private struct CaptureToastView: View {
     }
 }
 
-extension CaptureToastController.Action {
+extension [CaptureToastController.Action] {
     /// Open · Show in Finder · Copy, for a saved recording or replay.
-    static func forMovie(at url: URL, clipboard: any ClipboardWriting) -> [Self] {
+    static func forMovie(at url: URL, clipboard: any ClipboardWriting) -> Self {
         [
-            Self(title: String(localized: "Open"), systemImage: "play") { NSWorkspace.shared.open(url) },
-            Self(title: String(localized: "Show in Finder"), systemImage: "folder") {
+            Element(title: String(localized: "Open"), systemImage: "play") { NSWorkspace.shared.open(url) },
+            Element(title: String(localized: "Show in Finder"), systemImage: "folder") {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             },
-            Self(title: String(localized: "Copy"), systemImage: "doc.on.doc") { clipboard.copyFile(at: url) },
+            Element(title: String(localized: "Copy"), systemImage: "doc.on.doc") { clipboard.copyFile(at: url) },
         ]
     }
 }
