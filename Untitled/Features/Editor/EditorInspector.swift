@@ -243,6 +243,7 @@ private struct Swatch: View {
 /// The settings that only make sense for one tool.
 private struct ToolSection: View {
     @Bindable var document: EditorDocument
+    @AppStorage(EditorDocument.highlighterSnapsKey) private var snapsToText = true
     let tool: EditorTool
 
     var body: some View {
@@ -270,10 +271,18 @@ private struct ToolSection: View {
         case .highlighter:
             Section {
                 ValueSlider("Thickness", value: points(\.lineWidth), in: 4...60, unit: "pt")
+                Toggle("Snap to text", isOn: $snapsToText)
             } header: {
                 Text("Stroke")
             } footer: {
-                Text("Hold Shift while dragging for a perfectly straight stroke.")
+                if snapsToText {
+                    Text("Drag along a line of text to cover its words neatly. Hold Shift for a straight stroke anywhere.")
+                } else {
+                    Text("Hold Shift while dragging for a perfectly straight stroke.")
+                }
+            }
+            .onChange(of: snapsToText) {
+                if snapsToText { document.prepareTextLines() }
             }
         case .text:
             Section("Size") {
