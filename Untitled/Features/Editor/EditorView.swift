@@ -18,6 +18,9 @@ struct EditorView: View {
         CanvasLayout(imageSize: document.imageSize, scale: document.scale, zoom: nil, pan: .zero, focus: document.visibleRect, in: canvasSize).fitFactor
     }
 
+    /// Small enough for a small screenshot, big enough for the toolbar and inspector.
+    static let minimumSize = CGSize(width: 640, height: 440)
+
     /// Room kept clear on the right for the floating inspector, so it never covers the image.
     private var inspectorInset: CGFloat {
         showsInspector ? EditorInspector.width + Design.spacingL * 2 : 0
@@ -38,7 +41,7 @@ struct EditorView: View {
         .background(Color(nsColor: .underPageBackgroundColor))
         .animation(.panel, value: showsInspector)
         .background { shortcutButtons }
-        .frame(minWidth: 720, minHeight: 440)
+        .frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height)
         .toolbar { toolbar }
         .sheet(item: $exportItem) { item in
             ExportSheet(item: item, folder: actions.exportFolder, options: actions.exportOptions) { url in
