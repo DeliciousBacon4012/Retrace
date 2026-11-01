@@ -198,7 +198,11 @@ final class EditorDocument {
     @ObservationIgnored private var gestureSnapshot: Snapshot?
     @ObservationIgnored private var textEditSnapshot: Snapshot?
     @ObservationIgnored private var lastStyleEdit: (id: Annotation.ID?, tool: EditorTool, date: Date)?
+    /// Blurred and pixelated copies of the screenshot, each as big as the screenshot itself
+    /// (about 60 MB at 5K). Only a few are kept: see `keepRedactionLayer`.
     @ObservationIgnored private var redactionLayers: [String: CGImage] = [:]
+    /// Layer keys, least recently used first.
+    @ObservationIgnored private var redactionLayerUse: [String] = []
     @ObservationIgnored private var pendingRedactions: Set<String> = []
     /// Bumped when a background redaction layer is ready, so the canvas redraws with it.
     private var redactionVersion = 0
@@ -623,7 +627,6 @@ final class EditorDocument {
 
     // MARK: Redaction
 
-    /// The blurred or pixelated copy of the screenshot that a redaction mark reveals.
     /// The blurred or pixelated copy of the screenshot for the canvas. A strength that isn't
     /// ready yet is made in the background while the nearest finished one stands in, so
     /// dragging the Strength slider never stalls the window.
@@ -631,27 +634,57 @@ final class EditorDocument {
         guard redaction != .solid else { return nil }
         _ = redactionVersion
         let level = Self.level(for: strength)
-        if let cached = redactionLayers[Self.key(redaction, level)] { return cached }
+        let key = Self.key(redaction, level)
+        if let cached = redactionLayers[key] {
+            touchRedactionLayer(key)
+            return cached
+        }
         prepareRedaction(redaction, levels: [level])
         let nearest = (0...10).sorted { abs($0 - level) < abs($1 - level) }
         return nearest.lazy.compactMap { self.redactionLayers[Self.key(redaction, $0)] }.first
     }
 
-    /// The exact layer, made right away if needed. Used when exporting.
+    /// The exact layer, made right away if needed. Used when exporting; a layer made here
+    /// isn't kept, since the export is done with it as soon as it's drawn.
     func redactedImageNow(_ redaction: Redaction, strength: Double) -> CGImage? {
         guard redaction != .solid else { return nil }
         let level = Self.level(for: strength)
         if let cached = redactionLayers[Self.key(redaction, level)] { return cached }
-        let layer = Self.redacted(image, redaction: redaction, level: Double(level) / 10, scale: scale)
-        redactionLayers[Self.key(redaction, level)] = layer
-        return layer
+        return Self.redacted(image, redaction: redaction, level: Double(level) / 10, scale: scale)
     }
 
-    /// Makes every strength of a redaction in the background, nearest to the current one first.
+    /// Makes the current strength and its two neighbours in the background, so nudging the
+    /// Strength slider is instant. Further strengths are made when the slider reaches them.
     func prepareRedaction(_ redaction: Redaction, around strength: Double? = nil) {
         guard redaction != .solid else { return }
         let center = Self.level(for: strength ?? style(for: .redact).strength)
-        prepareRedaction(redaction, levels: (0...10).sorted { abs($0 - center) < abs($1 - center) })
+        prepareRedaction(redaction, levels: [center, center - 1, center + 1].filter { (0...10).contains($0) })
+    }
+
+    /// The most layers kept beyond the ones marks on the canvas are showing.
+    private static let spareRedactionLayers = 3
+
+    private func touchRedactionLayer(_ key: String) {
+        guard redactionLayerUse.last != key else { return }
+        redactionLayerUse.removeAll { $0 == key }
+        redactionLayerUse.append(key)
+    }
+
+    /// Keeps `layer` and lets go of the least recently used ones beyond a few spares.
+    /// Layers that marks on the canvas, or the redact tool itself, are using always stay;
+    /// dropping them would only make the canvas ask for them again.
+    private func keepRedactionLayer(_ layer: CGImage, for key: String) {
+        redactionLayers[key] = layer
+        touchRedactionLayer(key)
+        var inUse = Set(annotations.filter { $0.tool == .redact }.map { Self.key($0.style.redaction, Self.level(for: $0.style.strength)) })
+        let toolStyle = style(for: .redact)
+        inUse.insert(Self.key(toolStyle.redaction, Self.level(for: toolStyle.strength)))
+        var spares = redactionLayerUse.filter { !inUse.contains($0) }
+        while spares.count > Self.spareRedactionLayers {
+            let oldest = spares.removeFirst()
+            redactionLayers[oldest] = nil
+            redactionLayerUse.removeAll { $0 == oldest }
+        }
     }
 
     private func prepareRedaction(_ redaction: Redaction, levels: [Int]) {
@@ -667,7 +700,7 @@ final class EditorDocument {
                 let key = Self.key(redaction, level)
                 self.pendingRedactions.remove(key)
                 if let layer {
-                    self.redactionLayers[key] = layer
+                    self.keepRedactionLayer(layer, for: key)
                     self.redactionVersion += 1
                 }
             }

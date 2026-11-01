@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         dependencies.start()
+        Task.detached(priority: .utility) { ReplayWriter.removeLeftovers() }
         launch.finishLaunching(opensWindowSetting: dependencies.settings.opensWindowAtLaunch)
         #if DEBUG
         // Lets automated checks open the editor: `open Untitled.app --args -UntitledDebugOpenImage <path>`.
