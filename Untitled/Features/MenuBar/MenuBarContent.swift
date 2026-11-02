@@ -9,6 +9,7 @@ struct MenuBarContent: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         if let remaining = dependencies.recording.countdown {
@@ -65,7 +66,7 @@ struct MenuBarContent: View {
                 RecentTextMenu()
             } else {
                 Button("Show Recents", systemImage: "clock") {
-                    MainWindowRouter.shared.show(.recents, using: openWindow)
+                    MainWindowRouter.shared.show(using: openWindow)
                 }
             }
         }
@@ -75,7 +76,7 @@ struct MenuBarContent: View {
                 MainWindowRouter.shared.show(using: openWindow)
             }
             Button("Settings…", systemImage: "gearshape") {
-                MainWindowRouter.shared.show(.general, using: openWindow)
+                MainWindowRouter.shared.showSettings(using: openSettings)
             }
             .keyboardShortcut(",")
         }
@@ -143,7 +144,6 @@ struct QuickActionButton: View {
         Button(title, systemImage: action.symbolName) {
             dependencies.perform(action)
         }
-        .labelStyle(.titleAndIcon)
         .disabled(!action.isAvailable || (action.savesReplay && !dependencies.replay.buffer.isOn))
     }
 
@@ -173,7 +173,7 @@ private struct RecentTextMenu: View {
             }
             Divider()
             Button("Show All in Recents") {
-                MainWindowRouter.shared.show(.recents, recentsFilter: .text, using: openWindow)
+                MainWindowRouter.shared.show(recentsFilter: .text, using: openWindow)
             }
         }
     }

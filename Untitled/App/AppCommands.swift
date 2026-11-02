@@ -6,17 +6,8 @@ struct AppCommands: Commands {
     let dependencies: AppDependencies
 
     @Environment(\.openWindow) private var openWindow
-    @FocusedValue(\.selectedTab) private var selectedTab
 
     var body: some Commands {
-        // Settings live in the main window's sidebar, so ⌘, opens it on General.
-        CommandGroup(replacing: .appSettings) {
-            Button("Settings…") {
-                MainWindowRouter.shared.show(.general, using: openWindow)
-            }
-            .keyboardShortcut(",")
-        }
-
         CommandGroup(after: .newItem) {
             Button("Open…") {
                 let panel = NSOpenPanel()
@@ -48,17 +39,6 @@ struct AppCommands: Commands {
             SaveLastMenu()
                 .environment(dependencies)
                 .environment(dependencies.settings)
-        }
-
-        CommandGroup(before: .toolbar) {
-            ForEach(Array(AppTab.primary.enumerated()), id: \.element) { index, tab in
-                Button(tab.title) {
-                    selectedTab?.wrappedValue = tab
-                }
-                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
-                .disabled(selectedTab == nil)
-            }
-            Divider()
         }
 
         CommandGroup(replacing: .help) {

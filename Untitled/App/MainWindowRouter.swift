@@ -2,34 +2,40 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// Lets places outside the main window, such as the menu bar and the Settings command,
-/// choose which page it shows the next time it appears.
+/// Lets places outside the main window, such as the menu bar and toasts, open it or the
+/// Settings window, on the Recents filter or Settings tab they need.
 @Observable
 final class MainWindowRouter {
     static let shared = MainWindowRouter()
 
-    /// A page to switch to. The main window clears it once shown.
-    var pending: AppTab?
-    /// A Recents filter to switch to. Recents clears it once applied.
+    /// A Recents filter to switch to. The main window clears it once applied.
     var pendingRecentsFilter: LibraryViewModel.KindFilter?
     /// Counts requests from code that can't open windows itself, such as a toast's button.
     /// `WindowRequestPresenter` opens the window for each one.
     private(set) var openRequests = 0
 
-    /// Brings the main window forward, opening it if needed, on `page` if one is given.
-    /// The app is activated too, since a menu bar app is often in the background.
-    func show(_ page: AppTab? = nil, recentsFilter: LibraryViewModel.KindFilter? = nil, using openWindow: OpenWindowAction) {
-        if let page { pending = page }
+    /// Brings the main window forward, opening it if needed. The app is activated too,
+    /// since a menu bar app is often in the background.
+    func show(recentsFilter: LibraryViewModel.KindFilter? = nil, using openWindow: OpenWindowAction) {
         if let recentsFilter { pendingRecentsFilter = recentsFilter }
-        openWindow(id: WindowID.main)
         NSApplication.shared.activate()
+        openWindow(id: WindowID.main)
     }
 
-    /// Like `show(_:recentsFilter:using:)`, for code with no `openWindow` at hand.
-    func request(_ page: AppTab? = nil, recentsFilter: LibraryViewModel.KindFilter? = nil) {
-        if let page { pending = page }
+    /// Like `show(recentsFilter:using:)`, for code with no `openWindow` at hand.
+    func request(recentsFilter: LibraryViewModel.KindFilter? = nil) {
         if let recentsFilter { pendingRecentsFilter = recentsFilter }
         openRequests += 1
+    }
+
+    /// Opens Settings, on `pane` if one is given, otherwise on the tab last used.
+    /// Activating first brings the window in front even while Untitled has no Dock icon.
+    func showSettings(_ pane: SettingsPane? = nil, using openSettings: OpenSettingsAction) {
+        if let pane {
+            UserDefaults.standard.set(pane.rawValue, forKey: SettingsPane.storageKey)
+        }
+        NSApplication.shared.activate()
+        openSettings()
     }
 }
 

@@ -3,15 +3,16 @@ import QuickLook
 import SwiftUI
 
 /// Every screenshot and recording in the save folder, and the text Capture Text copied,
-/// newest first.
+/// newest first. This is the main window's content; its filter lives in the window toolbar.
 struct LibraryView: View {
+    @Bindable var viewModel: LibraryViewModel
+
     @Environment(AppDependencies.self) private var dependencies
-    @State private var viewModel = LibraryViewModel()
     /// The text card that was just copied, which says so for a moment.
     @State private var copiedSnippet: TextSnippet.ID?
     @FocusState private var isGridFocused: Bool
 
-    private let columns = [GridItem(.adaptive(minimum: 180, maximum: 280), spacing: 18)]
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 14)]
 
     var body: some View {
         let library = dependencies.library
@@ -19,7 +20,7 @@ struct LibraryView: View {
         let items = viewModel.visibleItems(files: library.items, snippets: history.snippets)
 
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 22) {
+            LazyVGrid(columns: columns, spacing: 18) {
                 ForEach(items) { item in
                     cell(for: item)
                         .onTapGesture(count: 2) { open(item) }
@@ -36,7 +37,7 @@ struct LibraryView: View {
                         .contextMenu { contextMenu(for: item, in: items) }
                 }
             }
-            .padding(20)
+            .padding(16)
         }
         .focusable()
         .focused($isGridFocused)
@@ -51,9 +52,6 @@ struct LibraryView: View {
         .onExitCommand { viewModel.selection.removeAll() }
         .quickLookPreview($viewModel.previewURL, in: items.compactMap(\.file).map(\.url))
         .overlay { emptyState(library: library, history: history, isEmpty: items.isEmpty) }
-        .searchable(text: $viewModel.searchText, placement: .toolbar, prompt: Text("Search Recents"))
-        .navigationSubtitle(Text("\(items.count) items"))
-        .toolbar { toolbar(library: library) }
         .onChange(of: library.items) { pruneSelection() }
         .onChange(of: history.snippets) { pruneSelection() }
         .onAppear(perform: applyPendingFilter)
@@ -73,25 +71,6 @@ struct LibraryView: View {
             LibraryCell(item: file, isSelected: viewModel.selection.contains(item.id))
         case .text(let snippet):
             TextCard(snippet: snippet, isSelected: viewModel.selection.contains(item.id), isCopied: copiedSnippet == snippet.id)
-        }
-    }
-
-    /// The filter and the folder live in the window toolbar, where macOS draws them on glass.
-    @ToolbarContentBuilder
-    private func toolbar(library: CaptureLibrary) -> some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            Picker("Show", selection: $viewModel.kindFilter) {
-                ForEach(LibraryViewModel.KindFilter.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-        }
-        ToolbarItem {
-            Button("Show in Finder", systemImage: "folder") {
-                NSWorkspace.shared.activateFileViewerSelecting([library.folder])
-            }
-            .help("Show the save folder in Finder")
         }
     }
 
@@ -128,9 +107,9 @@ struct LibraryView: View {
             }
         } else if isEmpty {
             ContentUnavailableView {
-                Label("Nothing Here Yet", systemImage: "photo.on.rectangle.angled")
+                Label("No Captures Yet", systemImage: "camera.viewfinder")
             } description: {
-                Text("Screenshots, recordings and text you capture appear here.")
+                Text("Use the buttons above or a shortcut. Screenshots, recordings and text you capture appear here.")
             }
         }
     }
@@ -214,10 +193,10 @@ private struct TextCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(snippet.text)
                 .font(.callout)
-                .lineLimit(7)
+                .lineLimit(5)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(12)
-                .frame(height: 150)
+                .frame(height: 116)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
                 .overlay(alignment: .bottomTrailing) {
                     if isCopied {
@@ -225,8 +204,8 @@ private struct TextCard: View {
                             .font(.caption.weight(.medium))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(.thinMaterial, in: .capsule)
-                            .padding(10)
+                            .glassEffect(.regular, in: .capsule)
+                            .padding(8)
                             .transition(.opacity)
                     }
                 }
@@ -262,15 +241,16 @@ private struct LibraryCell: View {
         VStack(alignment: .leading, spacing: 8) {
             FileThumbnail(url: item.url)
                 .padding(6)
-                .frame(height: 150)
+                .frame(height: 116)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
                 .overlay(alignment: .bottomLeading) {
                     if item.kind == .video {
                         Image(systemName: "video.fill")
                             .font(.caption)
                             .padding(6)
-                            .background(.thinMaterial, in: .capsule)
-                            .padding(10)
+                            .glassEffect(.regular, in: .capsule)
+                            .padding(8)
+                            .accessibilityLabel("Recording")
                     }
                 }
                 .overlay {
@@ -298,7 +278,7 @@ private struct LibraryCell: View {
 #if DEBUG
 #Preview {
     let dependencies = AppDependencies.preview(screenRecording: .granted)
-    LibraryView()
+    LibraryView(viewModel: LibraryViewModel())
         .environment(dependencies)
         .frame(width: 800, height: 560)
 }

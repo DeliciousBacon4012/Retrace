@@ -6,7 +6,7 @@ struct ShortcutsSettingsView: View {
     @Environment(SettingsStore.self) private var settings
 
     var body: some View {
-        Form {
+        Group {
             Section("Screenshots") {
                 ForEach(QuickAction.all.filter(\.isScreenshot)) { row(for: $0) }
             }
@@ -39,7 +39,6 @@ struct ShortcutsSettingsView: View {
                 }
             }
         }
-        .formStyle(.grouped)
     }
 
     @ViewBuilder
@@ -84,6 +83,6 @@ struct ShortcutsSettingsView: View {
     ShortcutsSettingsView()
         .environment(dependencies)
         .environment(dependencies.settings)
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif
