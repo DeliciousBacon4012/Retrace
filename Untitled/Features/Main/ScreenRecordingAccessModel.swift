@@ -1,9 +1,9 @@
 import Foundation
 import Observation
 
-/// State and actions for the Capture page.
+/// Screen Recording access as the main window shows it, and the ways to fix it.
 @Observable
-final class CaptureHomeViewModel {
+final class ScreenRecordingAccessModel {
     private(set) var screenRecording: PermissionStatus
     private(set) var isChecking = false
     /// True after a manual check still found no access, so the screen can suggest a restart.

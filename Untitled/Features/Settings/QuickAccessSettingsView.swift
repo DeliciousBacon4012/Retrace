@@ -7,7 +7,7 @@ struct QuickAccessSettingsView: View {
     var body: some View {
         @Bindable var settings = settings
 
-        Form {
+        Group {
             Section {
                 Toggle("Show a thumbnail after each capture", isOn: $settings.showsQuickAccess)
             } footer: {
@@ -63,7 +63,6 @@ struct QuickAccessSettingsView: View {
                 Text("The countdown pauses while the pointer is over the thumbnails.")
             }
         }
-        .formStyle(.grouped)
         .disabled(!settings.showsQuickAccess)
     }
 }
@@ -72,6 +71,6 @@ struct QuickAccessSettingsView: View {
 #Preview {
     QuickAccessSettingsView()
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif

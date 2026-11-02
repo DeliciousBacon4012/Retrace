@@ -12,7 +12,8 @@ struct UntitledApp: App {
                 .environment(dependencies)
                 .environment(dependencies.settings)
         }
-        .defaultSize(width: 920, height: 600)
+        .defaultSize(width: 600, height: 440)
+        .windowToolbarStyle(.unified(showsTitle: false))
         // The launch decides whether this opens (see LaunchContext), not window restoration,
         // so starting at login stays in the menu bar.
         .defaultLaunchBehavior(.suppressed)
@@ -20,6 +21,12 @@ struct UntitledApp: App {
         .commands {
             AppCommands(dependencies: dependencies)
             EditorCommands(editors: dependencies.editor)
+        }
+
+        Settings {
+            SettingsView()
+                .environment(dependencies)
+                .environment(dependencies.settings)
         }
 
         Window("Feature Roadmap", id: WindowID.roadmap) {

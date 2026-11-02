@@ -7,7 +7,7 @@ struct NotificationsSettingsView: View {
     var body: some View {
         @Bindable var settings = settings
 
-        Form {
+        Group {
             Section {
                 Toggle("Show toasts", isOn: $settings.showsToasts)
                 Picker("Position", selection: $settings.toastPosition) {
@@ -60,7 +60,6 @@ struct NotificationsSettingsView: View {
             }
             .disabled(!settings.showsToasts)
         }
-        .formStyle(.grouped)
     }
 
     private func seconds(for kind: ToastKind) -> Binding<Int> {
@@ -76,6 +75,6 @@ struct NotificationsSettingsView: View {
 #Preview {
     NotificationsSettingsView()
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif

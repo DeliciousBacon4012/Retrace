@@ -7,7 +7,7 @@ struct AfterCaptureSettingsView: View {
     var body: some View {
         @Bindable var settings = settings
 
-        Form {
+        Group {
             Section {
                 Toggle("Copy to clipboard", isOn: $settings.copiesToClipboard)
                 Toggle("Save to folder", isOn: $settings.savesToFolder)
@@ -15,7 +15,6 @@ struct AfterCaptureSettingsView: View {
                 Toggle("Open in editor", isOn: $settings.opensEditor)
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -23,6 +22,6 @@ struct AfterCaptureSettingsView: View {
 #Preview {
     AfterCaptureSettingsView()
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif

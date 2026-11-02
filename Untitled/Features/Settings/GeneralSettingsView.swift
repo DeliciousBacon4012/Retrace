@@ -11,7 +11,7 @@ struct GeneralSettingsView: View {
     var body: some View {
         @Bindable var settings = settings
 
-        Form {
+        Group {
             Section {
                 Toggle("Open at login", isOn: Binding(
                     get: { viewModel.launchesAtLogin },
@@ -35,7 +35,6 @@ struct GeneralSettingsView: View {
                 LabeledContent("Version", value: Bundle.main.displayVersion)
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -43,6 +42,6 @@ struct GeneralSettingsView: View {
 #Preview {
     GeneralSettingsView(launchAtLogin: PreviewLaunchAtLoginService())
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif

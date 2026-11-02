@@ -7,7 +7,7 @@ struct RecordingSettingsView: View {
     var body: some View {
         @Bindable var settings = settings
 
-        Form {
+        Group {
             Section("Video") {
                 Picker("Codec", selection: $settings.videoCodec) {
                     ForEach(VideoCodec.allCases) { Text($0.title).tag($0) }
@@ -37,7 +37,6 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -45,6 +44,6 @@ struct RecordingSettingsView: View {
 #Preview {
     RecordingSettingsView()
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif

@@ -9,7 +9,7 @@ struct ReplayBufferSettingsView: View {
     var body: some View {
         @Bindable var settings = settings
 
-        Form {
+        Group {
             Section {
                 // Turning it on goes through the coordinator, which asks for screen access first.
                 Toggle("Keep a replay buffer", isOn: Binding(
@@ -80,7 +80,6 @@ struct ReplayBufferSettingsView: View {
             }
         }
         .animation(.response, value: settings.saveLastDurations)
-        .formStyle(.grouped)
     }
 
     private var canAdd: Bool {
@@ -95,6 +94,6 @@ struct ReplayBufferSettingsView: View {
     ReplayBufferSettingsView()
         .environment(dependencies)
         .environment(dependencies.settings)
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif

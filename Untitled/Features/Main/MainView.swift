@@ -1,106 +1,159 @@
+import AppKit
 import SwiftUI
 
-/// The main window: a dashboard with the capture home, recents, and every setting in
-/// one sidebar, the way a menu bar app's window usually works. The system sidebar and
-/// toolbar draw in Liquid Glass on their own.
+/// The main window: your captures as the content, with capture, record, filter and
+/// Settings on the window toolbar, which macOS draws as Liquid Glass over them.
+/// There's no sidebar; settings live in their own window.
 struct MainView: View {
     @Environment(AppDependencies.self) private var dependencies
-    @SceneStorage("selectedTab") private var selection: AppTab = .capture
-    @State private var router = MainWindowRouter.shared
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selection) {
-                Section {
-                    ForEach(AppTab.primary) { tab in
-                        Label(tab.title, systemImage: tab.symbolName).tag(tab)
-                    }
-                }
-                Section("Settings") {
-                    ForEach(AppTab.settings) { tab in
-                        Label(tab.title, systemImage: tab.symbolName).tag(tab)
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
-        } detail: {
-            detail
-                .navigationTitle(selection.title)
-        }
-        .focusedSceneValue(\.selectedTab, $selection)
-        .toolbar {
-            CaptureToolbar(capture: dependencies.capture)
-        }
-        .onAppear(perform: applyPendingPage)
-        .onChange(of: router.pending) { applyPendingPage() }
-        .frame(minWidth: 760, minHeight: 500)
-    }
-
-    @ViewBuilder
-    private var detail: some View {
-        switch selection {
-        case .capture:
-            CaptureHomeView(showRecents: { selection = .recents })
-        case .recents:
-            LibraryView()
-        case .general:
-            settingsPage { GeneralSettingsView(launchAtLogin: dependencies.launchAtLogin) }
-        case .captureSettings:
-            settingsPage { CaptureSettingsView() }
-        case .afterCapture:
-            settingsPage { AfterCaptureSettingsView() }
-        case .editor:
-            settingsPage { EditorSettingsView() }
-        case .filesAndPrivacy:
-            settingsPage { FilesPrivacySettingsView() }
-        case .quickAccess:
-            settingsPage { QuickAccessSettingsView() }
-        case .notifications:
-            settingsPage { NotificationsSettingsView() }
-        case .recording:
-            settingsPage { RecordingSettingsView() }
-        case .replayBuffer:
-            settingsPage { ReplayBufferSettingsView() }
-        case .shortcuts:
-            settingsPage { ShortcutsSettingsView() }
-        case .advanced:
-            settingsPage { AdvancedSettingsView() }
-        }
-    }
-
-    /// Settings forms keep a comfortable reading width in a wide window.
-    private func settingsPage(@ViewBuilder _ content: () -> some View) -> some View {
-        content()
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
-    }
-
-    private func applyPendingPage() {
-        guard let page = router.pending else { return }
-        selection = page
-        router.pending = nil
+        MainContent(access: ScreenRecordingAccessModel(permissions: dependencies.permissions))
     }
 }
 
-extension FocusedValues {
-    /// The main window's page, so View menu commands can switch it.
-    @Entry var selectedTab: Binding<AppTab>?
+private struct MainContent: View {
+    @State var access: ScreenRecordingAccessModel
+    @State private var library = LibraryViewModel()
+
+    @Environment(AppDependencies.self) private var dependencies
+
+    var body: some View {
+        LibraryView(viewModel: library)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if access.screenRecording == .notGranted {
+                    PermissionBanner(model: access)
+                        .padding([.horizontal, .top], 16)
+                        .padding(.bottom, 4)
+                        .transition(.opacity)
+                }
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .navigation) {
+                    ForEach(QuickAction.screenshots) { action in
+                        CaptureButton(action: action)
+                    }
+                }
+                ToolbarSpacer(.fixed, placement: .navigation)
+                ToolbarItem(placement: .navigation) {
+                    RecordControl()
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    FilterMenu(viewModel: library)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    SettingsLink {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    .help("Settings  ⌘,")
+                }
+            }
+            .frame(minWidth: 520, minHeight: 340)
+            .animation(.panel, value: access.screenRecording)
+            .task {
+                await access.watchScreenRecording()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                access.refresh()
+            }
+    }
 }
 
-/// Capture buttons in the window toolbar. macOS groups them on one glass capsule.
-private struct CaptureToolbar: ToolbarContent {
-    let capture: CaptureCoordinator
+/// One screenshot mode. The toolbar shows its symbol; the tooltip names it and its shortcut.
+private struct CaptureButton: View {
+    let action: QuickAction
 
-    var body: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            ForEach(QuickAction.screenshots) { action in
-                Button(action.title, systemImage: action.symbolName) {
-                    Task { await capture.run(action) }
-                }
-                .help(action.title)
-                .disabled(capture.isCapturing)
-            }
+    @Environment(AppDependencies.self) private var dependencies
+    @Environment(SettingsStore.self) private var settings
+
+    var body: some View {
+        Button(action.title, systemImage: action.symbolName) {
+            Task { await dependencies.capture.run(action) }
         }
+        .help(helpText)
+        .disabled(dependencies.capture.isCapturing)
+    }
+
+    private var helpText: String {
+        guard let shortcut = settings.shortcuts[action.id] else { return action.title }
+        return "\(action.title)  \(shortcut.displayString)"
+    }
+}
+
+/// Click to record an area; the menu holds the other recordings and the replay buffer.
+/// While recording, it becomes the one red Stop button.
+private struct RecordControl: View {
+    @Environment(AppDependencies.self) private var dependencies
+    @Environment(SettingsStore.self) private var settings
+
+    var body: some View {
+        let recording = dependencies.recording
+        if recording.countdown != nil {
+            Button("Cancel Recording", systemImage: "xmark") {
+                recording.cancelCountdown()
+            }
+            .help("Cancel the countdown")
+        } else if recording.isRecording {
+            Button("Stop Recording", systemImage: "stop.fill") {
+                recording.recorder.stop()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .disabled(recording.recorder.state == .finishing)
+            .help("Stop Recording")
+        } else {
+            Menu {
+                ForEach(QuickAction.recordings) { action in
+                    QuickActionButton(action: action)
+                        .menuShortcut(settings.shortcuts[action.id])
+                }
+                Divider()
+                Toggle("Replay Buffer", isOn: Binding(
+                    get: { settings.replayBufferEnabled },
+                    set: { dependencies.replay.setEnabled($0) }
+                ))
+                SaveLastMenu()
+            } label: {
+                Label("Record", systemImage: dependencies.replay.buffer.isOn ? "record.circle.fill" : "record.circle")
+            } primaryAction: {
+                Task { await recording.toggle(.area) }
+            }
+            .help(recordHelp)
+            .disabled(recording.recorder.state != .idle)
+        }
+    }
+
+    private var recordHelp: String {
+        let base = String(localized: "Record Area. Open the menu for more.")
+        return dependencies.replay.buffer.isOn ? base + " " + String(localized: "Replay buffer is on.") : base
+    }
+}
+
+/// Which captures show, plus the save folder. The symbol fills in while a filter is on.
+private struct FilterMenu: View {
+    @Bindable var viewModel: LibraryViewModel
+
+    @Environment(SettingsStore.self) private var settings
+
+    var body: some View {
+        Menu {
+            Picker("Show", selection: $viewModel.kindFilter) {
+                ForEach(LibraryViewModel.KindFilter.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Button("Show Save Folder in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([settings.saveFolderURL])
+            }
+        } label: {
+            Label(
+                "Filter",
+                systemImage: viewModel.kindFilter == .all
+                    ? "line.3.horizontal.decrease.circle"
+                    : "line.3.horizontal.decrease.circle.fill"
+            )
+        }
+        .help(viewModel.kindFilter == .all ? String(localized: "Show All") : String(localized: "Showing \(viewModel.kindFilter.title)"))
     }
 }
 
@@ -110,6 +163,6 @@ private struct CaptureToolbar: ToolbarContent {
     MainView()
         .environment(dependencies)
         .environment(dependencies.settings)
-        .frame(width: 960, height: 620)
+        .frame(width: 600, height: 440)
 }
 #endif

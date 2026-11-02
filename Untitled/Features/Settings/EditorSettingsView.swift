@@ -13,7 +13,7 @@ struct EditorSettingsView: View {
     var body: some View {
         @Bindable var settings = settings
 
-        Form {
+        Group {
             Section {
                 Toggle("Open after each screenshot", isOn: $settings.opensEditor)
                 Toggle("Show the inspector", isOn: $showsInspector)
@@ -55,7 +55,6 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
         .animation(.response, value: palette)
         .confirmationDialog("Reset every tool to its original style?", isPresented: $confirmsReset) {
             Button("Reset Tool Styles", role: .destructive) {
@@ -93,6 +92,6 @@ private struct PaletteStrip: View {
     EditorSettingsView()
         .environment(dependencies)
         .environment(dependencies.settings)
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif

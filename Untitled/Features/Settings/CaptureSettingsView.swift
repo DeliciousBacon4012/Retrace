@@ -7,7 +7,7 @@ struct CaptureSettingsView: View {
     var body: some View {
         @Bindable var settings = settings
 
-        Form {
+        Group {
             Section {
                 Toggle("Include the pointer", isOn: $settings.includesCursor)
                 Toggle("Include window shadow", isOn: $settings.includesWindowShadow)
@@ -17,7 +17,6 @@ struct CaptureSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -25,6 +24,6 @@ struct CaptureSettingsView: View {
 #Preview {
     CaptureSettingsView()
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif

@@ -10,7 +10,7 @@ struct AdvancedSettingsView: View {
     var body: some View {
         @Bindable var settings = settings
 
-        Form {
+        Group {
             Section {
                 Picker("Text history", selection: $settings.textHistoryLimit) {
                     ForEach(SettingsStore.textHistoryLimits, id: \.self) { limit in
@@ -93,7 +93,6 @@ struct AdvancedSettingsView: View {
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear {
             screenRecording = dependencies.permissions.screenRecordingStatus
         }
@@ -113,6 +112,6 @@ struct AdvancedSettingsView: View {
     AdvancedSettingsView()
         .environment(dependencies)
         .environment(dependencies.settings)
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif

@@ -8,7 +8,7 @@ struct FilesPrivacySettingsView: View {
     var body: some View {
         @Bindable var settings = settings
 
-        Form {
+        Group {
             Section {
                 LabeledContent("Save to") {
                     HStack {
@@ -88,7 +88,6 @@ struct FilesPrivacySettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
         .animation(.response, value: settings.imageFormat)
     }
 
@@ -112,6 +111,6 @@ struct FilesPrivacySettingsView: View {
 #Preview {
     FilesPrivacySettingsView()
         .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
-        .frame(width: 520)
+        .settingsPage()
 }
 #endif
