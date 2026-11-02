@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreText
 import Foundation
 import os
 import OSLog
@@ -72,9 +73,25 @@ nonisolated enum TextRecognizer {
     private static let queue = DispatchQueue(label: "io.github.deliciousbacon4012.Untitled.vision", qos: .userInitiated)
     private static let log = Logger(subsystem: Log.subsystem, category: "text")
 
+    /// How long a read may take. The first read after launch loads Vision's models, which can
+    /// take tens of seconds on some Macs, so `prepare()` does that early and the limit is generous.
+    private static let textLimit: Duration = .seconds(90)
+
+    /// Loads the text models in the background, so the first Capture Text doesn't wait for them.
+    /// Call once at launch.
+    static func prepare() {
+        queue.async {
+            guard let sample = sampleImage() else { return }
+            let started = ContinuousClock.now
+            let request = textRequest(correctsLanguage: true)
+            try? VNImageRequestHandler(cgImage: sample, options: [:]).perform([request])
+            log.info("Vision text models ready after \(started.duration(to: .now), privacy: .public)")
+        }
+    }
+
     /// Reads every line of text and every QR code or barcode.
     static func recognize(_ image: CGImage) async throws -> RecognizedContent {
-        try await run(limit: .seconds(20)) {
+        try await run(limit: textLimit) {
             let text = textRequest(correctsLanguage: true)
             let codes = VNDetectBarcodesRequest()
             try VNImageRequestHandler(cgImage: image, options: [:]).perform([text, codes])
@@ -95,7 +112,7 @@ nonisolated enum TextRecognizer {
     /// Where each line of text sits, with a box for every word, for snapping marks to text.
     /// In image pixels with the origin at the top left.
     static func textLayout(in image: CGImage) async throws -> [TextLine] {
-        try await run(limit: .seconds(20)) {
+        try await run(limit: textLimit) {
             let size = CGSize(width: image.width, height: image.height)
             let request = textRequest(correctsLanguage: false)
             try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
@@ -188,6 +205,24 @@ nonisolated enum TextRecognizer {
         request.usesLanguageCorrection = correctsLanguage
         request.automaticallyDetectsLanguage = true
         return request
+    }
+
+    /// A small image with a word on it, so warming up exercises the whole recognizer.
+    private static func sampleImage() -> CGImage? {
+        guard let context = CGContext(
+            data: nil, width: 160, height: 48, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else { return nil }
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 160, height: 48))
+        let font = CTFontCreateWithName("Helvetica" as CFString, 28, nil)
+        let text = NSAttributedString(string: "Hello", attributes: [
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 0, alpha: 1),
+        ])
+        context.textPosition = CGPoint(x: 12, y: 14)
+        CTLineDraw(CTLineCreateWithAttributedString(text), context)
+        return context.makeImage()
     }
 
     /// Vision's normalized, bottom-left rectangles in top-left image pixels.
