@@ -25,6 +25,9 @@ final class SettingsStore {
     var opensEditor = Defaults.opensEditor { didSet { save(opensEditor, .opensEditor) } }
     var includesCursor = Defaults.includesCursor { didSet { save(includesCursor, .includesCursor) } }
     var includesWindowShadow = Defaults.includesWindowShadow { didSet { save(includesWindowShadow, .includesWindowShadow) } }
+    /// Space around window captures, in points.
+    var windowPadding = Defaults.windowPadding { didSet { save(windowPadding, .windowPadding) } }
+    var windowBackground = Defaults.windowBackground { didSet { save(windowBackground.rawValue, .windowBackground) } }
     var overlayCorner = Defaults.overlayCorner { didSet { save(overlayCorner.rawValue, .overlayCorner) } }
     /// Seconds before the Quick Access overlay closes on its own. Zero means never.
     var overlayAutoCloseSeconds = Defaults.overlayAutoCloseSeconds { didSet { save(overlayAutoCloseSeconds, .overlayAutoCloseSeconds) } }
@@ -171,6 +174,8 @@ final class SettingsStore {
         opensEditor = value(.opensEditor, default: Defaults.opensEditor)
         includesCursor = value(.includesCursor, default: Defaults.includesCursor)
         includesWindowShadow = value(.includesWindowShadow, default: Defaults.includesWindowShadow)
+        windowPadding = min(max(value(.windowPadding, default: Defaults.windowPadding), 0), 200)
+        windowBackground = WindowBackground(rawValue: value(.windowBackground, default: "")) ?? Defaults.windowBackground
         overlayCorner = OverlayCorner(rawValue: value(.overlayCorner, default: "")) ?? Defaults.overlayCorner
         overlayAutoCloseSeconds = value(.overlayAutoCloseSeconds, default: Defaults.overlayAutoCloseSeconds)
         overlaySpeed = OverlaySpeed(rawValue: value(.overlaySpeed, default: "")) ?? Defaults.overlaySpeed
@@ -263,6 +268,8 @@ private extension SettingsStore {
         case opensEditor
         case includesCursor
         case includesWindowShadow
+        case windowPadding
+        case windowBackground
         case overlayCorner
         case overlayAutoCloseSeconds
         case overlaySpeed
@@ -307,6 +314,8 @@ private extension SettingsStore {
         static let opensEditor = false
         static let includesCursor = false
         static let includesWindowShadow = true
+        static let windowPadding = 0
+        static let windowBackground = WindowBackground.transparent
         static let overlayCorner = OverlayCorner.bottomLeft
         static let overlayAutoCloseSeconds = 0
         static let overlaySpeed = OverlaySpeed.normal

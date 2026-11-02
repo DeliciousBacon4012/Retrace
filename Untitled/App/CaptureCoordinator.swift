@@ -60,18 +60,16 @@ final class CaptureCoordinator {
             await capture(.area)
             return
         }
-        guard !isCapturing, hasPermission() else { return }
-        isCapturing = true
+        guard await claimCapture() else { return }
         defer { isCapturing = false }
         do {
             guard let displayID = lastArea.screen.displayID else { throw CaptureError.displayNotFound }
-            let captureScale = scale(for: lastArea.screen)
-            let image = try await capturer.captureDisplay(
+            let frame = try await capturer.captureDisplay(
                 displayID,
                 rect: lastArea.screen.topLeftRelativeRect(for: lastArea.rect),
-                options: options(scale: captureScale)
+                options: options()
             )
-            finish(CapturedImage(image: image, scale: captureScale, date: .now))
+            finish(CapturedImage(image: frame.image, scale: frame.scale, date: .now))
         } catch {
             Log.capture.error("Capture failed: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
@@ -97,17 +95,15 @@ final class CaptureCoordinator {
     }
 
     func capture(_ mode: CaptureMode) async {
-        guard !isCapturing, hasPermission() else { return }
-
-        isCapturing = true
+        guard await claimCapture() else { return }
         defer { isCapturing = false }
 
         do {
-            guard let result = try await takeImage(mode) else {
+            guard let frame = try await takeImage(mode) else {
                 Log.capture.info("Capture cancelled")
                 return
             }
-            finish(CapturedImage(image: result.image, scale: result.scale, date: .now))
+            finish(CapturedImage(image: frame.image, scale: frame.scale, date: .now))
         } catch {
             Log.capture.error("Capture failed: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
@@ -116,17 +112,27 @@ final class CaptureCoordinator {
 
     /// Reads the text in a selected area, copies it, and shows what was copied.
     /// QR codes and barcodes are read too; a web link gets an Open button.
+    ///
+    /// The area is read the way the editor reads it: at full resolution, without the
+    /// pointer, with a few points of margin so letters at the edge stay whole, and
+    /// enlarged first when it's only a line or two tall.
     func captureText() async {
-        guard !isCapturing, hasPermission() else { return }
-        isCapturing = true
+        guard await claimCapture() else { return }
 
         do {
             let image: CGImage
             do {
                 // Capture buttons come back as soon as the area is taken; reading runs on its own.
                 defer { isCapturing = false }
-                guard let result = try await takeImage(.area) else { return }
-                image = result.image
+                guard case .area(let rect, let screen)? = await overlay.select(.area) else { return }
+                guard let displayID = screen.displayID else { throw CaptureError.displayNotFound }
+                let padded = rect.insetBy(dx: -4, dy: -4).intersection(screen.frame)
+                let frame = try await capturer.captureDisplay(
+                    displayID,
+                    rect: screen.topLeftRelativeRect(for: padded),
+                    options: CaptureOptions(showsCursor: false, standardSize: false, excludedWindows: ownFloatingWindows())
+                )
+                image = frame.image
             }
             Log.capture.info("Reading text from a \(image.width, privacy: .public)×\(image.height, privacy: .public) area")
             let content = try await readText(in: image.upscaledForReading() ?? image)
@@ -162,9 +168,30 @@ final class CaptureCoordinator {
         }
     }
 
+    /// Starts a capture unless one is running. A selection still on screen gives way to the
+    /// new request, so pressing Capture Text during Capture Area switches to it instead of
+    /// being ignored. A capture past its selection finishes first.
+    private func claimCapture() async -> Bool {
+        guard hasPermission() else { return false }
+        if isCapturing, overlay.isSelecting {
+            overlay.cancel()
+            // The cancelled capture unwinds on the next turn of the main actor.
+            for _ in 0..<50 where isCapturing {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        guard !isCapturing else {
+            NSSound.beep()
+            return false
+        }
+        isCapturing = true
+        return true
+    }
+
     private func showTextResult(_ content: RecognizedContent) {
         guard !content.isEmpty else {
-            toast.show(.init(kind: .error, symbolName: "text.magnifyingglass", title: String(localized: "No text found"), detail: String(localized: "Try a larger or sharper area.")))
+            let shown = toast.show(.init(kind: .error, symbolName: "text.magnifyingglass", title: String(localized: "No text found"), detail: String(localized: "Try a larger or sharper area.")))
+            if !shown { NSSound.beep() }
             return
         }
         let copied = content.lines.isEmpty ? content.codes.joined(separator: "\n") : content.text
@@ -215,48 +242,51 @@ final class CaptureCoordinator {
     }
 
     /// Returns `nil` when the person cancels the selection.
-    private func takeImage(_ mode: CaptureMode) async throws -> (image: CGImage, scale: CGFloat)? {
+    private func takeImage(_ mode: CaptureMode) async throws -> CapturedFrame? {
         switch mode {
         case .screen:
             guard let screen = NSScreen.underPointer, let displayID = screen.displayID else {
                 throw CaptureError.displayNotFound
             }
-            let captureScale = scale(for: screen)
-            let image = try await capturer.captureDisplay(displayID, rect: nil, options: options(scale: captureScale))
-            return (image, captureScale)
+            return try await capturer.captureDisplay(displayID, rect: nil, options: options())
 
         case .area:
             guard case .area(let rect, let screen)? = await overlay.select(.area) else { return nil }
             lastArea = (rect, screen)
             guard let displayID = screen.displayID else { throw CaptureError.displayNotFound }
-            let captureScale = scale(for: screen)
-            let image = try await capturer.captureDisplay(
+            return try await capturer.captureDisplay(
                 displayID,
                 rect: screen.topLeftRelativeRect(for: rect),
-                options: options(scale: captureScale)
+                options: options()
             )
-            return (image, captureScale)
 
         case .window:
             let candidates = WindowList.onScreenWindows()
             guard case .window(let window)? = await overlay.select(.window(candidates)) else { return nil }
-            let screen = NSScreen.showingMost(of: window.frame) ?? NSScreen.main
-            let windowScale = screen.map { self.scale(for: $0) } ?? 2
-            let image = try await capturer.captureWindow(window.id, options: options(scale: windowScale))
-            return (image, windowScale)
+            let frame = try await capturer.captureWindow(window.id, options: options())
+            let style = WindowFrame.Style(
+                padding: CGFloat(settings.windowPadding),
+                shadow: settings.includesWindowShadow,
+                background: settings.windowBackground
+            )
+            return CapturedFrame(image: WindowFrame.decorate(frame.image, scale: frame.scale, style: style), scale: frame.scale)
         }
     }
 
-    private func scale(for screen: NSScreen) -> CGFloat {
-        settings.downscalesRetina ? 1 : screen.backingScaleFactor
-    }
-
-    private func options(scale: CGFloat) -> CaptureOptions {
+    private func options() -> CaptureOptions {
         CaptureOptions(
             showsCursor: settings.includesCursor,
-            includesWindowShadow: settings.includesWindowShadow,
-            scale: scale
+            standardSize: settings.downscalesRetina,
+            excludedWindows: ownFloatingWindows()
         )
+    }
+
+    /// Untitled's panels and overlays (thumbnails, toasts, pins, the HUD) stay out of captures;
+    /// its ordinary windows, like the editor and Recents, can be captured.
+    private func ownFloatingWindows() -> Set<CGWindowID> {
+        Set(NSApplication.shared.windows.lazy
+            .filter { $0.isVisible && $0.level != .normal }
+            .map { CGWindowID($0.windowNumber) })
     }
 
     // MARK: After capture

@@ -7,7 +7,8 @@ nonisolated struct WindowCandidate: Sendable {
     let frame: CGRect
 }
 
-/// Reads the on-screen windows, front to back.
+/// Reads the on-screen windows, front to back, Untitled's own included (its overlays and
+/// panels sit above the normal window layer, so they are never offered).
 enum WindowList {
     static func onScreenWindows() -> [WindowCandidate] {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
@@ -15,14 +16,12 @@ enum WindowList {
             return []
         }
 
-        let ownProcess = ProcessInfo.processInfo.processIdentifier
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
 
         return info.compactMap { entry in
             guard
                 let number = entry[kCGWindowNumber as String] as? NSNumber,
                 let layer = entry[kCGWindowLayer as String] as? NSNumber, layer.intValue == 0,
-                let owner = entry[kCGWindowOwnerPID as String] as? NSNumber, owner.int32Value != ownProcess,
                 let boundsInfo = entry[kCGWindowBounds as String] as? NSDictionary,
                 let bounds = CGRect(dictionaryRepresentation: boundsInfo),
                 bounds.width >= 40, bounds.height >= 40
