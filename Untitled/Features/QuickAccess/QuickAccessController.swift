@@ -17,6 +17,7 @@ final class QuickAccessController {
     private var isPointerInside = false
     private var hoverTask: Task<Void, Never>?
     private var resizeTask: Task<Void, Never>?
+    private var settleTask: Task<Void, Never>?
     private var closeTasks: [UUID: Task<Void, Never>] = [:]
     /// When each thumbnail closes on its own, so hovering can pause and resume the countdown.
     private var deadlines: [UUID: Date] = [:]
@@ -77,8 +78,8 @@ final class QuickAccessController {
 
         withAnimation(animated ? removeAnimation : nil) {
             model.cards.removeAll { $0.id == id }
-            if model.cards.count < 2, !alwaysExpanded { model.isExpanded = false }
         }
+        if model.cards.count < 2, !alwaysExpanded, model.isExpanded { setExpanded(false) }
         model.swipeOffsets[id] = nil
 
         if model.cards.isEmpty {
@@ -174,16 +175,43 @@ final class QuickAccessController {
                 try? await Task.sleep(for: .milliseconds(80))
                 guard let self, !Task.isCancelled, isPointerInside else { return }
                 resizePanel(count: model.cards.count, expanded: true, immediately: true)
-                model.isExpanded = true
+                setExpanded(true)
             }
         } else if !inside, model.isExpanded {
             hoverTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(350))
                 guard let self, !Task.isCancelled, !isPointerInside else { return }
-                model.isExpanded = false
+                setExpanded(false)
                 resizePanel(count: model.cards.count, expanded: false, immediately: false)
             }
         }
+    }
+
+    /// Moves the floors, holding back hover controls until the thumbnails come to rest, then
+    /// shows them on whichever thumbnail ended up under the pointer.
+    private func setExpanded(_ expanded: Bool) {
+        guard model.isExpanded != expanded else { return }
+        settleTask?.cancel()
+        model.isSettling = true
+        model.isExpanded = expanded
+        let duration = reduceMotion ? 0.15 : (expanded ? 0.4 : 0.32) * model.speed + 0.05
+        settleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(duration))
+            guard let self, !Task.isCancelled else { return }
+            model.isSettling = false
+            refreshHoveredCard()
+        }
+    }
+
+    /// Points hover at the thumbnail now under the pointer, if any.
+    private func refreshHoveredCard() {
+        guard let panel, let view = panel.contentView else {
+            model.hoveredID = nil
+            return
+        }
+        let inWindow = panel.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let point = CGPoint(x: inWindow.x, y: view.bounds.height - inWindow.y)
+        model.hoveredID = isPointerInside ? model.cardID(at: point, in: view.bounds.size) : nil
     }
 
     // MARK: Closing on its own

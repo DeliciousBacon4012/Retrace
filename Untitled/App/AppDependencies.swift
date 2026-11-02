@@ -24,6 +24,8 @@ final class AppDependencies {
     let toasts: CaptureToastController
     /// Text read by Capture Text, for Recents and the menu bar.
     let textHistory: TextHistory
+    /// The originals of captures saved over in the editor.
+    let versions: CaptureVersions
     let memory = MemoryMonitor()
 
     init(
@@ -32,7 +34,8 @@ final class AppDependencies {
         launchAtLogin: any LaunchAtLoginControlling,
         dockIcon: any DockIconControlling,
         clipboard: any ClipboardWriting,
-        textHistoryFile: URL? = TextHistory.defaultFileURL
+        textHistoryFile: URL? = TextHistory.defaultFileURL,
+        originalsFolder: URL? = CaptureVersions.defaultFolder
     ) {
         self.settings = settings
         self.permissions = permissions
@@ -44,7 +47,9 @@ final class AppDependencies {
         self.toasts = toasts
         let textHistory = TextHistory(settings: settings, fileURL: textHistoryFile)
         self.textHistory = textHistory
-        let editor = EditorPresenter(settings: settings, clipboard: clipboard, textHistory: textHistory)
+        let versions = CaptureVersions(folder: originalsFolder)
+        self.versions = versions
+        let editor = EditorPresenter(settings: settings, clipboard: clipboard, textHistory: textHistory, versions: versions)
         self.editor = editor
         let pins = PinController(clipboard: clipboard)
         pins.onEdit = { [weak editor] capture in editor?.open(capture) }
@@ -174,7 +179,8 @@ extension AppDependencies {
             launchAtLogin: PreviewLaunchAtLoginService(),
             dockIcon: PreviewDockIconService(),
             clipboard: PreviewClipboard(),
-            textHistoryFile: nil
+            textHistoryFile: nil,
+            originalsFolder: nil
         )
     }
 }

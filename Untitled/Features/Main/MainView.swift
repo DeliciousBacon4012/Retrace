@@ -39,6 +39,9 @@ private struct MainContent: View {
                     RecordControl()
                 }
                 ToolbarItem(placement: .primaryAction) {
+                    QuickLookToggle()
+                }
+                ToolbarItem(placement: .primaryAction) {
                     FilterMenu(viewModel: library)
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -130,6 +133,19 @@ private struct RecordControl: View {
 }
 
 /// Which captures show, plus the save folder. The symbol fills in while a filter is on.
+/// While on, a single click in Recents previews with Quick Look. Double-click still opens.
+private struct QuickLookToggle: View {
+    @AppStorage(LibraryViewModel.quickLookOnClickKey) private var isOn = false
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            Label("Quick Look on Click", systemImage: "eye")
+        }
+        .toggleStyle(.button)
+        .help(isOn ? "Click previews with Quick Look. Double-click opens." : "Preview with Quick Look when you click")
+    }
+}
+
 private struct FilterMenu: View {
     @Bindable var viewModel: LibraryViewModel
 

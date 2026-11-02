@@ -5,6 +5,8 @@ import SwiftUI
 /// A Quick Look thumbnail of a file, loaded in the background and cached.
 struct FileThumbnail: View {
     let url: URL
+    /// When the file last changed. A new value reloads the thumbnail, such as after an edit.
+    var version: Date?
     var maximumSize = CGSize(width: 320, height: 220)
 
     @Environment(\.displayScale) private var displayScale
@@ -24,11 +26,16 @@ struct FileThumbnail: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: url) {
+        .task(id: LoadKey(url: url, version: version)) {
             let loaded = await ThumbnailCache.shared.thumbnail(for: url, size: maximumSize, scale: displayScale)
             withAnimation(.easeOut(duration: 0.15)) { image = loaded }
         }
         .accessibilityHidden(true)
+    }
+
+    private struct LoadKey: Equatable {
+        let url: URL
+        let version: Date?
     }
 }
 

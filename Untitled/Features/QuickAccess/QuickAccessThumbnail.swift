@@ -14,6 +14,9 @@ final class QuickAccessStackModel {
 
     var cards: [Card] = []
     var isExpanded = false
+    /// True while the floors rise or settle. Thumbnails slide under a still pointer then, so
+    /// hover controls wait until they stop instead of flashing on each one in turn.
+    var isSettling = false
     var hoveredID: UUID?
     /// Sideways movement of a thumbnail being flicked away.
     var swipeOffsets: [UUID: CGFloat] = [:]
@@ -73,7 +76,7 @@ struct QuickAccessStackView: View {
                 QuickAccessCard(
                     card: card,
                     size: model.geometry.cardSize,
-                    isHovered: isReachable && model.hoveredID == card.id,
+                    isHovered: isReachable && !model.isSettling && model.hoveredID == card.id,
                     badge: !model.isExpanded && index == 0 && count > 1 ? count : nil,
                     actions: actions
                 )
