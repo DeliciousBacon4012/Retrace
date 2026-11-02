@@ -10,11 +10,30 @@ struct CaptureSettingsView: View {
         Group {
             Section {
                 Toggle("Include the pointer", isOn: $settings.includesCursor)
-                Toggle("Include window shadow", isOn: $settings.includesWindowShadow)
             } footer: {
-                Text("The window shadow applies to window captures. Recordings always show the pointer.")
+                Text("Recordings always show the pointer.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("Window Captures") {
+                Toggle("Shadow", isOn: $settings.includesWindowShadow)
+                LabeledContent("Padding") {
+                    HStack {
+                        Slider(value: Binding(
+                            get: { Double(settings.windowPadding) },
+                            set: { settings.windowPadding = Int($0) }
+                        ), in: 0...120, step: 8)
+                        Text("\(settings.windowPadding) pt")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
+                Picker("Background", selection: $settings.windowBackground) {
+                    ForEach(WindowBackground.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
             }
         }
     }

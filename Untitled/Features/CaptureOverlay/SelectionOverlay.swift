@@ -19,6 +19,14 @@ final class SelectionOverlay {
     private var continuation: CheckedContinuation<ScreenSelection?, Never>?
     private var resignObserver: NSObjectProtocol?
 
+    /// True while the overlay is on screen, waiting for a selection.
+    var isSelecting: Bool { continuation != nil }
+
+    /// Closes the overlay as if the person pressed Escape.
+    func cancel() {
+        finish(with: nil)
+    }
+
     /// Shows the overlay and waits for a selection. Returns `nil` if the person cancels.
     func select(_ mode: Mode) async -> ScreenSelection? {
         finish(with: nil)
@@ -137,6 +145,11 @@ private final class OverlayView: NSView {
         } else {
             super.keyDown(with: event)
         }
+    }
+
+    /// A right-click cancels, like Escape.
+    override func rightMouseDown(with event: NSEvent) {
+        onFinish(nil)
     }
 
     override func mouseMoved(with event: NSEvent) {
