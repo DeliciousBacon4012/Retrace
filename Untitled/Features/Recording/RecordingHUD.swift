@@ -17,7 +17,7 @@ final class RecordingHUDController {
         let hosting = NSHostingView(rootView: view)
         let size = hosting.fittingSize
         let panel = FloatingPanel(contentRect: CGRect(origin: .zero, size: size))
-        panel.contentView = hosting
+        panel.setHostedContent(hosting)
         let visible = screen.visibleFrame
         panel.setFrameOrigin(CGPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - 12))
         panel.orderFrontRegardless()
@@ -26,7 +26,7 @@ final class RecordingHUDController {
         if let area {
             let outline = FloatingPanel(contentRect: area.insetBy(dx: -3, dy: -3))
             outline.ignoresMouseEvents = true
-            outline.contentView = NSHostingView(rootView: RecordingOutline())
+            outline.setHostedContent(NSHostingView(rootView: RecordingOutline()))
             outline.orderFrontRegardless()
             frame = outline
         }

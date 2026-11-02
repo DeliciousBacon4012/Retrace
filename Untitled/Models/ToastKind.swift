@@ -28,7 +28,7 @@ nonisolated enum ToastKind: String, CaseIterable, Identifiable, Sendable {
         case .imageCopied: 3
         case .saved: 3
         case .recordingSaved: 5
-        case .error: 6
+        case .error: 8
         }
     }
 
