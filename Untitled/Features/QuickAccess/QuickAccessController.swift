@@ -246,7 +246,6 @@ final class QuickAccessController {
             hoverStack: { [weak self] in self?.pointerInside($0) }
         )
         let view = QuickAccessHostingView(rootView: QuickAccessStackView(model: model, actions: actions))
-        view.sizingOptions = []
         view.model = model
         view.fileURL = { [weak self] id in self?.card(id)?.capture.fileURL }
         view.onSwipeBegan = { [weak self] id in
@@ -255,7 +254,7 @@ final class QuickAccessController {
         view.onSwipeAway = { [weak self] id in self?.dismiss(id, animated: false) }
 
         let panel = QuickAccessPanel(contentRect: .zero)
-        panel.contentView = view
+        panel.setHostedContent(view)
         self.panel = panel
         return panel
     }

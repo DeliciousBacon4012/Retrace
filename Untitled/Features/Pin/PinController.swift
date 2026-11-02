@@ -28,7 +28,7 @@ final class PinController {
             },
             setOpacity: { [weak panel] value in panel?.alphaValue = value }
         )
-        panel.contentView = NSHostingView(rootView: view)
+        panel.setHostedContent(NSHostingView(rootView: view))
         panels.append(panel)
 
         // Start at the image's real size near the pointer, but never larger than most of the screen.

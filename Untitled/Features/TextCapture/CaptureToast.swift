@@ -70,7 +70,7 @@ final class CaptureToastController {
         let hosting = NSHostingView(rootView: view)
         let size = hosting.fittingSize
         let panel = FloatingPanel(contentRect: CGRect(origin: .zero, size: size))
-        panel.contentView = hosting
+        panel.setHostedContent(hosting)
         let visible = screen.visibleFrame
         let x = switch settings.toastPosition {
         case .topCenter: visible.midX - size.width / 2
