@@ -98,7 +98,13 @@ final class CaptureLibrary {
                     return nil
                 }
                 let date = values.creationDate ?? values.contentModificationDate ?? .distantPast
-                return LibraryItem(url: url, date: date, kind: kind, byteCount: values.fileSize ?? 0)
+                return LibraryItem(
+                    url: url,
+                    date: date,
+                    modified: values.contentModificationDate ?? date,
+                    kind: kind,
+                    byteCount: values.fileSize ?? 0
+                )
             }
             return .success(items.sorted { $0.date > $1.date })
         } catch {

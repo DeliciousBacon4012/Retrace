@@ -9,6 +9,8 @@ nonisolated struct LibraryItem: Identifiable, Hashable, Sendable {
 
     let url: URL
     let date: Date
+    /// When the file last changed, such as after an edit, so its thumbnail can follow.
+    var modified: Date = .distantPast
     let kind: Kind
     let byteCount: Int
 

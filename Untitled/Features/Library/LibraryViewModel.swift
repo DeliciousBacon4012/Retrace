@@ -22,6 +22,9 @@ final class LibraryViewModel {
         }
     }
 
+    /// Settings key: a single click previews with Quick Look.
+    static let quickLookOnClickKey = "recentsQuickLookOnClick"
+
     var searchText = ""
     var kindFilter: KindFilter = .all
     var selection: Set<RecentItem.ID> = []

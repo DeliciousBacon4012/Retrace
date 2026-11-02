@@ -4,10 +4,14 @@ import SwiftUI
 
 /// Every screenshot and recording in the save folder, and the text Capture Text copied,
 /// newest first. This is the main window's content; its filter lives in the window toolbar.
+///
+/// Click selects, or previews with Quick Look while that's switched on in the toolbar.
+/// Double-click opens: images in the editor, recordings in their app, text in the text app.
 struct LibraryView: View {
     @Bindable var viewModel: LibraryViewModel
 
     @Environment(AppDependencies.self) private var dependencies
+    @AppStorage(LibraryViewModel.quickLookOnClickKey) private var quickLookOnClick = false
     /// The text card that was just copied, which says so for a moment.
     @State private var copiedSnippet: TextSnippet.ID?
     @FocusState private var isGridFocused: Bool
@@ -58,7 +62,12 @@ struct LibraryView: View {
         .onExitCommand { viewModel.selection.removeAll() }
         .quickLookPreview($viewModel.previewURL, in: items.compactMap(\.file).map(\.url))
         .overlay { emptyState(library: library, history: history, isEmpty: items.isEmpty) }
-        .onChange(of: library.items) { pruneSelection() }
+        .onChange(of: library.items) {
+            pruneSelection()
+            if !library.isLoading, library.loadError == nil {
+                dependencies.versions.prune(keeping: library.items.map(\.url))
+            }
+        }
         .onChange(of: history.snippets) { pruneSelection() }
         .onAppear {
             applyPendingFilter()
@@ -79,7 +88,12 @@ struct LibraryView: View {
     private func cell(for item: RecentItem) -> some View {
         switch item {
         case .file(let file):
-            LibraryCell(item: file, isSelected: viewModel.selection.contains(item.id))
+            LibraryCell(
+                item: file,
+                original: dependencies.versions.original(for: file.url),
+                isSelected: viewModel.selection.contains(item.id),
+                openInEditor: { dependencies.editor.open(fileAt: $0) }
+            )
         case .text(let snippet):
             TextCard(snippet: snippet, isSelected: viewModel.selection.contains(item.id), isCopied: copiedSnippet == snippet.id)
         }
@@ -136,6 +150,10 @@ struct LibraryView: View {
             }
             Button(file.kind == .image ? "Open in Default App" : "Open") { files.forEach { NSWorkspace.shared.open($0.url) } }
             Button("Quick Look") { viewModel.previewURL = file.url }
+            if dependencies.versions.hasOriginal(for: file.url) {
+                Button("Restore Original") { restoreOriginal(of: file.url) }
+                    .disabled(files.count > 1)
+            }
             Divider()
             Button("Copy") {
                 if files.count == 1 {
@@ -207,16 +225,33 @@ struct LibraryView: View {
             open(item)
         } else {
             viewModel.select(item)
-            if let snippet = item.snippet { copy(snippet) }
+            switch item {
+            case .file(let file):
+                // An open preview follows the selection, as in Finder.
+                if quickLookOnClick || viewModel.previewURL != nil {
+                    viewModel.previewURL = file.url
+                }
+            case .text(let snippet):
+                copy(snippet)
+            }
         }
     }
 
     /// Images open in the editor; recordings play in their default app.
     private func open(_ item: RecentItem) {
+        viewModel.previewURL = nil
         switch item {
         case .file(let file) where file.kind == .image: dependencies.editor.open(fileAt: file.url)
         case .file(let file): NSWorkspace.shared.open(file.url)
         case .text(let snippet): PlainTextOpener.open(snippet.text, in: dependencies.settings.plainTextApp)
+        }
+    }
+
+    private func restoreOriginal(of url: URL) {
+        do {
+            try dependencies.versions.restoreOriginal(of: url)
+        } catch {
+            ErrorPresenter.present(error)
         }
     }
 
@@ -296,17 +331,32 @@ private struct TextCard: View {
     }
 }
 
-/// One capture in the grid: its thumbnail, name, and when it was taken.
+/// One capture in the grid: its thumbnail, name, and when it was taken. An edited capture
+/// shows its original peeking out behind it, and a badge that opens both versions.
 private struct LibraryCell: View {
     let item: LibraryItem
+    /// The untouched original, when this capture was saved over in the editor.
+    let original: URL?
     let isSelected: Bool
+    let openInEditor: (URL) -> Void
+
+    @State private var showsVersions = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            FileThumbnail(url: item.url)
+            FileThumbnail(url: item.url, version: item.modified)
                 .padding(6)
                 .frame(height: 116)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+                .background(alignment: .top) {
+                    if original != nil {
+                        // The original, a step behind: the same stacked edge as Quick Access.
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(.quaternary.opacity(0.5))
+                            .padding(.horizontal, 10)
+                            .offset(y: -5)
+                    }
+                }
                 .overlay(alignment: .bottomLeading) {
                     if item.kind == .video {
                         Image(systemName: "video.fill")
@@ -315,6 +365,25 @@ private struct LibraryCell: View {
                             .glassEffect(.regular, in: .capsule)
                             .padding(8)
                             .accessibilityLabel("Recording")
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if original != nil {
+                        Button {
+                            showsVersions = true
+                        } label: {
+                            Label("Edited", systemImage: "square.stack")
+                                .font(.caption.weight(.medium))
+                        }
+                        .buttonStyle(.glass)
+                        .controlSize(.small)
+                        .padding(6)
+                        .help("Show the edited and original versions")
+                        .popover(isPresented: $showsVersions, arrowEdge: .bottom) {
+                            if let original {
+                                VersionsView(edited: item, original: original, openInEditor: openInEditor)
+                            }
+                        }
                     }
                 }
                 .overlay {
@@ -336,6 +405,71 @@ private struct LibraryCell: View {
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityValue(original != nil ? Text("Edited") : Text(""))
+    }
+}
+
+/// The edited capture next to its original. Double-click either one to open it in the editor.
+private struct VersionsView: View {
+    let edited: LibraryItem
+    let original: URL
+    let openInEditor: (URL) -> Void
+
+    @Environment(AppDependencies.self) private var dependencies
+    @Environment(\.dismiss) private var dismiss
+    @State private var previewURL: URL?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                version("Edited", url: edited.url, version: edited.modified)
+                version("Original", url: original, version: dependencies.versions.editedDate(for: edited.url))
+            }
+            HStack {
+                Button("Remove Original", role: .destructive) {
+                    dependencies.versions.removeOriginal(of: edited.url)
+                    dismiss()
+                }
+                .help("Moves the original to the Trash and keeps the edited version")
+                Spacer()
+                Button("Restore Original") {
+                    do {
+                        try dependencies.versions.restoreOriginal(of: edited.url)
+                        dismiss()
+                    } catch {
+                        ErrorPresenter.present(error)
+                    }
+                }
+                .help("Puts the original back and moves the edited version to the Trash")
+            }
+            .buttonStyle(.glass)
+        }
+        .padding(16)
+        .frame(width: 440)
+        .quickLookPreview($previewURL, in: [edited.url, original])
+    }
+
+    private func version(_ title: LocalizedStringKey, url: URL, version: Date?) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            FileThumbnail(url: url, version: version)
+                .padding(6)
+                .frame(height: 130)
+                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+                .contentShape(.rect)
+                .onTapGesture {
+                    if (NSApp.currentEvent?.clickCount ?? 1) >= 2 {
+                        dismiss()
+                        openInEditor(url)
+                    } else {
+                        previewURL = url
+                    }
+                }
+                .help("Click to preview, double-click to open in the editor")
+            Text(title)
+                .font(.callout.weight(.medium))
+                .padding(.horizontal, 4)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 

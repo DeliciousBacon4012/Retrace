@@ -10,6 +10,7 @@ final class EditorPresenter {
     @ObservationIgnored private let settings: SettingsStore
     @ObservationIgnored private let clipboard: any ClipboardWriting
     @ObservationIgnored private let textHistory: TextHistory?
+    @ObservationIgnored private let versions: CaptureVersions?
     @ObservationIgnored private var controllers: [EditorWindowController] = []
     @ObservationIgnored private var keyWindowObserver: (any NSObjectProtocol)?
 
@@ -17,10 +18,11 @@ final class EditorPresenter {
     /// other window, or one of the editor's own sheets, has focus.
     private(set) var active: EditorWindowController?
 
-    init(settings: SettingsStore, clipboard: any ClipboardWriting, textHistory: TextHistory? = nil) {
+    init(settings: SettingsStore, clipboard: any ClipboardWriting, textHistory: TextHistory? = nil, versions: CaptureVersions? = nil) {
         self.settings = settings
         self.clipboard = clipboard
         self.textHistory = textHistory
+        self.versions = versions
         keyWindowObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] notification in
             let window = notification.object as? NSWindow
             MainActor.assumeIsolated { self?.followKeyWindow(window) }
@@ -66,7 +68,7 @@ final class EditorPresenter {
     }
 
     private func present(_ document: EditorDocument) {
-        let controller = EditorWindowController(document: document, settings: settings, clipboard: clipboard, textHistory: textHistory) { [weak self] closed in
+        let controller = EditorWindowController(document: document, settings: settings, clipboard: clipboard, textHistory: textHistory, versions: versions) { [weak self] closed in
             self?.controllers.removeAll { $0 === closed }
             if self?.active === closed { self?.active = nil }
         }
@@ -83,13 +85,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     private let settings: SettingsStore
     private let clipboard: any ClipboardWriting
     private let textHistory: TextHistory?
+    private let versions: CaptureVersions?
     private let onClose: (EditorWindowController) -> Void
 
-    init(document: EditorDocument, settings: SettingsStore, clipboard: any ClipboardWriting, textHistory: TextHistory?, onClose: @escaping (EditorWindowController) -> Void) {
+    init(document: EditorDocument, settings: SettingsStore, clipboard: any ClipboardWriting, textHistory: TextHistory?, versions: CaptureVersions? = nil, onClose: @escaping (EditorWindowController) -> Void) {
         self.editorDocument = document
         self.settings = settings
         self.clipboard = clipboard
         self.textHistory = textHistory
+        self.versions = versions
         self.onClose = onClose
 
         let screen = NSScreen.underPointer ?? NSScreen.main ?? NSScreen.screens.first
@@ -210,6 +214,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         if redacts { options.stripsMetadata = true }
         do {
             let data = try ImageEncoder.data(for: image, options: options, pointScale: editorDocument.scale)
+            // Saving over the capture it came from keeps the untouched original for Recents.
+            if url.standardizedFileURL == editorDocument.fileURL?.standardizedFileURL {
+                versions?.preserveOriginal(of: url)
+            }
             try data.write(to: url, options: .atomic)
             editorDocument.markSaved(to: url)
             // The original capture may still be on the clipboard. Swap in the covered version.
