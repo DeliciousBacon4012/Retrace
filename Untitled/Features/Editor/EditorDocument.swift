@@ -462,6 +462,15 @@ final class EditorDocument {
 
     // MARK: Selection and editing
 
+    /// Selects the top mark at `point`, keeping the current selection if there's none there.
+    func selectMark(at point: CGPoint, tolerance: CGFloat) {
+        guard tool != .crop, !isPickingTextArea,
+              let hit = annotations.last(where: { $0.contains(point, tolerance: tolerance) })
+        else { return }
+        finishTextEditing()
+        select(hit.id)
+    }
+
     func select(_ id: Annotation.ID?) {
         guard selectedID != id else { return }
         withAnimation(.response) { selectedID = id }

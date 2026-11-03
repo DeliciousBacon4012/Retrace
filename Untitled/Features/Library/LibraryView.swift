@@ -23,21 +23,17 @@ struct LibraryView: View {
             LazyVGrid(columns: columns, spacing: 18) {
                 ForEach(items) { item in
                     cell(for: item)
-                        .onTapGesture(count: 2) { open(item) }
-                        .onTapGesture {
-                            if NSEvent.modifierFlags.contains(.command) {
-                                viewModel.toggle(item)
-                            } else {
-                                viewModel.select(item)
-                                if let snippet = item.snippet { copy(snippet) }
-                            }
-                            isGridFocused = true
-                        }
+                        .onTapGesture { click(item, in: items) }
                         .onDrag { itemProvider(for: item) }
                         .contextMenu { contextMenu(for: item, in: items) }
                 }
             }
             .padding(16)
+        }
+        .contentShape(.rect)
+        .onTapGesture {
+            viewModel.selection.removeAll()
+            isGridFocused = true
         }
         .focusable()
         .focused($isGridFocused)
@@ -46,6 +42,12 @@ struct LibraryView: View {
             viewModel.togglePreview(in: items)
             return .handled
         }
+        .onKeyPress(.return) {
+            guard let item = viewModel.selectedItems(in: items).first else { return .ignored }
+            open(item)
+            return .handled
+        }
+        .onCommand(#selector(NSResponder.selectAll(_:))) { viewModel.selectAll(items) }
         .onDeleteCommand {
             delete(viewModel.selectedItems(in: items))
         }
@@ -54,7 +56,10 @@ struct LibraryView: View {
         .overlay { emptyState(library: library, history: history, isEmpty: items.isEmpty) }
         .onChange(of: library.items) { pruneSelection() }
         .onChange(of: history.snippets) { pruneSelection() }
-        .onAppear(perform: applyPendingFilter)
+        .onAppear {
+            applyPendingFilter()
+            isGridFocused = true
+        }
         .onChange(of: MainWindowRouter.shared.pendingRecentsFilter) { applyPendingFilter() }
         .task(id: copiedSnippet) {
             guard copiedSnippet != nil else { return }
@@ -120,17 +125,26 @@ struct LibraryView: View {
         switch item {
         case .file(let file):
             let files = targets.compactMap(\.file)
-            Button("Open") { files.forEach { NSWorkspace.shared.open($0.url) } }
-            Button("Quick Look") { viewModel.previewURL = file.url }
             if file.kind == .image {
-                Button("Annotate") { dependencies.editor.open(fileAt: file.url) }
-                    .disabled(files.count > 1)
+                Button("Open in Editor") { files.forEach { dependencies.editor.open(fileAt: $0.url) } }
             }
+            Button(file.kind == .image ? "Open in Default App" : "Open") { files.forEach { NSWorkspace.shared.open($0.url) } }
+            Button("Quick Look") { viewModel.previewURL = file.url }
             Divider()
-            Button("Copy") { dependencies.clipboard.copyFile(at: file.url) }
-                .disabled(files.count > 1)
+            Button("Copy") {
+                if files.count == 1 {
+                    dependencies.clipboard.copyFile(at: file.url)
+                } else {
+                    dependencies.clipboard.copyFiles(at: files.map(\.url))
+                }
+            }
+            if file.kind == .image {
+                Button("Pin to Screen") { files.forEach { dependencies.pins.pin(fileAt: $0.url) } }
+            }
             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(files.map(\.url)) }
             ShareLink(items: files.map(\.url)) { Text("Share…") }
+            Divider()
+            Button("Select All") { viewModel.selectAll(items) }
             Divider()
             Button("Move to Trash", role: .destructive) { delete(targets.filter { $0.file != nil }) }
         case .text(let snippet):
@@ -139,6 +153,8 @@ struct LibraryView: View {
                 .disabled(targets.count > 1)
             Button("Copy") { copy(snippet) }
                 .disabled(targets.count > 1)
+            Divider()
+            Button("Select All") { viewModel.selectAll(items) }
             Divider()
             Button("Delete", role: .destructive) { delete(targets.filter { $0.snippet != nil }) }
         }
@@ -153,8 +169,26 @@ struct LibraryView: View {
         }
     }
 
+    /// One gesture for single and double clicks, so a click never waits to see if another follows.
+    private func click(_ item: RecentItem, in items: [RecentItem]) {
+        isGridFocused = true
+        let flags = NSEvent.modifierFlags
+        if flags.contains(.command) {
+            viewModel.toggle(item)
+        } else if flags.contains(.shift) {
+            viewModel.extendSelection(to: item, in: items)
+        } else if NSApp.currentEvent?.clickCount == 2 {
+            open(item)
+        } else {
+            viewModel.select(item)
+            if let snippet = item.snippet { copy(snippet) }
+        }
+    }
+
+    /// Images open in the editor; recordings play in their default app.
     private func open(_ item: RecentItem) {
         switch item {
+        case .file(let file) where file.kind == .image: dependencies.editor.open(fileAt: file.url)
         case .file(let file): NSWorkspace.shared.open(file.url)
         case .text(let snippet): PlainTextOpener.open(snippet.text, in: dependencies.settings.plainTextApp)
         }

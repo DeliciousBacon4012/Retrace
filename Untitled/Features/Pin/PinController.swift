@@ -61,11 +61,14 @@ final class PinController {
         open.allowsMultipleSelection = true
         NSApp.activate()
         guard open.runModal() == .OK else { return }
-        for url in open.urls {
-            guard let image = NSImage(contentsOf: url), let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { continue }
-            let scale = image.size.width > 0 ? max(CGFloat(cgImage.width) / image.size.width, 1) : 1
-            pin(CapturedImage(image: cgImage, scale: scale, date: .now, fileURL: url))
-        }
+        open.urls.forEach(pin(fileAt:))
+    }
+
+    /// Pins a saved image, at the size it was saved for.
+    func pin(fileAt url: URL) {
+        guard let image = NSImage(contentsOf: url), let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        let scale = image.size.width > 0 ? max(CGFloat(cgImage.width) / image.size.width, 1) : 1
+        pin(CapturedImage(image: cgImage, scale: scale, date: .now, fileURL: url))
     }
 
     private func close(_ panel: PinPanel) {

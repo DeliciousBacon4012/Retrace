@@ -7,6 +7,10 @@ import SwiftUI
 /// `StackGeometry`): collapsed, older thumbnails peek out behind the newest; with the pointer
 /// over it, the stack rises into evenly spaced floors. Drag a thumbnail into any app to drop
 /// the file, or flick it toward the screen edge to put it away.
+///
+/// The window stays one size, tall enough for every floor, so thumbnails only ever move inside
+/// it and nothing redraws mid-animation. Clicks outside the thumbnails pass through to whatever
+/// is underneath, because the window ignores the mouse until the pointer is over the stack.
 final class QuickAccessController {
     private let settings: SettingsStore
     private let clipboard: any ClipboardWriting
@@ -16,12 +20,12 @@ final class QuickAccessController {
     private var screen: NSScreen?
     private var isPointerInside = false
     private var hoverTask: Task<Void, Never>?
-    private var resizeTask: Task<Void, Never>?
     private var closeTasks: [UUID: Task<Void, Never>] = [:]
     /// When each thumbnail closes on its own, so hovering can pause and resume the countdown.
     private var deadlines: [UUID: Date] = [:]
     private var pausedRemaining: [UUID: TimeInterval] = [:]
     private var screenObserver: (any NSObjectProtocol)?
+    private var pointerMonitors: [Any] = []
 
     /// Opens a capture in the editor; set once the editor exists.
     var onAnnotate: ((CapturedImage) -> Void)?
@@ -53,17 +57,16 @@ final class QuickAccessController {
 
         let card = QuickAccessStackModel.Card(id: capture.id, capture: capture, thumbnail: Self.thumbnail(of: capture, size: model.geometry.cardSize))
         let panel = panel ?? makePanel()
-        // Grow first, away from the corner, so nothing on screen moves when the window does.
-        resizePanel(count: model.cards.count + 1, expanded: model.isExpanded, immediately: true)
+        placePanel()
         panel.orderFrontRegardless()
+        startFollowingPointer()
 
         withAnimation(insertAnimation) {
             model.cards.insert(card, at: 0)
         }
         scheduleAutoClose(capture.id)
 
-        let limit = min(settings.quickAccessMaxVisible, model.geometry.capacity(forHeight: screen?.visibleFrame.height ?? 900))
-        while model.cards.count > limit, let oldest = model.cards.last {
+        while model.cards.count > visibleLimit, let oldest = model.cards.last {
             dismiss(oldest.id)
         }
     }
@@ -84,6 +87,7 @@ final class QuickAccessController {
         if model.cards.isEmpty {
             isPointerInside = false
             hoverTask?.cancel()
+            stopFollowingPointer()
             let panel = panel
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(0.3))
@@ -91,8 +95,13 @@ final class QuickAccessController {
                 panel?.orderOut(nil)
             }
         } else {
-            resizePanel(count: model.cards.count, expanded: model.isExpanded, immediately: false)
+            followPointer()
         }
+    }
+
+    /// Closes every thumbnail.
+    private func dismissAll() {
+        model.cards.map(\.id).forEach { dismiss($0) }
     }
 
     private var insertAnimation: Animation {
@@ -155,7 +164,63 @@ final class QuickAccessController {
         onAnnotate?(capture)
     }
 
+    private func showInFinder(_ id: UUID) {
+        guard let url = card(id)?.capture.fileURL else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+        NSApp.activate()
+    }
+
     // MARK: Hover
+
+    private func startFollowingPointer() {
+        guard pointerMonitors.isEmpty else {
+            followPointer()
+            return
+        }
+        let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseUp, .rightMouseUp]
+        // With the pointer elsewhere the window ignores the mouse, so moves go to other apps.
+        if let outside = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.followPointer() }
+        }) {
+            pointerMonitors.append(outside)
+        }
+        if let inside = NSEvent.addLocalMonitorForEvents(matching: events, handler: { [weak self] event in
+            self?.followPointer()
+            return event
+        }) {
+            pointerMonitors.append(inside)
+        }
+        followPointer()
+    }
+
+    private func stopFollowingPointer() {
+        pointerMonitors.forEach(NSEvent.removeMonitor)
+        pointerMonitors.removeAll()
+        panel?.ignoresMouseEvents = true
+    }
+
+    /// Lets the window take the mouse only over the thumbnails. It leaves that alone during a
+    /// drag, since a flick or a file drag may carry the pointer well past the stack.
+    private func followPointer() {
+        guard let panel, NSEvent.pressedMouseButtons == 0 else { return }
+        let inside = stackFrame.contains(NSEvent.mouseLocation)
+        panel.ignoresMouseEvents = !inside
+        guard inside != isPointerInside else { return }
+        if !inside { model.hoveredID = nil }
+        pointerInside(inside)
+    }
+
+    /// The area the thumbnails cover right now, in screen coordinates.
+    private var stackFrame: CGRect {
+        guard let panel else { return .zero }
+        let size = model.geometry.panelSize(count: max(model.cards.count, 1), expanded: model.isExpanded)
+        return CGRect(
+            x: panel.frame.minX,
+            y: model.corner.isBottom ? panel.frame.minY : panel.frame.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+    }
 
     /// Rises into floors shortly after the pointer arrives, and settles back a moment after
     /// it leaves, so passing over the corner doesn't make the stack flicker.
@@ -173,7 +238,6 @@ final class QuickAccessController {
             hoverTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(80))
                 guard let self, !Task.isCancelled, isPointerInside else { return }
-                resizePanel(count: model.cards.count, expanded: true, immediately: true)
                 model.isExpanded = true
             }
         } else if !inside, model.isExpanded {
@@ -181,7 +245,6 @@ final class QuickAccessController {
                 try? await Task.sleep(for: .milliseconds(350))
                 guard let self, !Task.isCancelled, !isPointerInside else { return }
                 model.isExpanded = false
-                resizePanel(count: model.cards.count, expanded: false, immediately: false)
             }
         }
     }
@@ -243,7 +306,8 @@ final class QuickAccessController {
             pin: { [weak self] in self?.pin($0) },
             open: { [weak self] in self?.open($0) },
             close: { [weak self] in self?.dismiss($0) },
-            hoverStack: { [weak self] in self?.pointerInside($0) }
+            closeAll: { [weak self] in self?.dismissAll() },
+            showInFinder: { [weak self] in self?.showInFinder($0) }
         )
         let view = QuickAccessHostingView(rootView: QuickAccessStackView(model: model, actions: actions))
         view.model = model
@@ -254,16 +318,22 @@ final class QuickAccessController {
         view.onSwipeAway = { [weak self] id in self?.dismiss(id, animated: false) }
 
         let panel = QuickAccessPanel(contentRect: .zero)
+        panel.acceptsMouseMovedEvents = true
+        panel.ignoresMouseEvents = true
         panel.setHostedContent(view)
         self.panel = panel
         return panel
     }
 
-    /// Resizes the window around the stack, anchored to its corner. Growing happens at once;
-    /// shrinking waits for the thumbnails to finish moving, so none of them gets clipped.
-    private func resizePanel(count: Int, expanded: Bool, immediately: Bool) {
+    /// How many thumbnails can show at once, by the setting and the height of the screen.
+    private var visibleLimit: Int {
+        min(settings.quickAccessMaxVisible, model.geometry.capacity(forHeight: screen?.visibleFrame.height ?? 900))
+    }
+
+    /// Puts the window in its corner, tall enough for every thumbnail to have a floor.
+    private func placePanel() {
         guard let panel, let screen else { return }
-        let size = model.geometry.panelSize(count: max(count, 1), expanded: expanded)
+        let size = model.geometry.panelSize(count: max(visibleLimit, 1), expanded: true)
         let area = screen.visibleFrame
         let frame = CGRect(
             x: model.corner.isLeft ? area.minX : area.maxX - size.width,
@@ -271,14 +341,7 @@ final class QuickAccessController {
             width: size.width,
             height: size.height
         )
-        resizeTask?.cancel()
-        if immediately || frame.height >= panel.frame.height || panel.frame.width != frame.width {
-            panel.setFrame(frame, display: true)
-            return
-        }
-        resizeTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(0.45 * (self?.model.speed ?? 1)))
-            guard let self, !Task.isCancelled, model.isExpanded == expanded, model.cards.count == count else { return }
+        if panel.frame != frame {
             panel.setFrame(frame, display: true)
         }
     }
@@ -288,7 +351,7 @@ final class QuickAccessController {
         guard panel != nil, !model.cards.isEmpty else { return }
         let id = screen?.displayID
         screen = NSScreen.screens.first { $0.displayID == id } ?? NSScreen.main
-        resizePanel(count: model.cards.count, expanded: model.isExpanded, immediately: true)
+        placePanel()
     }
 
     /// A copy at twice the thumbnail's size, enough for Retina without holding the full capture twice.

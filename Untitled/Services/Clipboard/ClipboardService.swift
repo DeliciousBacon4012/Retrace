@@ -6,6 +6,8 @@ protocol ClipboardWriting: AnyObject {
     func copy(_ image: NSImage)
     /// Copies a saved file so it pastes as a file in Finder and as its contents in most apps.
     func copyFile(at url: URL)
+    /// Copies several saved files, which paste as files in Finder.
+    func copyFiles(at urls: [URL])
     func copy(text: String)
     /// True while the clipboard still holds an image this app put there, untouched since.
     var holdsOurImage: Bool { get }
@@ -35,6 +37,10 @@ final class SystemClipboard: ClipboardWriting {
         imageChangeCount = NSPasteboard.general.changeCount
     }
 
+    func copyFiles(at urls: [URL]) {
+        write(urls.map { $0 as NSURL })
+    }
+
     func copy(text: String) {
         write([text as NSString])
     }
@@ -54,6 +60,7 @@ final class PreviewClipboard: ClipboardWriting {
     var holdsOurImage: Bool { false }
     func copy(_ image: NSImage) {}
     func copyFile(at url: URL) {}
+    func copyFiles(at urls: [URL]) {}
     func copy(text: String) {}
 }
 #endif

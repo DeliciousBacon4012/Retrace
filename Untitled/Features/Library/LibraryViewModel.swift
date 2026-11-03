@@ -26,6 +26,8 @@ final class LibraryViewModel {
     var kindFilter: KindFilter = .all
     var selection: Set<RecentItem.ID> = []
     var previewURL: URL?
+    /// Where a Shift-click range starts: the item last clicked without Shift.
+    @ObservationIgnored private var rangeAnchor: RecentItem.ID?
 
     /// Files and snippets that match the filter and search, newest first. Snippets match
     /// on their text, files on their name.
@@ -48,14 +50,31 @@ final class LibraryViewModel {
 
     func select(_ item: RecentItem) {
         selection = [item.id]
+        rangeAnchor = item.id
     }
 
     func toggle(_ item: RecentItem) {
+        rangeAnchor = item.id
         if selection.contains(item.id) {
             selection.remove(item.id)
         } else {
             selection.insert(item.id)
         }
+    }
+
+    /// Selects everything from the last item clicked through `item`, like Finder.
+    func extendSelection(to item: RecentItem, in items: [RecentItem]) {
+        guard let start = items.firstIndex(where: { $0.id == rangeAnchor }),
+              let end = items.firstIndex(where: { $0.id == item.id })
+        else {
+            select(item)
+            return
+        }
+        selection = Set(items[min(start, end)...max(start, end)].map(\.id))
+    }
+
+    func selectAll(_ items: [RecentItem]) {
+        selection = Set(items.map(\.id))
     }
 
     func selectedItems(in items: [RecentItem]) -> [RecentItem] {

@@ -10,6 +10,9 @@ struct AnnotationCanvas: View {
     @State private var isHovering = false
     @State private var magnifyStart: CGFloat?
     @State private var scrollMonitor: Any?
+    @State private var rightClickMonitor: Any?
+    /// The pointer over the image, for selecting the mark under a right-click.
+    @State private var pointer = HoverPoint()
 
     var body: some View {
         GeometryReader { proxy in
@@ -76,14 +79,22 @@ struct AnnotationCanvas: View {
                 switch phase {
                 case .active(let location):
                     isHovering = true
+                    pointer.location = layout.imagePoint(for: location)
+                    pointer.tolerance = 7 / layout.factor
                     updateCursor(at: location, layout: layout)
                 case .ended:
                     isHovering = false
                     NSCursor.arrow.set()
                 }
             }
-            .onAppear { installScrollMonitor(fitFactor: layout.fitFactor) }
-            .onDisappear { removeScrollMonitor() }
+            .onAppear {
+                installScrollMonitor(fitFactor: layout.fitFactor)
+                installRightClickMonitor()
+            }
+            .onDisappear {
+                removeScrollMonitor()
+                removeRightClickMonitor()
+            }
         }
         .clipped()
     }
@@ -164,6 +175,24 @@ struct AnnotationCanvas: View {
         scrollMonitor = nil
     }
 
+    /// A right-click acts on the mark under it, so that mark is selected before the menu opens.
+    private func installRightClickMonitor() {
+        guard rightClickMonitor == nil else { return }
+        rightClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown) { [document, pointer] event in
+            if isHovering {
+                document.selectMark(at: pointer.location, tolerance: pointer.tolerance)
+            }
+            return event
+        }
+    }
+
+    private func removeRightClickMonitor() {
+        if let rightClickMonitor {
+            NSEvent.removeMonitor(rightClickMonitor)
+        }
+        rightClickMonitor = nil
+    }
+
     // MARK: Cursor
 
     private func updateCursor(at location: CGPoint, layout: CanvasLayout) {
@@ -220,6 +249,12 @@ struct AnnotationCanvas: View {
 }
 
 /// Converts between the view's points and the image's pixels, for the current zoom and pan.
+/// Where the pointer is, kept out of view state so moving it doesn't redraw the canvas.
+private final class HoverPoint {
+    var location: CGPoint = .zero
+    var tolerance: CGFloat = 0
+}
+
 nonisolated struct CanvasLayout: Equatable {
     let factor: CGFloat
     let fitFactor: CGFloat

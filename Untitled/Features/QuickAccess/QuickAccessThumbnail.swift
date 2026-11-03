@@ -43,8 +43,8 @@ struct QuickAccessStackView: View {
         var pin: (UUID) -> Void
         var open: (UUID) -> Void
         var close: (UUID) -> Void
-        /// The pointer entered or left the whole stack.
-        var hoverStack: (Bool) -> Void
+        var closeAll: () -> Void
+        var showInFinder: (UUID) -> Void
     }
 
     let model: QuickAccessStackModel
@@ -103,7 +103,6 @@ struct QuickAccessStackView: View {
         }
         .padding(model.geometry.padding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
-        .onHover(perform: actions.hoverStack)
     }
 
     /// Floors rise one after another, nearest first, like a quick ripple.
@@ -141,6 +140,8 @@ private struct QuickAccessCard: View {
             .aspectRatio(contentMode: .fill)
             .frame(width: size.width, height: size.height, alignment: cropAlignment)
             .clipShape(.rect(cornerRadius: 12, style: .continuous))
+            .contentShape(.rect(cornerRadius: 12, style: .continuous))
+            .onTapGesture { actions.open(id) }
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(.separator, lineWidth: 0.5)
@@ -163,9 +164,14 @@ private struct QuickAccessCard: View {
                         .accessibilityLabel("\(badge) captures")
                 }
             }
-            .shadow(color: .black.opacity(0.22), radius: 8, y: 3)
-            .animation(.easeOut(duration: 0.15), value: isHovered)
-            .onTapGesture(count: 2) { actions.open(id) }
+            // On a shape behind the card, so hover changes don't redraw the shadow.
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.background)
+                    .shadow(color: .black.opacity(0.22), radius: 8, y: 3)
+            }
+            .animation(.smooth(duration: 0.18), value: isHovered)
+            .contextMenu { contextMenu }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(card.capture.isVideo ? "Recording" : "Screenshot")
             .accessibilityAction(named: "Open in Editor") { actions.open(id) }
@@ -178,6 +184,7 @@ private struct QuickAccessCard: View {
         ZStack {
             Color.black.opacity(0.2)
                 .clipShape(.rect(cornerRadius: 12, style: .continuous))
+                .onTapGesture { actions.open(id) }
 
             GlassEffectContainer(spacing: 8) {
                 VStack(spacing: 8) {
@@ -208,6 +215,28 @@ private struct QuickAccessCard: View {
             }
             .padding(6)
         }
+    }
+
+    @ViewBuilder
+    private var contextMenu: some View {
+        Button(card.capture.isVideo ? "Open" : "Open in Editor") { actions.open(id) }
+        Button("Copy") { actions.copy(id) }
+        if card.capture.fileURL == nil {
+            Button("Save") { actions.save(id) }
+        } else {
+            Button("Show in Finder") { actions.showInFinder(id) }
+        }
+        if let url = card.capture.fileURL {
+            ShareLink(item: url) { Text("Share…") }
+        }
+        if !card.capture.isVideo {
+            Button("Pin to Screen") { actions.pin(id) }
+        }
+        Divider()
+        Button("Close") { actions.close(id) }
+        Button("Close All") { actions.closeAll() }
+        Divider()
+        Button("Move to Trash", role: .destructive) { actions.delete(id) }
     }
 
     private func cornerButton(_ title: LocalizedStringKey, symbol: String, action: @escaping () -> Void) -> some View {

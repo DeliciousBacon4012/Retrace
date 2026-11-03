@@ -80,8 +80,27 @@ struct EditorView: View {
         }
     }
 
+    /// Mark commands act on the selected mark; right-clicking a mark selects it first.
+    @ViewBuilder
+    private var canvasMenu: some View {
+        Button("Copy Image") { actions.copy() }
+        Button("Copy Text from Area…") { document.send(.copyText) }
+        Divider()
+        Button("Duplicate") { document.duplicateSelection() }
+        Button("Bring to Front") { document.bringSelectionToFront() }
+        Button("Send to Back") { document.sendSelectionToBack() }
+        Button("Delete", role: .destructive) { document.deleteSelection() }
+        Divider()
+        Button("Zoom to Fit") { document.zoomToFit() }
+        Button("Actual Size") { document.zoomToActualSize() }
+        Divider()
+        Button("Save") { actions.save() }
+        Button("Export…") { document.send(.export) }
+    }
+
     private var canvas: some View {
         AnnotationCanvas(document: document)
+            .contextMenu { canvasMenu }
             .onGeometryChange(for: CGSize.self) { $0.size } action: { canvasSize = $0 }
             .overlay(alignment: .bottom) {
                 EditorStatusBar(document: document, fitFactor: fitFactor)
