@@ -127,8 +127,10 @@ struct EditorView: View {
             symbol: symbol(for:),
             position: $toolbarPosition
         )
-        .padding(.leading, Design.spacingL + (toolbarPosition == .right ? 0 : leftInspector))
-        .padding(.trailing, Design.spacingL + (toolbarPosition == .left ? 0 : rightInspector))
+        // Along a side, the tools keep the edge and a docked inspector moves in beside them;
+        // along the bottom, they center between the docked panels.
+        .padding(.leading, Design.spacingL + (toolbarPosition == .bottom ? leftInspector : 0))
+        .padding(.trailing, Design.spacingL + (toolbarPosition == .bottom ? rightInspector : 0))
         .padding(.vertical, Design.spacingL)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
         .transition(.opacity.combined(with: .scale(0.9)))
