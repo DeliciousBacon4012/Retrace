@@ -376,21 +376,17 @@ private struct EffectsSection: View {
 private struct CropSection: View {
     let document: EditorDocument
 
-    private let ratios: [(String, CGFloat)] = [("16:9", 16 / 9), ("4:3", 4 / 3), ("1:1", 1), ("3:4", 3 / 4), ("9:16", 9 / 16)]
-
     var body: some View {
         Section {
-            LabeledContent("Aspect Ratio") {
-                Menu("Choose") {
-                    ForEach(ratios, id: \.0) { title, ratio in
-                        Button(title) { document.applyCropAspect(ratio) }
-                    }
-                }
-                .fixedSize()
+            Picker("Aspect Ratio", selection: Binding(get: { document.cropAspect }, set: { document.setCropAspect($0) })) {
+                Text(CropAspect.free.title).tag(CropAspect.free)
+                Text(CropAspect.original.title).tag(CropAspect.original)
+                Divider()
+                ForEach(CropAspect.allCases.filter { $0 != .free && $0 != .original }) { Text($0.title).tag($0) }
             }
             HStack {
                 Button("Reset") { document.resetCrop() }
-                    .disabled(document.cropRect == nil)
+                    .disabled(!document.isCropped)
                 Spacer()
                 Button("Crop") { document.commitCrop() }
                     .buttonStyle(.borderedProminent)
@@ -398,7 +394,7 @@ private struct CropSection: View {
         } header: {
             Text("Crop")
         } footer: {
-            Text("Drag the handles or the box. Press Return to crop, or Esc to cancel. Hold Shift for a square.")
+            Text("Drag the handles, move the box, or drag across the image to start over. A chosen ratio stays locked; in Free, hold Shift for a square. Press Return to crop, or Esc to cancel.")
         }
     }
 }

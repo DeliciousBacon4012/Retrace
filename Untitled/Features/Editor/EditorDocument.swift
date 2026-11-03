@@ -40,9 +40,12 @@ final class EditorDocument {
                 select(nil)
                 toolBeforeCrop = oldValue
                 cropBeforeEditing = cropRect
+                // Handles go around the whole image straight away, ready to drag in.
+                if cropRect == nil { cropRect = fullImageRect }
                 zoom = nil
                 pan = .zero
             } else if oldValue == .crop {
+                cropRect = normalizedCrop(cropRect)
                 zoom = nil
                 pan = .zero
             }
@@ -163,11 +166,28 @@ final class EditorDocument {
     /// Escape in the crop tool: put the crop back the way it was and leave the tool.
     func cancelCrop() {
         guard tool == .crop else { return }
-        if cropRect != cropBeforeEditing {
+        if normalizedCrop(cropRect) != normalizedCrop(cropBeforeEditing) {
             pushUndo(snapshot, named: String(localized: "Crop"))
             cropRect = cropBeforeEditing
         }
         withAnimation(.panel) { tool = toolBeforeCrop == .crop ? .select : toolBeforeCrop }
+    }
+
+    /// The shape the crop keeps while its handles are dragged. Free by default.
+    private(set) var cropAspect: CropAspect = .free
+
+    private var fullImageRect: CGRect { CGRect(origin: .zero, size: imageSize) }
+
+    /// True when there's a crop that actually cuts something off.
+    var isCropped: Bool { normalizedCrop(cropRect) != nil }
+
+    /// A crop covering the whole image is no crop at all.
+    private func normalizedCrop(_ rect: CGRect?) -> CGRect? {
+        guard let rect else { return nil }
+        let full = fullImageRect
+        let isWhole = abs(rect.minX - full.minX) < 1 && abs(rect.minY - full.minY) < 1
+            && abs(rect.maxX - full.maxX) < 1 && abs(rect.maxY - full.maxY) < 1
+        return isWhole ? nil : rect
     }
 
     /// The crop as a box, so it can use the same handles as rectangles.
@@ -319,7 +339,7 @@ final class EditorDocument {
         if tool == .crop {
             if let box = cropBox, let handle = MarkHandle.hit(at: point, on: box, tolerance: tolerance * 1.8) {
                 gesture = .cropHandle(handle)
-            } else if let cropRect, cropRect.contains(point) {
+            } else if let cropRect = normalizedCrop(cropRect), cropRect.contains(point) {
                 gesture = .movingCrop(last: point)
             } else {
                 gesture = .cropping(origin: clamp(point))
@@ -472,9 +492,13 @@ final class EditorDocument {
             hasUnsavedChanges = true
 
         case .cropping(let origin):
-            cropRect = CGRect(origin: origin, size: .zero)
-                .union(CGRect(origin: clamp(constrained ? squared(from: origin, to: point) : point), size: .zero))
-                .intersection(CGRect(origin: .zero, size: imageSize))
+            if let ratio = cropAspect.ratio(for: imageSize) ?? (constrained ? 1 : nil) {
+                cropRect = CropGeometry.box(from: origin, to: point, ratio: ratio, in: fullImageRect)
+            } else {
+                cropRect = CGRect(origin: origin, size: .zero)
+                    .union(CGRect(origin: clamp(point), size: .zero))
+                    .intersection(fullImageRect)
+            }
 
         case .movingCrop(let last):
             guard let crop = cropRect else { return }
@@ -485,9 +509,25 @@ final class EditorDocument {
             gesture = .movingCrop(last: point)
 
         case .cropHandle(let handle):
-            guard var box = cropBox else { return }
-            handle.drag(&box, to: clamp(point), constrained: constrained)
-            cropRect = box.rect.intersection(CGRect(origin: .zero, size: imageSize))
+            guard var box = cropBox, let crop = cropRect else { return }
+            // A chosen ratio stays locked while any handle moves, like Photoshop.
+            if let ratio = cropAspect.ratio(for: imageSize) ?? (constrained ? 1 : nil) {
+                switch handle {
+                case .corner(let index):
+                    let opposite = [
+                        CGPoint(x: crop.maxX, y: crop.maxY), CGPoint(x: crop.minX, y: crop.maxY),
+                        CGPoint(x: crop.minX, y: crop.minY), CGPoint(x: crop.maxX, y: crop.minY),
+                    ][index]
+                    cropRect = CropGeometry.box(from: opposite, to: point, ratio: ratio, in: fullImageRect)
+                case .edge(let index):
+                    cropRect = CropGeometry.box(movingEdge: index, of: crop, to: point, ratio: ratio, in: fullImageRect)
+                default:
+                    break
+                }
+            } else {
+                handle.drag(&box, to: clamp(point), constrained: false)
+                cropRect = box.rect.intersection(fullImageRect)
+            }
 
         case nil:
             break
@@ -515,13 +555,13 @@ final class EditorDocument {
             }
         case .cropping:
             if let crop = cropRect, crop.width < 8 || crop.height < 8 {
-                cropRect = gestureSnapshot?.cropRect
+                cropRect = gestureSnapshot?.cropRect ?? fullImageRect
             } else {
                 pushUndoIfChanged(since: gestureSnapshot, named: String(localized: "Crop"))
             }
         case .movingCrop, .cropHandle:
             if let crop = cropRect, crop.width < 8 || crop.height < 8 {
-                cropRect = gestureSnapshot?.cropRect
+                cropRect = gestureSnapshot?.cropRect ?? fullImageRect
             } else {
                 pushUndoIfChanged(since: gestureSnapshot, named: String(localized: "Crop"))
             }
@@ -679,23 +719,21 @@ final class EditorDocument {
     }
 
     func resetCrop() {
-        guard cropRect != nil else { return }
+        guard isCropped else { return }
         pushUndo(snapshot, named: String(localized: "Reset Crop"))
-        withAnimation(.response) { cropRect = nil }
+        withAnimation(.response) { cropRect = tool == .crop ? fullImageRect : nil }
     }
 
-    /// Crops to a fixed aspect ratio, as large as fits and centered.
-    func applyCropAspect(_ ratio: CGFloat) {
-        let size = imageSize
-        var width = size.width
-        var height = width / ratio
-        if height > size.height {
-            height = size.height
-            width = height * ratio
-        }
+    /// Locks the crop to a shape and makes it the largest of that shape around the current
+    /// crop's center. Free keeps the crop as it is and unlocks it.
+    func setCropAspect(_ aspect: CropAspect) {
+        cropAspect = aspect
+        guard let ratio = aspect.ratio(for: imageSize) else { return }
+        let current = cropRect ?? fullImageRect
         pushUndo(snapshot, named: String(localized: "Crop"))
         withAnimation(.response) {
-            cropRect = CGRect(x: (size.width - width) / 2, y: (size.height - height) / 2, width: width, height: height).integral
+            cropRect = CropGeometry.largest(ratio: ratio, in: fullImageRect, around: CGPoint(x: current.midX, y: current.midY)).integral
+                .intersection(fullImageRect)
         }
     }
 
@@ -854,7 +892,9 @@ final class EditorDocument {
 
     // MARK: Helpers
 
-    private var snapshot: Snapshot { Snapshot(annotations: annotations, cropRect: cropRect) }
+    /// A crop around the whole image is saved as no crop, so undo never brings back a
+    /// do-nothing crop outside the crop tool.
+    private var snapshot: Snapshot { Snapshot(annotations: annotations, cropRect: normalizedCrop(cropRect)) }
     private var selectedIndex: Int? { selected.flatMap { mark in annotations.firstIndex { $0.id == mark.id } } }
 
     private func moveSelection(by offset: CGSize) {
@@ -953,7 +993,7 @@ final class EditorDocument {
     private func restore(_ snapshot: Snapshot) {
         withAnimation(.response) {
             annotations = snapshot.annotations
-            cropRect = snapshot.cropRect
+            cropRect = snapshot.cropRect ?? (tool == .crop ? fullImageRect : nil)
         }
         setSelection(selectedIDs.intersection(annotations.map(\.id)))
         lastStyleEdit = nil
