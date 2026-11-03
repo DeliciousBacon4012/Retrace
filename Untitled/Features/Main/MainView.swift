@@ -12,14 +12,36 @@ struct MainView: View {
     }
 }
 
+/// What the main window shows: your captures, or everything you copied.
+enum MainSection: String, CaseIterable, Identifiable {
+    case captures
+    case clipboard
+
+    var id: String { rawValue }
+    static let storageKey = "mainWindowSection"
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .captures: "Captures"
+        case .clipboard: "Clipboard"
+        }
+    }
+}
+
 private struct MainContent: View {
     @State var access: ScreenRecordingAccessModel
     @State private var library = LibraryViewModel()
+    @AppStorage(MainSection.storageKey) private var section: MainSection = .captures
 
     @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
-        LibraryView(viewModel: library)
+        Group {
+            switch section {
+            case .captures: LibraryView(viewModel: library)
+            case .clipboard: ClipboardView()
+            }
+        }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if access.screenRecording == .notGranted {
                     PermissionBanner(model: access)
@@ -38,11 +60,26 @@ private struct MainContent: View {
                 ToolbarItem(placement: .navigation) {
                     RecordControl()
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    QuickLookToggle()
+                ToolbarItem(placement: .principal) {
+                    Picker("Show", selection: $section) {
+                        ForEach(MainSection.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    .help("Switch between your captures and clipboard history")
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    FilterMenu(viewModel: library)
+                if section == .captures {
+                    ToolbarItem(placement: .primaryAction) {
+                        QuickLookToggle()
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        FilterMenu(viewModel: library)
+                    }
+                } else {
+                    ToolbarItem(placement: .primaryAction) {
+                        ClipboardMenu()
+                    }
                 }
                 ToolbarItem(placement: .primaryAction) {
                     SettingsLink {
@@ -51,7 +88,7 @@ private struct MainContent: View {
                     .help("Settings  ⌘,")
                 }
             }
-            .frame(minWidth: 520, minHeight: 340)
+            .frame(minWidth: 600, minHeight: 340)
             .animation(.panel, value: access.screenRecording)
             .task {
                 await access.watchScreenRecording()
@@ -132,20 +169,36 @@ private struct RecordControl: View {
     }
 }
 
-/// Which captures show, plus the save folder. The symbol fills in while a filter is on.
-/// While on, a single click in Recents previews with Quick Look. Double-click still opens.
-private struct QuickLookToggle: View {
-    @AppStorage(LibraryViewModel.quickLookOnClickKey) private var isOn = false
+/// Turning clipboard history on and off, and clearing it.
+private struct ClipboardMenu: View {
+    @Environment(AppDependencies.self) private var dependencies
+    @Environment(SettingsStore.self) private var settings
+    @Environment(\.openSettings) private var openSettings
+    @State private var confirmsClear = false
 
     var body: some View {
-        Toggle(isOn: $isOn) {
-            Label("Quick Look on Click", systemImage: "eye")
+        @Bindable var settings = settings
+        Menu {
+            Toggle("Keep Clipboard History", isOn: $settings.keepsClipboardHistory)
+            Divider()
+            Button("Clear History…") { confirmsClear = true }
+                .disabled(dependencies.clipboardHistory.entries.isEmpty)
+            Button("Clipboard Settings…") {
+                MainWindowRouter.shared.showSettings(.clipboard, using: openSettings)
+            }
+        } label: {
+            Label("Clipboard", systemImage: "clipboard")
         }
-        .toggleStyle(.button)
-        .help(isOn ? "Click previews with Quick Look. Double-click opens." : "Preview with Quick Look when you click")
+        .help(settings.keepsClipboardHistory ? "Clipboard history is on" : "Clipboard history is paused")
+        .confirmationDialog("Clear clipboard history?", isPresented: $confirmsClear) {
+            Button("Clear History", role: .destructive) { dependencies.clipboardHistory.removeAll() }
+        } message: {
+            Text("Everything in clipboard history is deleted. This can't be undone.")
+        }
     }
 }
 
+/// Which captures show, plus the save folder. The symbol fills in while a filter is on.
 private struct FilterMenu: View {
     @Bindable var viewModel: LibraryViewModel
 
@@ -170,6 +223,19 @@ private struct FilterMenu: View {
             )
         }
         .help(viewModel.kindFilter == .all ? String(localized: "Show All") : String(localized: "Showing \(viewModel.kindFilter.title)"))
+    }
+}
+
+/// While on, a single click in Recents previews with Quick Look. Double-click still opens.
+private struct QuickLookToggle: View {
+    @AppStorage(LibraryViewModel.quickLookOnClickKey) private var isOn = false
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            Label("Quick Look on Click", systemImage: "eye")
+        }
+        .toggleStyle(.button)
+        .help(isOn ? "Click previews with Quick Look. Double-click opens." : "Preview with Quick Look when you click")
     }
 }
 

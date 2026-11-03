@@ -55,6 +55,14 @@ final class SettingsStore {
     static let thumbnailMemoryChoices = [64, 128, 256]
     private var storedToastSeconds: [String: Int] = [:] { didSet { save(storedToastSeconds, .toastSeconds) } }
 
+    // MARK: Clipboard history
+
+    /// Keeps what you copy in any app, for the Clipboard view.
+    var keepsClipboardHistory = Defaults.keepsClipboardHistory { didSet { save(keepsClipboardHistory, .keepsClipboardHistory) } }
+    var clipboardRetention = Defaults.clipboardRetention { didSet { save(clipboardRetention.rawValue, .clipboardRetention) } }
+    /// Apps whose copies are never kept, by bundle identifier.
+    var clipboardExcludedApps = Defaults.clipboardExcludedApps { didSet { save(clipboardExcludedApps, .clipboardExcludedApps) } }
+
     // MARK: Output
 
     var imageFormat = Defaults.imageFormat { didSet { save(imageFormat.rawValue, .imageFormat) } }
@@ -188,6 +196,9 @@ final class SettingsStore {
         plainTextApp = PlainTextApp(rawValue: value(.plainTextApp, default: "")) ?? Defaults.plainTextApp
         let limit = value(.textHistoryLimit, default: Defaults.textHistoryLimit)
         textHistoryLimit = Self.textHistoryLimits.contains(limit) ? limit : Defaults.textHistoryLimit
+        keepsClipboardHistory = value(.keepsClipboardHistory, default: Defaults.keepsClipboardHistory)
+        clipboardRetention = ClipboardRetention(rawValue: value(.clipboardRetention, default: "")) ?? Defaults.clipboardRetention
+        clipboardExcludedApps = value(.clipboardExcludedApps, default: Defaults.clipboardExcludedApps)
         let thumbnailMemory = value(.thumbnailMemoryMB, default: Defaults.thumbnailMemoryMB)
         thumbnailMemoryMB = Self.thumbnailMemoryChoices.contains(thumbnailMemory) ? thumbnailMemory : Defaults.thumbnailMemoryMB
         // Keep only known kinds with a time Settings offers, so the picker always shows a choice.
@@ -283,6 +294,9 @@ private extension SettingsStore {
         case plainTextApp
         case textHistoryLimit
         case thumbnailMemoryMB
+        case keepsClipboardHistory
+        case clipboardRetention
+        case clipboardExcludedApps
         case imageFormat
         case downscalesRetina
         case imageQuality
@@ -328,6 +342,19 @@ private extension SettingsStore {
         static let plainTextApp = PlainTextApp.textEdit
         static let textHistoryLimit = 50
         static let thumbnailMemoryMB = 64
+        static let keepsClipboardHistory = true
+        static let clipboardRetention = ClipboardRetention.forever
+        /// Password managers and wallets. Most also mark what they copy as private, which is
+        /// always skipped; this catches the ones that don't.
+        static let clipboardExcludedApps = [
+            "com.apple.Passwords",
+            "com.apple.keychainaccess",
+            "com.1password.1password",
+            "com.agilebits.onepassword7",
+            "com.bitwarden.desktop",
+            "io.trezor.TrezorSuite",
+            "com.ledger.live",
+        ]
         static let imageFormat = ImageFormat.png
         static let downscalesRetina = false
         static let imageQuality = 0.85

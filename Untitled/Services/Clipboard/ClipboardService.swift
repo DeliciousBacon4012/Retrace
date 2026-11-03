@@ -11,11 +11,15 @@ protocol ClipboardWriting: AnyObject {
     func copy(text: String)
     /// True while the clipboard still holds an image this app put there, untouched since.
     var holdsOurImage: Bool { get }
+    /// The clipboard's change count right after this app last wrote to it, so clipboard
+    /// history can leave out what Untitled copied itself.
+    var lastWriteChangeCount: Int? { get }
 }
 
 final class SystemClipboard: ClipboardWriting {
     /// The clipboard's change count right after this app last copied an image.
     private var imageChangeCount: Int?
+    private(set) var lastWriteChangeCount: Int?
 
     var holdsOurImage: Bool {
         imageChangeCount == NSPasteboard.general.changeCount
@@ -51,6 +55,7 @@ final class SystemClipboard: ClipboardWriting {
         if !pasteboard.writeObjects(objects) {
             Log.capture.error("Could not write to the clipboard")
         }
+        lastWriteChangeCount = pasteboard.changeCount
     }
 }
 
@@ -58,6 +63,7 @@ final class SystemClipboard: ClipboardWriting {
 /// A stand-in for previews and tests.
 final class PreviewClipboard: ClipboardWriting {
     var holdsOurImage: Bool { false }
+    var lastWriteChangeCount: Int? { nil }
     func copy(_ image: NSImage) {}
     func copyFile(at url: URL) {}
     func copyFiles(at urls: [URL]) {}

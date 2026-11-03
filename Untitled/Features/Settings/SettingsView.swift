@@ -35,6 +35,8 @@ struct SettingsView: View {
             .settingsPage()
         case .quickAccess:
             QuickAccessSettingsView().settingsPage()
+        case .clipboard:
+            ClipboardSettingsView().settingsPage()
         case .notifications:
             NotificationsSettingsView().settingsPage()
         case .editor:
