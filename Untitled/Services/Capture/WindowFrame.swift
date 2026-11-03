@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 /// What fills the space around a window capture.
 nonisolated enum WindowBackground: String, CaseIterable, Identifiable, Sendable {
