@@ -15,13 +15,18 @@ struct EditorInspector: View {
 
         Form {
             Section {
-                InspectorHeader(tool: tool, isSelection: document.selected != nil)
+                InspectorHeader(tool: tool, selectionCount: document.selectedIDs.count, isMixed: document.selectionIsMixed)
             }
 
             switch tool {
+            case _ where document.selectionIsMixed:
+                Section {
+                    Text("These marks are different kinds. Select marks of one kind to change their style.")
+                        .foregroundStyle(.secondary)
+                }
             case .select:
                 Section {
-                    Text("Click a mark to change it. Drag its handles to reshape it, or drag the mark to move it.")
+                    Text("Click a mark to change it. Drag its handles to reshape it, or drag the mark to move it. Drag across marks, Shift-click, or press ⌘A to select several.")
                         .foregroundStyle(.secondary)
                 }
             case .crop:
@@ -33,16 +38,16 @@ struct EditorInspector: View {
                 if tool != .highlighter, tool != .redact {
                     EffectsSection(document: document)
                 }
-                if tool == .redact, document.selected == nil {
+                if tool == .redact, !document.hasSelection {
                     AutoRedactSection(document: document)
                 }
             }
 
-            if document.selected != nil {
+            if document.hasSelection {
                 ArrangeSection(document: document)
             }
 
-            if tool.draws {
+            if tool.draws, !document.selectionIsMixed {
                 Section {
                     Button("Reset to Default Style") {
                         withAnimation(.response) { document.resetStyle() }
@@ -63,20 +68,31 @@ struct EditorInspector: View {
 
 private struct InspectorHeader: View {
     let tool: EditorTool
-    let isSelection: Bool
+    let selectionCount: Int
+    let isMixed: Bool
+
+    private var caption: LocalizedStringKey {
+        switch selectionCount {
+        case 0: tool.draws ? "Next mark" : "Tool"
+        case 1: "Selected mark"
+        default: "\(selectionCount) marks selected"
+        }
+    }
 
     var body: some View {
         LabeledContent {
-            Text(String(tool.key).uppercased())
-                .font(.callout.monospaced())
-                .foregroundStyle(.secondary)
-                .help("Press \(String(tool.key).uppercased()) to pick this tool")
+            if !isMixed {
+                Text(String(tool.key).uppercased())
+                    .font(.callout.monospaced())
+                    .foregroundStyle(.secondary)
+                    .help("Press \(String(tool.key).uppercased()) to pick this tool")
+            }
         } label: {
             Label {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(tool.title)
+                    Text(isMixed ? String(localized: "Selection") : tool.title)
                         .font(.headline)
-                    Text(isSelection ? "Selected mark" : (tool.draws ? "Next mark" : "Tool"))
+                    Text(caption)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -366,7 +382,7 @@ private struct CropSection: View {
     }
 }
 
-/// Order, duplicate, and delete for the selected mark.
+/// Order, duplicate, and delete for the selected marks.
 private struct ArrangeSection: View {
     let document: EditorDocument
 

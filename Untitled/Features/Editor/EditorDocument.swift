@@ -20,7 +20,9 @@ final class EditorDocument {
     /// must be the covered version, with nothing extra in the file.
     var hasRedactions: Bool { annotations.contains { $0.tool == .redact } }
     private(set) var cropRect: CGRect?
-    private(set) var selectedID: Annotation.ID?
+    private(set) var selectedIDs: Set<Annotation.ID> = []
+    /// The area being dragged out with the Select tool, in image pixels.
+    private(set) var marquee: CGRect?
     /// The text mark being typed into, if any.
     private(set) var editingTextID: Annotation.ID?
     /// A mark being drawn right now, not yet in `annotations`.
@@ -174,6 +176,14 @@ final class EditorDocument {
         return box
     }
 
+    /// The canvas's size in the window. Kept here so only the views that show the zoom follow
+    /// it as the window resizes, rather than the whole editor with its toolbar and inspector.
+    var canvasSize: CGSize = .zero
+    /// The factor that fits the image to the canvas.
+    var fitFactor: CGFloat {
+        CanvasLayout(imageSize: imageSize, scale: scale, zoom: nil, pan: .zero, focus: visibleRect, in: canvasSize).fitFactor
+    }
+
     /// The zoom, as a fraction of the image's actual size. `nil` fits the image to the window.
     var zoom: CGFloat?
     /// Whether the pointer is over the zoom percentage, which scrolls to zoom; the canvas
@@ -197,7 +207,9 @@ final class EditorDocument {
     @ObservationIgnored private var gesture: Gesture?
     @ObservationIgnored private var gestureSnapshot: Snapshot?
     @ObservationIgnored private var textEditSnapshot: Snapshot?
-    @ObservationIgnored private var lastStyleEdit: (id: Annotation.ID?, tool: EditorTool, date: Date)?
+    @ObservationIgnored private var lastStyleEdit: (ids: Set<Annotation.ID>, tool: EditorTool, date: Date)?
+    /// The mark a press landed on, which a click without a drag narrows the selection to.
+    @ObservationIgnored private var pressedMark: Annotation.ID?
     /// Blurred and pixelated copies of the screenshot, each as big as the screenshot itself
     /// (about 60 MB at 5K). Only a few are kept: see `keepRedactionLayer`.
     @ObservationIgnored private var redactionLayers: [String: CGImage] = [:]
@@ -218,6 +230,7 @@ final class EditorDocument {
     private enum Gesture {
         case drawing
         case moving(last: CGPoint)
+        case marquee(origin: CGPoint, base: Set<Annotation.ID>)
         case handle(MarkHandle)
         case cropping(origin: CGPoint)
         case movingCrop(last: CGPoint)
@@ -255,15 +268,21 @@ final class EditorDocument {
         _ = historyVersion
         return undoManager.canRedo
     }
-    var selected: Annotation? { annotations.first { $0.id == selectedID } }
+    /// The selected mark, when exactly one is selected. Only then does it offer handles.
+    var selected: Annotation? { selectedIDs.count == 1 ? selectedMarks.first : nil }
+    /// The selected marks, back to front.
+    var selectedMarks: [Annotation] { annotations.filter { selectedIDs.contains($0.id) } }
+    var hasSelection: Bool { !selectedIDs.isEmpty }
+    /// True when the selection holds different kinds of mark, which share no settings.
+    var selectionIsMixed: Bool { Set(selectedMarks.map(\.tool)).count > 1 }
 
-    /// The tool whose settings the inspector shows: the selected mark's, or the current tool's.
-    var inspectedTool: EditorTool { selected?.tool ?? tool }
+    /// The tool whose settings the inspector shows: the selected marks', or the current tool's.
+    var inspectedTool: EditorTool { selectedMarks.last?.tool ?? tool }
 
-    /// The style the inspector edits. Changing it restyles the selected mark and becomes
+    /// The style the inspector edits. Changing it restyles the selected marks and becomes
     /// that tool's style for the next mark.
     var style: MarkStyle {
-        get { selected?.style ?? style(for: tool) }
+        get { selectedMarks.last?.style ?? style(for: tool) }
         set { applyStyle(newValue) }
     }
 
@@ -281,7 +300,7 @@ final class EditorDocument {
         }
     }
 
-    /// Puts the inspected tool back to its original look, including the selected mark.
+    /// Puts the inspected tool back to its original look, including the selected marks.
     func resetStyle() {
         let tool = inspectedTool
         style = MarkStyle.defaults(for: tool, scale: scale)
@@ -290,9 +309,11 @@ final class EditorDocument {
     // MARK: Pointer input, in image pixels
 
     /// Starts a click or drag. `tolerance` is how far, in pixels, a click may miss a thin mark.
-    func pointerDown(at point: CGPoint, tolerance: CGFloat, clickCount: Int) {
+    /// `extending` (⇧ held) adds to the selection or takes a mark out of it.
+    func pointerDown(at point: CGPoint, tolerance: CGFloat, clickCount: Int, extending: Bool = false) {
         finishTextEditing()
         gestureSnapshot = snapshot
+        pressedMark = nil
         if tool == .crop {
             if let box = cropBox, let handle = MarkHandle.hit(at: point, on: box, tolerance: tolerance * 1.8) {
                 gesture = .cropHandle(handle)
@@ -311,13 +332,34 @@ final class EditorDocument {
         }
 
         if let hit = annotations.last(where: { $0.contains(point, tolerance: tolerance) }) {
+            if extending {
+                setSelection(selectedIDs.symmetricDifference([hit.id]))
+                gesture = selectedIDs.contains(hit.id) ? .moving(last: point) : nil
+                return
+            }
             if hit.tool == .text, clickCount >= 2 || tool == .text {
                 beginEditing(hit.id)
                 gesture = nil
                 return
             }
-            select(hit.id)
+            if !selectedIDs.contains(hit.id) {
+                select(hit.id)
+            }
+            pressedMark = hit.id
             gesture = .moving(last: point)
+            return
+        }
+
+        // Several marks move together from anywhere inside their outlines.
+        if selectedIDs.count > 1, !extending,
+           selectedMarks.contains(where: { $0.bounds.insetBy(dx: -tolerance, dy: -tolerance).contains(point) }) {
+            gesture = .moving(last: point)
+            return
+        }
+
+        if tool == .select {
+            if !extending { select(nil) }
+            gesture = .marquee(origin: point, base: selectedIDs)
             return
         }
 
@@ -391,10 +433,14 @@ final class EditorDocument {
             draft = mark
 
         case .moving(let last):
-            guard let index = selectedIndex else { return }
-            annotations[index].move(by: CGSize(width: point.x - last.x, height: point.y - last.y))
+            moveSelection(by: CGSize(width: point.x - last.x, height: point.y - last.y))
             gesture = .moving(last: point)
             hasUnsavedChanges = true
+
+        case .marquee(let origin, let base):
+            let area = CGRect(origin: origin, size: .zero).union(CGRect(origin: point, size: .zero))
+            marquee = area
+            selectedIDs = base.union(annotations.filter { $0.bounds.intersects(area) }.map(\.id))
 
         case .handle(let handle):
             guard let index = selectedIndex else { return }
@@ -439,41 +485,60 @@ final class EditorDocument {
             if let crop = cropRect, crop.width < 8 || crop.height < 8 {
                 cropRect = gestureSnapshot?.cropRect
             } else {
-                pushUndo(gestureSnapshot, named: String(localized: "Crop"))
+                pushUndoIfChanged(since: gestureSnapshot, named: String(localized: "Crop"))
             }
         case .movingCrop, .cropHandle:
             if let crop = cropRect, crop.width < 8 || crop.height < 8 {
                 cropRect = gestureSnapshot?.cropRect
             } else {
-                pushUndo(gestureSnapshot, named: String(localized: "Crop"))
+                pushUndoIfChanged(since: gestureSnapshot, named: String(localized: "Crop"))
             }
         case .moving:
-            pushUndo(gestureSnapshot, named: String(localized: "Move"))
+            if snapshot == gestureSnapshot, let pressedMark {
+                select(pressedMark)
+            }
+            pushUndoIfChanged(since: gestureSnapshot, named: String(localized: "Move"))
+        case .marquee:
+            marquee = nil
         case .handle:
-            pushUndo(gestureSnapshot, named: String(localized: "Reshape"))
+            pushUndoIfChanged(since: gestureSnapshot, named: String(localized: "Reshape"))
         case nil:
             break
         }
         gesture = nil
         gestureSnapshot = nil
+        pressedMark = nil
     }
 
     var isDragging: Bool { gesture != nil }
 
     // MARK: Selection and editing
 
-    /// Selects the top mark at `point`, keeping the current selection if there's none there.
+    /// Selects the top mark at `point`, keeping the current selection if there's none there
+    /// or the mark is already part of it.
     func selectMark(at point: CGPoint, tolerance: CGFloat) {
         guard tool != .crop, !isPickingTextArea,
-              let hit = annotations.last(where: { $0.contains(point, tolerance: tolerance) })
+              let hit = annotations.last(where: { $0.contains(point, tolerance: tolerance) }),
+              !selectedIDs.contains(hit.id)
         else { return }
         finishTextEditing()
         select(hit.id)
     }
 
     func select(_ id: Annotation.ID?) {
-        guard selectedID != id else { return }
-        withAnimation(.response) { selectedID = id }
+        setSelection(id.map { [$0] } ?? [])
+    }
+
+    /// ⌘A: every mark, leaving the current tool as it is.
+    func selectAll() {
+        guard tool != .crop, !isPickingTextArea else { return }
+        finishTextEditing()
+        setSelection(Set(annotations.map(\.id)))
+    }
+
+    private func setSelection(_ ids: Set<Annotation.ID>) {
+        guard selectedIDs != ids else { return }
+        withAnimation(.response) { selectedIDs = ids }
         lastStyleEdit = nil
     }
 
@@ -495,7 +560,7 @@ final class EditorDocument {
         editingTextID = nil
         if let mark = annotations.first(where: { $0.id == id }), mark.isNegligible {
             withAnimation(.response) { annotations.removeAll { $0.id == id } }
-            if selectedID == id { select(nil) }
+            selectedIDs.remove(id)
         } else if let before = textEditSnapshot, before != snapshot {
             pushUndo(before, named: String(localized: "Typing"))
         }
@@ -503,26 +568,33 @@ final class EditorDocument {
     }
 
     func deleteSelection() {
-        guard let id = selectedID else { return }
+        guard hasSelection else { return }
         pushUndo(snapshot, named: String(localized: "Delete"))
         editingTextID = nil
         withAnimation(.response) {
-            annotations.removeAll { $0.id == id }
+            annotations.removeAll { selectedIDs.contains($0.id) }
         }
         select(nil)
     }
 
     func duplicateSelection() {
-        guard var copy = selected else { return }
+        let originals = selectedMarks
+        guard !originals.isEmpty else { return }
         pushUndo(snapshot, named: String(localized: "Duplicate"))
-        copy.id = UUID()
         let offset = 16 * scale
-        copy.move(by: CGSize(width: offset, height: offset))
-        if copy.tool == .counter {
-            copy.number = (annotations.filter { $0.tool == .counter }.map(\.number).max() ?? 0) + 1
+        var number = annotations.filter { $0.tool == .counter }.map(\.number).max() ?? 0
+        let copies = originals.map { original in
+            var copy = original
+            copy.id = UUID()
+            copy.move(by: CGSize(width: offset, height: offset))
+            if copy.tool == .counter {
+                number += 1
+                copy.number = number
+            }
+            return copy
         }
-        withAnimation(.pop) { annotations.append(copy) }
-        select(copy.id)
+        withAnimation(.pop) { annotations.append(contentsOf: copies) }
+        setSelection(Set(copies.map(\.id)))
     }
 
     /// Covers each area with a redact mark in the redact tool's current style, as one undo step.
@@ -542,24 +614,26 @@ final class EditorDocument {
     }
 
     func bringSelectionToFront() {
-        guard let index = selectedIndex, index < annotations.count - 1 else { return }
+        let marks = selectedMarks
+        guard !marks.isEmpty, annotations.suffix(marks.count).map(\.id) != marks.map(\.id) else { return }
         pushUndo(snapshot, named: String(localized: "Bring to Front"))
-        let mark = annotations.remove(at: index)
-        annotations.append(mark)
+        annotations.removeAll { selectedIDs.contains($0.id) }
+        annotations.append(contentsOf: marks)
     }
 
     func sendSelectionToBack() {
-        guard let index = selectedIndex, index > 0 else { return }
+        let marks = selectedMarks
+        guard !marks.isEmpty, annotations.prefix(marks.count).map(\.id) != marks.map(\.id) else { return }
         pushUndo(snapshot, named: String(localized: "Send to Back"))
-        let mark = annotations.remove(at: index)
-        annotations.insert(mark, at: 0)
+        annotations.removeAll { selectedIDs.contains($0.id) }
+        annotations.insert(contentsOf: marks, at: 0)
     }
 
     /// Moves the selection by whole points with the arrow keys.
     func nudgeSelection(dx: CGFloat, dy: CGFloat) {
-        guard let index = selectedIndex else { return }
-        coalescedUndo(for: annotations[index].id)
-        annotations[index].move(by: CGSize(width: dx * scale, height: dy * scale))
+        guard hasSelection else { return }
+        coalescedUndo()
+        moveSelection(by: CGSize(width: dx * scale, height: dy * scale))
     }
 
     func clearAll() {
@@ -746,16 +820,27 @@ final class EditorDocument {
     // MARK: Helpers
 
     private var snapshot: Snapshot { Snapshot(annotations: annotations, cropRect: cropRect) }
-    private var selectedIndex: Int? { annotations.firstIndex { $0.id == selectedID } }
+    private var selectedIndex: Int? { selected.flatMap { mark in annotations.firstIndex { $0.id == mark.id } } }
+
+    private func moveSelection(by offset: CGSize) {
+        for index in annotations.indices where selectedIDs.contains(annotations[index].id) {
+            annotations[index].move(by: offset)
+        }
+    }
 
     private func applyStyle(_ newStyle: MarkStyle) {
-        if let index = selectedIndex {
-            let mark = annotations[index]
+        if let mark = selectedMarks.last {
             guard mark.style != newStyle else { return }
-            coalescedUndo(for: mark.id)
-            annotations[index].style = newStyle
-            if mark.style.route != newStyle.route, newStyle.route == .curved, annotations[index].control == nil {
-                annotations[index].control = ArrowGeometry.defaultBend(from: mark.start, to: mark.end)
+            coalescedUndo()
+            for index in annotations.indices where selectedIDs.contains(annotations[index].id) {
+                let before = annotations[index]
+                annotations[index].style = newStyle
+                if before.tool == .highlighter, mark.style.lineWidth == newStyle.lineWidth {
+                    annotations[index].style.lineWidth = before.style.lineWidth
+                }
+                if mark.style.route != newStyle.route, newStyle.route == .curved, before.control == nil {
+                    annotations[index].control = ArrowGeometry.defaultBend(from: before.start, to: before.end)
+                }
             }
             var remembered = newStyle
             if mark.tool == .highlighter, mark.style.lineWidth == newStyle.lineWidth {
@@ -794,24 +879,30 @@ final class EditorDocument {
         }
     }
 
-    /// Records one undo step for a run of quick changes to the same mark, like dragging a slider.
-    private func coalescedUndo(for id: Annotation.ID?) {
+    /// Records one undo step for a run of quick changes to the same marks, like dragging a slider.
+    private func coalescedUndo() {
         let now = Date()
-        if let last = lastStyleEdit, last.id == id, now.timeIntervalSince(last.date) < 1 {
-            lastStyleEdit = (id, tool, now)
+        if let last = lastStyleEdit, last.ids == selectedIDs, now.timeIntervalSince(last.date) < 1 {
+            lastStyleEdit = (selectedIDs, tool, now)
             hasUnsavedChanges = true
             return
         }
         pushUndo(snapshot, named: String(localized: "Change Style"))
-        lastStyleEdit = (id, tool, now)
+        lastStyleEdit = (selectedIDs, tool, now)
     }
 
-    /// Records the state before a change as one undo step. Undoing it records the state it
-    /// replaces, so redo always returns to exactly where you were.
+    /// Records the state just before a change as one undo step. Undoing it records the state
+    /// it replaces, so redo always returns to exactly where you were.
     private func pushUndo(_ previous: Snapshot?, named name: String) {
-        guard let previous, previous != snapshot else { return }
+        guard let previous else { return }
         registerUndo(restoring: previous, named: name)
         hasUnsavedChanges = true
+    }
+
+    /// For a drag, whose change has already happened: a press that moved nothing records nothing.
+    private func pushUndoIfChanged(since previous: Snapshot?, named name: String) {
+        guard previous != snapshot else { return }
+        pushUndo(previous, named: name)
     }
 
     private func registerUndo(restoring previous: Snapshot, named name: String) {
@@ -829,9 +920,7 @@ final class EditorDocument {
             annotations = snapshot.annotations
             cropRect = snapshot.cropRect
         }
-        if let id = selectedID, !annotations.contains(where: { $0.id == id }) {
-            select(nil)
-        }
+        setSelection(selectedIDs.intersection(annotations.map(\.id)))
         lastStyleEdit = nil
         hasUnsavedChanges = true
     }

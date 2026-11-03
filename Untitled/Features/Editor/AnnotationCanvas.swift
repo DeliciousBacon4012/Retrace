@@ -117,7 +117,8 @@ struct AnnotationCanvas: View {
                     document.pointerDown(
                         at: layout.imagePoint(for: value.startLocation),
                         tolerance: 7 / layout.factor,
-                        clickCount: NSApp.currentEvent?.clickCount ?? 1
+                        clickCount: NSApp.currentEvent?.clickCount ?? 1,
+                        extending: NSEvent.modifierFlags.contains(.shift)
                     )
                 }
                 if value.translation != .zero {
@@ -399,14 +400,32 @@ private struct CropShade: View {
     }
 }
 
-/// The selected mark's outline and grab handles.
+/// The selected marks' outlines, the lone selected mark's grab handles, and the area being
+/// dragged out with the Select tool.
 private struct MarkSelectionOverlay: View {
     let document: EditorDocument
     let layout: CanvasLayout
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            if let mark = document.selected {
+            if let area = document.marquee {
+                let frame = layout.viewRect(for: area)
+                Rectangle()
+                    .fill(Color.accentColor.opacity(0.12))
+                    .strokeBorder(Color.accentColor, lineWidth: 1)
+                    .frame(width: frame.width, height: frame.height)
+                    .offset(x: frame.minX, y: frame.minY)
+            }
+            if document.selectedIDs.count > 1 {
+                ForEach(document.selectedMarks) { mark in
+                    let padding = mark.style.lineWidth / 2 * layout.factor + 6
+                    let frame = layout.viewRect(for: mark.bounds).insetBy(dx: -padding, dy: -padding)
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.25, dash: [5, 3]))
+                        .frame(width: frame.width, height: frame.height)
+                        .offset(x: frame.minX, y: frame.minY)
+                }
+            } else if let mark = document.selected {
                 let handles = MarkHandle.handles(for: mark)
                 if handles.isEmpty || mark.tool.isBoxShaped {
                     let padding = handles.isEmpty ? mark.style.lineWidth / 2 * layout.factor + 6 : 0

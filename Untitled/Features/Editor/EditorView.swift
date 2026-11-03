@@ -10,17 +10,13 @@ struct EditorView: View {
     @AppStorage("editorShowsInspector") private var showsInspector = true
     @AppStorage(EditorPalette.storageKey) private var palette: EditorPalette = .pastel
     @State private var exportItem: ExportItem?
-    @State private var canvasSize: CGSize = .zero
     @State private var notice: EditorNotice?
     @State private var isReadingText = false
     @FocusState private var isCanvasFocused: Bool
 
-    private var fitFactor: CGFloat {
-        CanvasLayout(imageSize: document.imageSize, scale: document.scale, zoom: nil, pan: .zero, focus: document.visibleRect, in: canvasSize).fitFactor
-    }
-
-    /// Small enough for a small screenshot, big enough for the toolbar and inspector.
-    static let minimumSize = CGSize(width: 640, height: 440)
+    /// Small enough for a small screenshot, and wide enough that the toolbar keeps every tool
+    /// on show instead of folding them into an overflow menu.
+    static let minimumSize = CGSize(width: 820, height: 440)
 
     /// Room kept clear on the right for the floating inspector, so it never covers the image.
     private var inspectorInset: CGFloat {
@@ -61,6 +57,7 @@ struct EditorView: View {
         .onKeyPress(phases: [.down, .repeat]) { press in
             handle(press)
         }
+        .onCommand(#selector(NSResponder.selectAll(_:))) { document.selectAll() }
         .onDeleteCommand { document.deleteSelection() }
         .onChange(of: document.commandRequest) { _, request in
             guard let request else { return }
@@ -80,16 +77,21 @@ struct EditorView: View {
         }
     }
 
-    /// Mark commands act on the selected mark; right-clicking a mark selects it first.
+    /// Mark commands act on the selected marks; right-clicking a mark selects it first.
     @ViewBuilder
     private var canvasMenu: some View {
         Button("Copy Image") { actions.copy() }
         Button("Copy Text from Area…") { document.send(.copyText) }
         Divider()
-        Button("Duplicate") { document.duplicateSelection() }
-        Button("Bring to Front") { document.bringSelectionToFront() }
-        Button("Send to Back") { document.sendSelectionToBack() }
-        Button("Delete", role: .destructive) { document.deleteSelection() }
+        Group {
+            Button("Duplicate") { document.duplicateSelection() }
+            Button("Bring to Front") { document.bringSelectionToFront() }
+            Button("Send to Back") { document.sendSelectionToBack() }
+            Button("Delete", role: .destructive) { document.deleteSelection() }
+        }
+        .disabled(!document.hasSelection)
+        Button("Select All") { document.selectAll() }
+            .disabled(document.annotations.isEmpty)
         Divider()
         Button("Zoom to Fit") { document.zoomToFit() }
         Button("Actual Size") { document.zoomToActualSize() }
@@ -101,9 +103,9 @@ struct EditorView: View {
     private var canvas: some View {
         AnnotationCanvas(document: document)
             .contextMenu { canvasMenu }
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { canvasSize = $0 }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { document.canvasSize = $0 }
             .overlay(alignment: .bottom) {
-                EditorStatusBar(document: document, fitFactor: fitFactor)
+                EditorStatusBar(document: document)
                     .padding(.bottom, Design.spacingL)
             }
             .overlay(alignment: .top) {
@@ -198,8 +200,8 @@ struct EditorView: View {
         switch command {
         case .export: startExport()
         case .copyText: if !isReadingText { textAreaBinding.wrappedValue = true }
-        case .zoomIn: document.zoomIn(fitFactor: fitFactor)
-        case .zoomOut: document.zoomOut(fitFactor: fitFactor)
+        case .zoomIn: document.zoomIn(fitFactor: document.fitFactor)
+        case .zoomOut: document.zoomOut(fitFactor: document.fitFactor)
         }
     }
 
@@ -294,11 +296,11 @@ struct EditorView: View {
             Button("Send to Back") { document.sendSelectionToBack() }
                 .keyboardShortcut("[", modifiers: .command)
             // ⌘= and ⌘+ are the same key; both are listed so either reading works.
-            Button("Zoom In") { document.zoomIn(fitFactor: fitFactor) }
+            Button("Zoom In") { document.zoomIn(fitFactor: document.fitFactor) }
                 .keyboardShortcut("=", modifiers: .command)
-            Button("Zoom In") { document.zoomIn(fitFactor: fitFactor) }
+            Button("Zoom In") { document.zoomIn(fitFactor: document.fitFactor) }
                 .keyboardShortcut("+", modifiers: .command)
-            Button("Zoom Out") { document.zoomOut(fitFactor: fitFactor) }
+            Button("Zoom Out") { document.zoomOut(fitFactor: document.fitFactor) }
                 .keyboardShortcut("-", modifiers: .command)
             // Preview's keys: ⌘0 for actual size and ⌘9 to fit. ⌘1 and ⌘2 belong to the
             // main window's pages.
@@ -348,7 +350,7 @@ struct EditorView: View {
     }
 
     private func nudge(dx: CGFloat, dy: CGFloat) -> KeyPress.Result {
-        guard document.selected != nil else { return .ignored }
+        guard document.hasSelection else { return .ignored }
         document.nudgeSelection(dx: dx, dy: dy)
         return .handled
     }
@@ -390,9 +392,9 @@ private struct EditorNoticeView: View {
 /// Zoom controls and the image size, floating on glass at the bottom of the canvas.
 private struct EditorStatusBar: View {
     let document: EditorDocument
-    let fitFactor: CGFloat
 
     var body: some View {
+        let fitFactor = document.fitFactor
         let zoom = document.currentZoom(fitFactor: fitFactor)
         let size = document.cropRect?.size ?? document.imageSize
 
@@ -401,7 +403,7 @@ private struct EditorStatusBar: View {
                 HStack(spacing: 2) {
                     Button("Zoom Out", systemImage: "minus") { document.zoomOut(fitFactor: fitFactor) }
                         .help("Zoom out (⌘−)")
-                    ZoomScrubber(document: document, fitFactor: fitFactor)
+                    ZoomScrubber(document: document)
                     Button("Zoom In", systemImage: "plus") { document.zoomIn(fitFactor: fitFactor) }
                         .help("Zoom in (⌘+)")
                 }
@@ -448,7 +450,8 @@ private struct EditorStatusBar: View {
 /// over it to zoom.
 private struct ZoomScrubber: View {
     let document: EditorDocument
-    let fitFactor: CGFloat
+
+    private var fitFactor: CGFloat { document.fitFactor }
 
     /// Where the current drag is measured from. It moves when ⌥ is pressed or released
     /// mid-drag, so changing speed never makes the zoom jump.

@@ -36,13 +36,13 @@ struct EditorCommands: Commands {
                 .disabled(document == nil)
             Button("Duplicate") { document?.duplicateSelection() }
                 .keyboardShortcut("d")
-                .disabled(document?.selected == nil)
+                .disabled(document?.hasSelection != true)
             Button("Bring to Front") { document?.bringSelectionToFront() }
                 .keyboardShortcut("]")
-                .disabled(document?.selected == nil)
+                .disabled(document?.hasSelection != true)
             Button("Send to Back") { document?.sendSelectionToBack() }
                 .keyboardShortcut("[")
-                .disabled(document?.selected == nil)
+                .disabled(document?.hasSelection != true)
         }
 
         CommandGroup(after: .toolbar) {

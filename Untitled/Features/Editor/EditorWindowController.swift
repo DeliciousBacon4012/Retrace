@@ -102,6 +102,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         )
         window.isReleasedWhenClosed = false
         window.toolbarStyle = .unified
+        // The tools sit in the toolbar's middle, so the title would only crowd them.
+        window.titleVisibility = .hidden
         window.tabbingMode = .disallowed
         window.setFrameAutosaveName("")
         super.init(window: window)
