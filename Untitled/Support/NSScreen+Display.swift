@@ -12,6 +12,16 @@ extension NSScreen {
         return screens.first { NSMouseInRect(location, $0.frame, false) } ?? main
     }
 
+    /// The screen showing the largest part of `rect`, in AppKit screen coordinates. A window
+    /// spanning two screens is drawn at the scale of this one.
+    static func showingMost(of rect: CGRect) -> NSScreen? {
+        func area(on screen: NSScreen) -> CGFloat {
+            let shared = screen.frame.intersection(rect)
+            return shared.isNull ? 0 : shared.width * shared.height
+        }
+        return screens.filter { area(on: $0) > 0 }.max { area(on: $0) < area(on: $1) }
+    }
+
     /// Converts a rect in AppKit screen coordinates to points relative to this screen's top-left corner.
     func topLeftRelativeRect(for rect: CGRect) -> CGRect {
         CGRect(

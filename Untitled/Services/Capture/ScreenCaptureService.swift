@@ -57,6 +57,7 @@ final class ScreenCaptureKitService: ScreenCapturing {
         configuration.width = max(1, Int((region.width * options.scale).rounded()))
         configuration.height = max(1, Int((region.height * options.scale).rounded()))
         configuration.showsCursor = options.showsCursor
+        configuration.captureResolution = .best
 
         return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
     }
@@ -71,6 +72,7 @@ final class ScreenCaptureKitService: ScreenCapturing {
         let configuration = SCStreamConfiguration()
         configuration.ignoreShadowsSingleWindow = !options.includesWindowShadow
         configuration.showsCursor = options.showsCursor
+        configuration.captureResolution = .best
         configuration.width = max(1, Int((filter.contentRect.width * options.scale).rounded()))
         configuration.height = max(1, Int((filter.contentRect.height * options.scale).rounded()))
 

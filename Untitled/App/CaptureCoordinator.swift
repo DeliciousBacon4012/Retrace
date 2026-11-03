@@ -218,7 +218,7 @@ final class CaptureCoordinator {
         case .window:
             let candidates = WindowList.onScreenWindows()
             guard case .window(let window)? = await overlay.select(.window(candidates)) else { return nil }
-            let screen = NSScreen.screens.first { $0.frame.intersects(window.frame) } ?? NSScreen.main
+            let screen = NSScreen.showingMost(of: window.frame) ?? NSScreen.main
             let windowScale = screen.map { self.scale(for: $0) } ?? 2
             let image = try await capturer.captureWindow(window.id, options: options(scale: windowScale))
             return (image, windowScale)
