@@ -11,6 +11,9 @@ struct LibraryView: View {
     /// The text card that was just copied, which says so for a moment.
     @State private var copiedSnippet: TextSnippet.ID?
     @FocusState private var isGridFocused: Bool
+    /// The item under the pointer, kept out of view state so moving it doesn't redraw the grid.
+    @State private var pointer = PointerItem()
+    @State private var rightClickMonitor: Any?
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 14)]
 
@@ -23,6 +26,7 @@ struct LibraryView: View {
             LazyVGrid(columns: columns, spacing: 18) {
                 ForEach(items) { item in
                     cell(for: item)
+                        .onHover { pointer.item = $0 ? item : (pointer.item?.id == item.id ? nil : pointer.item) }
                         .onTapGesture { click(item, in: items) }
                         .onDrag { itemProvider(for: item) }
                         .contextMenu { contextMenu(for: item, in: items) }
@@ -59,7 +63,9 @@ struct LibraryView: View {
         .onAppear {
             applyPendingFilter()
             isGridFocused = true
+            installRightClickMonitor()
         }
+        .onDisappear(perform: removeRightClickMonitor)
         .onChange(of: MainWindowRouter.shared.pendingRecentsFilter) { applyPendingFilter() }
         .task(id: copiedSnippet) {
             guard copiedSnippet != nil else { return }
@@ -169,6 +175,26 @@ struct LibraryView: View {
         }
     }
 
+    /// A right-click selects the item under it, so it's clear what the menu acts on. An item
+    /// that's already selected keeps the selection, and the menu acts on all of it.
+    private func installRightClickMonitor() {
+        guard rightClickMonitor == nil else { return }
+        rightClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { [viewModel, pointer] event in
+            if event.type == .rightMouseDown || event.modifierFlags.contains(.control),
+               let item = pointer.item, !viewModel.selection.contains(item.id) {
+                viewModel.select(item)
+            }
+            return event
+        }
+    }
+
+    private func removeRightClickMonitor() {
+        if let rightClickMonitor {
+            NSEvent.removeMonitor(rightClickMonitor)
+        }
+        rightClickMonitor = nil
+    }
+
     /// One gesture for single and double clicks, so a click never waits to see if another follows.
     private func click(_ item: RecentItem, in items: [RecentItem]) {
         isGridFocused = true
@@ -215,6 +241,10 @@ struct LibraryView: View {
         viewModel.kindFilter = filter
         MainWindowRouter.shared.pendingRecentsFilter = nil
     }
+}
+
+private final class PointerItem {
+    var item: RecentItem?
 }
 
 /// Captured text in the grid. Clicking it copies it again; double-clicking opens it.

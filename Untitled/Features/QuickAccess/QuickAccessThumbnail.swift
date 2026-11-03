@@ -193,8 +193,14 @@ private struct QuickAccessCard: View {
                         didCopy = true
                     }
                     .buttonStyle(.glass)
-                    Button("Save") { actions.save(id) }
-                        .buttonStyle(.glassProminent)
+                    // A capture that's already on disk has nothing to save, only somewhere to go.
+                    if card.capture.fileURL == nil {
+                        Button("Save") { actions.save(id) }
+                            .buttonStyle(.glassProminent)
+                    } else {
+                        Button("Show in Finder") { actions.showInFinder(id) }
+                            .buttonStyle(.glass)
+                    }
                 }
                 .controlSize(.regular)
             }

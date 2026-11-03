@@ -18,6 +18,7 @@ final class SelectionOverlay {
     private var windows: [OverlayWindow] = []
     private var continuation: CheckedContinuation<ScreenSelection?, Never>?
     private var resignObserver: NSObjectProtocol?
+    private weak var previousKeyWindow: NSWindow?
 
     /// Shows the overlay and waits for a selection. Returns `nil` if the person cancels.
     func select(_ mode: Mode) async -> ScreenSelection? {
@@ -29,6 +30,7 @@ final class SelectionOverlay {
     }
 
     private func present(_ mode: Mode) {
+        previousKeyWindow = NSApp.keyWindow
         for screen in NSScreen.screens {
             let view = OverlayView(mode: mode, screen: screen) { [weak self] selection in
                 self?.finish(with: selection)
@@ -62,6 +64,9 @@ final class SelectionOverlay {
         resignObserver = nil
         windows.forEach { $0.orderOut(nil) }
         windows.removeAll()
+        // The overlay took keyboard focus without activating the app, so hand it back.
+        if previousKeyWindow?.isVisible == true { previousKeyWindow?.makeKey() }
+        previousKeyWindow = nil
         continuation?.resume(returning: selection)
         continuation = nil
     }
