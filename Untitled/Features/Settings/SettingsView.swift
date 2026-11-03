@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The Settings window (⌘,): a glass bar of tabs you can click, or press and slide across,
@@ -12,7 +13,7 @@ struct SettingsView: View {
     @State private var heights: [SettingsPane: CGFloat] = [:]
 
     private static let width: CGFloat = 660
-    private static let heightRange: ClosedRange<CGFloat> = 280...640
+    private static let minimumHeight: CGFloat = 280
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,7 +37,9 @@ struct SettingsView: View {
     /// The measured height of the open tab, or a middle size until it has been measured.
     private var height: CGFloat {
         let measured = heights[selection] ?? 540
-        return min(max(measured, Self.heightRange.lowerBound), Self.heightRange.upperBound)
+        // As tall as the screen allows, leaving room for the tab bar and the menu bar.
+        let maximum = max((NSScreen.main?.visibleFrame.height ?? 900) - 140, Self.minimumHeight)
+        return min(max(measured, Self.minimumHeight), maximum)
     }
 
     private func select(_ pane: SettingsPane) {
@@ -138,12 +141,6 @@ private struct SettingsTabBar: View {
             default: break
             }
         }
-        .accessibilityRepresentation {
-            Picker("Settings", selection: $selection) {
-                ForEach(panes) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-        }
     }
 
     private func tab(_ pane: SettingsPane) -> some View {
@@ -169,6 +166,11 @@ private struct SettingsTabBar: View {
             }
         }
         .help(pane.title)
+        // Each tab is its own button for VoiceOver, at exactly where it's drawn.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(pane.title)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { selection = pane }
     }
 
     /// The tab under a point on the bar, counting the 4-point inset.

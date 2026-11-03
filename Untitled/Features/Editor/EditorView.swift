@@ -8,6 +8,16 @@ struct EditorView: View {
     let actions: EditorActions
 
     @AppStorage("editorShowsInspector") private var showsInspector = true
+    @AppStorage(InspectorPlacement.storageKey) private var inspectorPlacement: InspectorPlacement = .right
+    @AppStorage(EditorToolbarPosition.storageKey) private var toolbarPosition: EditorToolbarPosition = .top
+    /// Where a floating inspector was dropped, as fractions of the room it can move in.
+    @AppStorage("editorInspectorFloatX") private var floatX = 0.5
+    @AppStorage("editorInspectorFloatY") private var floatY = 0.0
+    /// The inspector's top left corner while it's being dragged.
+    @State private var dragOrigin: CGPoint?
+    @State private var dragStart: CGPoint?
+    @State private var contentSize: CGSize = .zero
+    @State private var inspectorWindow = InspectorWindowController()
     @AppStorage(EditorPalette.storageKey) private var palette: EditorPalette = .pastel
     @State private var exportItem: ExportItem?
     @State private var notice: EditorNotice?
@@ -18,25 +28,47 @@ struct EditorView: View {
     /// on show instead of folding them into an overflow menu.
     static let minimumSize = CGSize(width: 820, height: 440)
 
-    /// Room kept clear on the right for the floating inspector, so it never covers the image.
-    private var inspectorInset: CGFloat {
-        showsInspector ? EditorInspector.width + Design.spacingL * 2 : 0
+    private var showsPanelInspector: Bool { showsInspector && inspectorPlacement != .window }
+    private var paletteRoom: CGFloat { EditorToolPalette.thickness + Design.spacingL }
+    private var dockedInspectorRoom: CGFloat { EditorInspector.width + Design.spacingL }
+
+    /// Room kept clear on each side for docked panels, so they never cover the image. The
+    /// image keeps its own margin inside, so it sits as far from a panel as from the edge.
+    private var canvasInsets: EdgeInsets {
+        let docked = showsPanelInspector && dragOrigin == nil
+        return EdgeInsets(
+            top: 0,
+            leading: (toolbarPosition == .left ? paletteRoom : 0) + (docked && inspectorPlacement == .left ? dockedInspectorRoom : 0),
+            bottom: toolbarPosition == .bottom ? paletteRoom : 0,
+            trailing: (toolbarPosition == .right ? paletteRoom : 0) + (docked && inspectorPlacement == .right ? dockedInspectorRoom : 0)
+        )
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack(alignment: .topLeading) {
             canvas
-                .padding(.trailing, inspectorInset)
+                .padding(canvasInsets)
 
-            if showsInspector {
-                EditorInspector(document: document)
-                    .padding(.vertical, Design.spacingL)
-                    .padding(.trailing, Design.spacingL)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            if toolbarPosition != .top {
+                toolPalette
+            }
+
+            if showsPanelInspector {
+                let origin = dragOrigin ?? inspectorOrigin
+                EditorInspector(document: document, chrome: .panel(grip: grip, maxHeight: contentSize.height - origin.y - Design.spacingL))
+                    .offset(x: origin.x, y: origin.y)
+                    .transition(.move(edge: inspectorPlacement == .left ? .leading : .trailing).combined(with: .opacity))
             }
         }
+        .coordinateSpace(.named(EditorLayout.space))
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { contentSize = $0 }
         .background(Color(nsColor: .underPageBackgroundColor))
         .animation(.panel, value: showsInspector)
+        .animation(.panel, value: inspectorPlacement)
+        .animation(.panel, value: toolbarPosition)
+        .onChange(of: showsInspector, initial: true) { syncInspectorWindow(near: nil) }
+        .onChange(of: inspectorPlacement) { syncInspectorWindow(near: nil) }
+        .onDisappear { inspectorWindow.close() }
         .background { shortcutButtons }
         .frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height)
         .toolbar { toolbar }
@@ -77,6 +109,111 @@ struct EditorView: View {
         }
     }
 
+    // MARK: Panels
+
+    /// The tools along the chosen edge, centered on the room the image has.
+    private var toolPalette: some View {
+        let docked = showsPanelInspector && dragOrigin == nil
+        let leftInspector = docked && inspectorPlacement == .left ? dockedInspectorRoom : 0
+        let rightInspector = docked && inspectorPlacement == .right ? dockedInspectorRoom : 0
+        let alignment: Alignment = switch toolbarPosition {
+        case .left: .leading
+        case .right: .trailing
+        default: .bottom
+        }
+        return EditorToolPalette(
+            document: document,
+            axis: toolbarPosition == .bottom ? .horizontal : .vertical,
+            symbol: symbol(for:),
+            position: $toolbarPosition
+        )
+        .padding(.leading, Design.spacingL + (toolbarPosition == .right ? 0 : leftInspector))
+        .padding(.trailing, Design.spacingL + (toolbarPosition == .left ? 0 : rightInspector))
+        .padding(.vertical, Design.spacingL)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+        .transition(.opacity.combined(with: .scale(0.9)))
+    }
+
+    /// The inspector's top left corner when it isn't being dragged.
+    private var inspectorOrigin: CGPoint {
+        let margin = Design.spacingL
+        switch inspectorPlacement {
+        case .left:
+            return CGPoint(x: margin + (toolbarPosition == .left ? paletteRoom : 0), y: margin)
+        case .floating:
+            let roomX = max(contentSize.width - EditorInspector.width - margin * 2, 0)
+            let roomY = max(contentSize.height - 200 - margin * 2, 0)
+            return CGPoint(x: margin + roomX * min(max(floatX, 0), 1), y: margin + roomY * min(max(floatY, 0), 1))
+        case .right, .window:
+            let palette = toolbarPosition == .right ? paletteRoom : 0
+            return CGPoint(x: contentSize.width - EditorInspector.width - margin - palette, y: margin)
+        }
+    }
+
+    private var grip: InspectorGrip {
+        InspectorGrip(placement: $inspectorPlacement, onDrag: dragInspector, onDrop: dropInspector)
+    }
+
+    private func dragInspector(_ value: DragGesture.Value) {
+        let start = dragStart ?? inspectorOrigin
+        dragStart = start
+        dragOrigin = CGPoint(x: start.x + value.translation.width, y: max(start.y + value.translation.height, 0))
+    }
+
+    /// Dropped outside the window it gets a window of its own; near a side it docks there;
+    /// anywhere else it floats where it was dropped.
+    private func dropInspector(_ value: DragGesture.Value) {
+        defer {
+            dragOrigin = nil
+            dragStart = nil
+        }
+        let mouse = NSEvent.mouseLocation
+        if let window = NSApp.keyWindow, !window.frame.contains(mouse) {
+            inspectorPlacement = .window
+            syncInspectorWindow(near: mouse)
+            return
+        }
+        let dockDistance: CGFloat = 80
+        var placement = InspectorPlacement.floating
+        if value.location.x < dockDistance {
+            placement = .left
+        } else if value.location.x > contentSize.width - dockDistance {
+            placement = .right
+        } else if let origin = dragOrigin {
+            let margin = Design.spacingL
+            let roomX = contentSize.width - EditorInspector.width - margin * 2
+            let roomY = contentSize.height - 200 - margin * 2
+            floatX = roomX > 0 ? Double((origin.x - margin) / roomX) : 0.5
+            floatY = roomY > 0 ? Double((origin.y - margin) / roomY) : 0
+            floatX = min(max(floatX, 0), 1)
+            floatY = min(max(floatY, 0), 1)
+        }
+        withAnimation(.panel) {
+            inspectorPlacement = placement
+            dragOrigin = nil
+        }
+    }
+
+    /// Shows or closes the inspector's own window to match the setting.
+    private func syncInspectorWindow(near point: NSPoint?) {
+        if showsInspector, inspectorPlacement == .window {
+            inspectorWindow.onClose = { inspectorPlacement = .right }
+            inspectorWindow.show(document: document, near: point)
+        } else {
+            inspectorWindow.close()
+        }
+    }
+
+    @ViewBuilder
+    private var layoutMenu: some View {
+        Picker("Toolbar Position", selection: $toolbarPosition) {
+            ForEach(EditorToolbarPosition.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
+        }
+        Picker("Inspector", selection: $inspectorPlacement) {
+            ForEach(InspectorPlacement.allCases) { Text($0.title).tag($0) }
+        }
+    }
+
     /// Mark commands act on the selected marks; right-clicking a mark selects it first.
     @ViewBuilder
     private var canvasMenu: some View {
@@ -95,6 +232,8 @@ struct EditorView: View {
         Divider()
         Button("Zoom to Fit") { document.zoomToFit() }
         Button("Actual Size") { document.zoomToActualSize() }
+        Divider()
+        layoutMenu
         Divider()
         Button("Save") { actions.save() }
         Button("Export…") { document.send(.export) }
@@ -143,16 +282,19 @@ struct EditorView: View {
                 .help("Redo (⇧⌘Z)")
         }
 
-        ToolbarItem(placement: .principal) {
-            Picker("Tool", selection: $document.tool) {
-                ForEach(EditorTool.allCases) { tool in
-                    Label(tool.title, systemImage: symbol(for: tool))
-                        .help("\(tool.title) (\(String(tool.key).uppercased()))")
-                        .tag(tool)
+        if toolbarPosition == .top {
+            ToolbarItem(placement: .principal) {
+                Picker("Tool", selection: $document.tool) {
+                    ForEach(EditorTool.allCases) { tool in
+                        Label(tool.title, systemImage: symbol(for: tool))
+                            .help("\(tool.title) (\(String(tool.key).uppercased()))")
+                            .tag(tool)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelStyle(.iconOnly)
+                .contextMenu { layoutMenu }
             }
-            .pickerStyle(.segmented)
-            .labelStyle(.iconOnly)
         }
 
         ToolbarItemGroup(placement: .primaryAction) {

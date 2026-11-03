@@ -5,15 +5,55 @@ import SwiftUI
 /// grouped form of standard controls on a floating panel of system Liquid Glass.
 /// Changes apply live and become the tool's style for next time.
 struct EditorInspector: View {
+    /// How the inspector is framed.
+    enum Chrome {
+        /// A glass panel over the editor, with a grip to drag it by, as tall as its content
+        /// up to `maxHeight`.
+        case panel(grip: InspectorGrip, maxHeight: CGFloat)
+        /// Filling a window of its own, which has a title bar to drag.
+        case window
+    }
+
     @Bindable var document: EditorDocument
+    let chrome: Chrome
+
+    /// The height of the form's content, once measured.
+    @State private var contentHeight: CGFloat?
 
     static let width: CGFloat = 280
     private static let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+    private static let gripHeight: CGFloat = 22
 
     var body: some View {
+        switch chrome {
+        case .panel(let grip, let maxHeight):
+            VStack(spacing: 0) {
+                grip
+                form
+                    .frame(height: formHeight(fitting: maxHeight - Self.gripHeight))
+            }
+            .frame(width: Self.width)
+            .clipShape(Self.shape)
+            .glassEffect(.regular, in: Self.shape)
+            .animation(.smooth(duration: 0.22), value: contentHeight)
+        case .window:
+            form
+                .frame(minWidth: Self.width, maxWidth: Self.width, maxHeight: .infinity)
+        }
+    }
+
+    /// As tall as the content, so the panel never ends in empty glass, and scrolling only
+    /// when the content is taller than the room.
+    private func formHeight(fitting room: CGFloat) -> CGFloat {
+        let room = max(room, 120)
+        guard let contentHeight else { return room }
+        return min(contentHeight, room)
+    }
+
+    private var form: some View {
         let tool = document.inspectedTool
 
-        Form {
+        return Form {
             Section {
                 InspectorHeader(tool: tool, selectionCount: document.selectedIDs.count, isMixed: document.selectionIsMixed)
             }
@@ -49,20 +89,25 @@ struct EditorInspector: View {
 
             if tool.draws, !document.selectionIsMixed {
                 Section {
-                    Button("Reset to Default Style") {
+                    Button("Reset to Default Style", systemImage: "arrow.counterclockwise") {
                         withAnimation(.response) { document.resetStyle() }
                     }
+                    .buttonStyle(.glass)
                 }
             }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .scrollEdgeEffectStyle(.soft, for: .vertical)
+        // Keeps the scroller clear of the panel's rounded corners.
+        .contentMargins(.vertical, 12, for: .scrollIndicators)
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.contentSize.height + geometry.contentInsets.top + geometry.contentInsets.bottom
+        } action: { _, height in
+            contentHeight = height
+        }
         .controlSize(.small)
         .animation(.smooth(duration: 0.22), value: tool)
-        .frame(width: Self.width)
-        .clipShape(Self.shape)
-        .glassEffect(.regular, in: Self.shape)
     }
 }
 
@@ -114,61 +159,37 @@ private struct VariantSection: View {
         switch tool {
         case .arrow:
             Section {
-                Picker("Type", selection: $document.style.route) {
-                    ForEach(ArrowRoute.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelStyle(.iconOnly)
+                GlassSegmentedPicker("Type", selection: $document.style.route, options: ArrowRoute.allCases, name: \.title) { Image(systemName: $0.symbolName) }
                 Picker("Start", selection: $document.style.startHead) {
                     ForEach(ArrowHead.allCases) { Text($0.title).tag($0) }
                 }
                 Picker("End", selection: $document.style.endHead) {
                     ForEach(ArrowHead.allCases) { Text($0.title).tag($0) }
                 }
-                Button("Swap Ends") {
+                Button("Swap Ends", systemImage: "arrow.left.arrow.right") {
                     let start = document.style.startHead
                     document.style.startHead = document.style.endHead
                     document.style.endHead = start
                 }
+                .buttonStyle(.glass)
             }
         case .shape:
             Section {
-                Picker("Shape", selection: $document.style.shape) {
-                    ForEach(ShapeKind.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelStyle(.iconOnly)
-                Picker("Fill", selection: $document.style.fill) {
-                    ForEach(ShapeFill.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
+                GlassSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
+                GlassSegmentedPicker("Fill", selection: $document.style.fill, options: ShapeFill.allCases, name: \.title) { Text($0.title) }
             }
         case .redact:
             Section {
-                Picker("Type", selection: $document.style.redaction) {
-                    ForEach(Redaction.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                Picker("Shape", selection: $document.style.shape) {
-                    ForEach(ShapeKind.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelStyle(.iconOnly)
+                GlassSegmentedPicker("Type", selection: $document.style.redaction, options: Redaction.allCases, name: \.title) { Text($0.title) }
+                GlassSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
             }
         case .spotlight:
             Section {
-                Picker("Shape", selection: $document.style.shape) {
-                    ForEach(ShapeKind.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelStyle(.iconOnly)
+                GlassSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
             }
         case .text:
             Section {
-                Picker("Style", selection: $document.style.textStyle) {
-                    ForEach(TextStyle.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
+                GlassSegmentedPicker("Style", selection: $document.style.textStyle, options: TextStyle.allCases, name: \.title) { Text($0.title) }
                 Picker("Font", selection: $document.style.font) {
                     ForEach(TextFont.allCases) { Text($0.title).tag($0) }
                 }
@@ -178,10 +199,7 @@ private struct VariantSection: View {
             }
         case .counter:
             Section {
-                Picker("Style", selection: $document.style.counterStyle) {
-                    ForEach(CounterStyle.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
+                GlassSegmentedPicker("Style", selection: $document.style.counterStyle, options: CounterStyle.allCases, name: \.title) { Text($0.title) }
             }
         default:
             EmptyView()
@@ -386,10 +404,11 @@ private struct CropSection: View {
             }
             HStack {
                 Button("Reset") { document.resetCrop() }
+                    .buttonStyle(.glass)
                     .disabled(!document.isCropped)
                 Spacer()
-                Button("Crop") { document.commitCrop() }
-                    .buttonStyle(.borderedProminent)
+                Button("Crop", systemImage: "checkmark") { document.commitCrop() }
+                    .buttonStyle(.glassProminent)
             }
         } header: {
             Text("Crop")
@@ -405,21 +424,21 @@ private struct ArrangeSection: View {
 
     var body: some View {
         Section("Arrange") {
-            HStack {
-                ControlGroup {
+            GlassEffectContainer(spacing: 6) {
+                HStack(spacing: 6) {
                     Button("Duplicate", systemImage: "plus.square.on.square") { document.duplicateSelection() }
                         .help("Duplicate (⌘D)")
                     Button("Bring to Front", systemImage: "square.3.layers.3d.top.filled") { document.bringSelectionToFront() }
                         .help("Bring to Front (⌘])")
                     Button("Send to Back", systemImage: "square.3.layers.3d.bottom.filled") { document.sendSelectionToBack() }
                         .help("Send to Back (⌘[)")
+                    Spacer()
+                    Button("Delete", systemImage: "trash", role: .destructive) { document.deleteSelection() }
+                        .help("Delete (⌫)")
                 }
-                .fixedSize()
-                Spacer()
-                Button("Delete", systemImage: "trash", role: .destructive) { document.deleteSelection() }
-                    .help("Delete (⌫)")
+                .buttonStyle(.glass)
+                .labelStyle(.iconOnly)
             }
-            .labelStyle(.iconOnly)
         }
     }
 }
@@ -488,6 +507,7 @@ private struct AutoRedactSection: View {
                         ProgressView().controlSize(.small)
                     } else {
                         Button("Hide") { Task { await find(kind) } }
+                            .buttonStyle(.glass)
                             .disabled(running != nil)
                     }
                 } label: {
