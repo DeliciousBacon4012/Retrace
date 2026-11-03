@@ -37,19 +37,28 @@ struct AnnotationCanvas: View {
                         .offset(x: layout.imageFrame.minX, y: layout.imageFrame.minY)
                         .accessibilityLabel("Screenshot")
 
+                    // Each layer covers only its mark, so resizing the window or zooming redraws
+                    // small layers instead of one window-sized layer per mark. The offset sits
+                    // outside the transition, so a new mark springs from its own center.
                     ForEach(document.annotations) { mark in
-                        MarkLayer(mark: mark, holes: AnnotationRenderer.Spotlight.holes(for: mark, among: spotlights), layout: layout, redactor: redactor)
+                        let frame = MarkLayer.frame(for: mark, in: layout)
+                        MarkLayer(mark: mark, holes: AnnotationRenderer.Spotlight.holes(for: mark, among: spotlights), layout: layout, frame: frame, redactor: redactor)
                             .equatable()
                             .transition(mark.tool == .spotlight
                                 ? .opacity
-                                : .scale(scale: 0.6, anchor: layout.anchor(for: mark.center)).combined(with: .opacity))
+                                : .scale(scale: 0.6, anchor: .center).combined(with: .opacity))
+                            .offset(x: frame.minX, y: frame.minY)
                     }
 
                     if let draft = document.draft {
-                        MarkLayer(mark: draft, holes: AnnotationRenderer.Spotlight.holes(for: draft, among: spotlights), layout: layout, redactor: redactor)
+                        let frame = MarkLayer.frame(for: draft, in: layout)
+                        MarkLayer(mark: draft, holes: AnnotationRenderer.Spotlight.holes(for: draft, among: spotlights), layout: layout, frame: frame, redactor: redactor)
+                            .offset(x: frame.minX, y: frame.minY)
                     }
                     ForEach(document.extraDrafts) { extra in
-                        MarkLayer(mark: extra, layout: layout, redactor: redactor)
+                        let frame = MarkLayer.frame(for: extra, in: layout)
+                        MarkLayer(mark: extra, layout: layout, frame: frame, redactor: redactor)
+                            .offset(x: frame.minX, y: frame.minY)
                     }
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
@@ -331,15 +340,32 @@ private struct MarkLayer: View, Equatable {
     /// For the spotlight that draws the shared shade: every spotlight's hole.
     var holes: [Annotation] = []
     let layout: CanvasLayout
+    /// Where the layer sits in the canvas, from `frame(for:in:)`.
+    let frame: CGRect
     let redactor: AnnotationRenderer.Redactor
 
     nonisolated static func == (lhs: MarkLayer, rhs: MarkLayer) -> Bool {
-        lhs.mark == rhs.mark && lhs.holes == rhs.holes && lhs.layout == rhs.layout
+        lhs.mark == rhs.mark && lhs.holes == rhs.holes && lhs.layout == rhs.layout && lhs.frame == rhs.frame
+    }
+
+    /// The part of the canvas a mark can paint: its area with room for its line, arrowheads,
+    /// text padding and shadow, limited to the part of the image on screen. A spotlight
+    /// shades the whole image.
+    static func frame(for mark: Annotation, in layout: CanvasLayout) -> CGRect {
+        let onScreen = layout.visibleFrame.intersection(CGRect(origin: .zero, size: layout.viewSize))
+        guard mark.tool != .spotlight else { return onScreen.isNull ? .zero : onScreen }
+        let style = mark.style
+        var margin = style.lineWidth * 9 * max(style.headScale, 1) + style.fontSize * 0.5 + 6
+        if style.shadow {
+            margin += style.shadowRadius * 3.5
+        }
+        let area = layout.viewRect(for: mark.bounds.insetBy(dx: -margin, dy: -margin)).intersection(onScreen)
+        return area.isNull ? .zero : area
     }
 
     var body: some View {
         Canvas { context, _ in
-            context.translateBy(x: layout.origin.x, y: layout.origin.y)
+            context.translateBy(x: layout.origin.x - frame.minX, y: layout.origin.y - frame.minY)
             context.scaleBy(x: layout.factor, y: layout.factor)
             context.clip(to: Path(CGRect(origin: .zero, size: layout.imageSize)))
             AnnotationRenderer.draw(
@@ -350,6 +376,7 @@ private struct MarkLayer: View, Equatable {
                 in: &context
             )
         }
+        .frame(width: frame.width, height: frame.height)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
