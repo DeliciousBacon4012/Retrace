@@ -27,6 +27,8 @@ final class EditorDocument {
     private(set) var editingTextID: Annotation.ID?
     /// A mark being drawn right now, not yet in `annotations`.
     private(set) var draft: Annotation?
+    /// More highlights drawn by the same Shift-drag, one per extra line of text.
+    private(set) var extraDrafts: [Annotation] = []
     private(set) var hasUnsavedChanges = false
 
     var tool: EditorTool = .arrow {
@@ -410,10 +412,28 @@ final class EditorDocument {
                     rawHighlight.append(point)
                 }
                 let drawnWidth = style(for: .highlighter).lineWidth
+                extraDrafts = []
+                marquee = nil
                 if constrained, let first = rawHighlight.first {
-                    // Shift draws one perfectly straight stroke.
-                    mark.points = [first, Geometry.snapped(from: first, to: point)]
-                    mark.style.lineWidth = drawnWidth
+                    // Shift highlights every line of text inside the box dragged out, and
+                    // draws freely only when there's no text there at all.
+                    let box = CGRect(origin: first, size: .zero).union(CGRect(origin: point, size: .zero))
+                    let bands = textLines.map { HighlightSnapping.bands(in: box, lines: $0) } ?? []
+                    if let band = bands.first {
+                        marquee = box
+                        mark.points = [band.start, band.end]
+                        mark.style.lineWidth = band.thickness
+                        extraDrafts = bands.dropFirst().map { band in
+                            var line = mark
+                            line.id = UUID()
+                            line.points = [band.start, band.end]
+                            line.style.lineWidth = band.thickness
+                            return line
+                        }
+                    } else {
+                        mark.points = rawHighlight
+                        mark.style.lineWidth = drawnWidth
+                    }
                 } else if !freehand, Self.highlighterSnapsToText, let lines = textLines,
                           let band = HighlightSnapping.band(for: rawHighlight, lines: lines) {
                     mark.points = [band.start, band.end]
@@ -474,11 +494,19 @@ final class EditorDocument {
         switch gesture {
         case .drawing:
             if let mark = draft {
+                let extras = extraDrafts
                 draft = nil
+                extraDrafts = []
+                marquee = nil
                 if !mark.isNegligible {
                     pushUndo(gestureSnapshot, named: String(localized: "Add \(mark.tool.title)"))
                     annotations.append(mark)
-                    select(mark.id)
+                    annotations.append(contentsOf: extras)
+                    if extras.isEmpty {
+                        select(mark.id)
+                    } else {
+                        setSelection(Set([mark.id] + extras.map(\.id)))
+                    }
                 }
             }
         case .cropping:

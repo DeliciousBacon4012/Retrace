@@ -292,7 +292,7 @@ private struct ToolSection: View {
                 Text("Stroke")
             } footer: {
                 if snapsToText {
-                    Text("Drag along a line of text to cover its words neatly. Hold Option to draw freely, or Shift for a straight stroke anywhere.")
+                    Text("Drag along a line of text to cover its words neatly. Hold Shift and drag a box to highlight every line inside it. Hold Option to draw freely.")
                 } else {
                     Text("Hold Shift while dragging for a perfectly straight stroke.")
                 }

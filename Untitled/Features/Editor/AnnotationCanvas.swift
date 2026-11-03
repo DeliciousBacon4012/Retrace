@@ -44,6 +44,9 @@ struct AnnotationCanvas: View {
                     if let draft = document.draft {
                         MarkLayer(mark: draft, layout: layout, redactor: redactor)
                     }
+                    ForEach(document.extraDrafts) { extra in
+                        MarkLayer(mark: extra, layout: layout, redactor: redactor)
+                    }
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
                 .mask(alignment: .topLeading) {

@@ -41,6 +41,33 @@ nonisolated enum HighlightSnapping {
         let right = touched.map(\.maxX).max() ?? min(maxX, line.rect.maxX)
         guard right > left else { return nil }
 
+        return band(for: line, from: left, to: right)
+    }
+
+    /// One band per line of text inside `box`, top to bottom, covering the whole words the box
+    /// reaches on each line. Empty when the box holds no text. Used by Shift-drag, which
+    /// highlights a block of lines at once.
+    static func bands(in box: CGRect, lines: [TextLine]) -> [Band] {
+        guard box.width >= 2, box.height >= 2 else { return [] }
+        return lines
+            .filter { line in
+                // Most of the line's height must be inside the box, so a box edge grazing the
+                // line above or below doesn't pull it in.
+                let vertical = min(box.maxY, line.rect.maxY) - max(box.minY, line.rect.minY)
+                return vertical >= line.rect.height * 0.4 && line.rect.minX < box.maxX && line.rect.maxX > box.minX
+            }
+            .sorted { $0.rect.minY < $1.rect.minY }
+            .compactMap { line in
+                let words = line.words.filter { word in
+                    let overlap = min(box.maxX, word.maxX) - max(box.minX, word.minX)
+                    return overlap >= word.width * 0.3
+                }
+                guard let left = words.map(\.minX).min(), let right = words.map(\.maxX).max(), right > left else { return nil }
+                return band(for: line, from: left, to: right)
+            }
+    }
+
+    private static func band(for line: TextLine, from left: CGFloat, to right: CGFloat) -> Band {
         let height = line.rect.height
         let padding = height * 0.12
         return Band(
