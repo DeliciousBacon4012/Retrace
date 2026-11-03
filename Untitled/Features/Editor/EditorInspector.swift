@@ -113,7 +113,7 @@ private struct VariantSection: View {
     var body: some View {
         switch tool {
         case .arrow:
-            Section("Arrow") {
+            Section {
                 Picker("Type", selection: $document.style.route) {
                     ForEach(ArrowRoute.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
                 }
@@ -132,7 +132,7 @@ private struct VariantSection: View {
                 }
             }
         case .shape:
-            Section("Shape") {
+            Section {
                 Picker("Shape", selection: $document.style.shape) {
                     ForEach(ShapeKind.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
                 }
@@ -144,7 +144,7 @@ private struct VariantSection: View {
                 .pickerStyle(.segmented)
             }
         case .redact:
-            Section("Redaction") {
+            Section {
                 Picker("Type", selection: $document.style.redaction) {
                     ForEach(Redaction.allCases) { Text($0.title).tag($0) }
                 }
@@ -156,7 +156,7 @@ private struct VariantSection: View {
                 .labelStyle(.iconOnly)
             }
         case .spotlight:
-            Section("Spotlight") {
+            Section {
                 Picker("Shape", selection: $document.style.shape) {
                     ForEach(ShapeKind.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
                 }
@@ -164,7 +164,7 @@ private struct VariantSection: View {
                 .labelStyle(.iconOnly)
             }
         case .text:
-            Section("Text") {
+            Section {
                 Picker("Style", selection: $document.style.textStyle) {
                     ForEach(TextStyle.allCases) { Text($0.title).tag($0) }
                 }
@@ -177,7 +177,7 @@ private struct VariantSection: View {
                 }
             }
         case .counter:
-            Section("Counter") {
+            Section {
                 Picker("Style", selection: $document.style.counterStyle) {
                     ForEach(CounterStyle.allCases) { Text($0.title).tag($0) }
                 }

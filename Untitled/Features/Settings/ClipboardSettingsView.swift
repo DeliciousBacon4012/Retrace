@@ -7,7 +7,6 @@ struct ClipboardSettingsView: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
     @State private var isConfirmingClear = false
-    @State private var selectedApp: String?
 
     var body: some View {
         @Bindable var settings = settings
@@ -43,20 +42,12 @@ struct ClipboardSettingsView: View {
             }
 
             Section {
-                List(selection: $selectedApp) {
-                    ForEach(settings.clipboardExcludedApps, id: \.self) { bundleID in
-                        ExcludedAppRow(bundleID: bundleID)
-                            .tag(bundleID)
+                ForEach(settings.clipboardExcludedApps, id: \.self) { bundleID in
+                    ExcludedAppRow(bundleID: bundleID) {
+                        settings.clipboardExcludedApps.removeAll { $0 == bundleID }
                     }
                 }
-                .frame(minHeight: 120)
-                .onDeleteCommand(perform: removeSelected)
-                HStack {
-                    Button("Add App…", action: addApp)
-                    Button("Remove", action: removeSelected)
-                        .disabled(selectedApp == nil)
-                    Spacer()
-                }
+                Button("Add App…", action: addApp)
             } header: {
                 Text("Ignore copies from")
             } footer: {
@@ -79,32 +70,50 @@ struct ClipboardSettingsView: View {
             settings.clipboardExcludedApps.append(id)
         }
     }
-
-    private func removeSelected() {
-        guard let selectedApp else { return }
-        settings.clipboardExcludedApps.removeAll { $0 == selectedApp }
-        self.selectedApp = nil
-    }
 }
 
-/// An ignored app by its icon and name, or its identifier when it isn't installed.
+/// An ignored app by its icon and name, with a button to stop ignoring it. An app that
+/// isn't installed shows its usual name, marked as not installed.
 private struct ExcludedAppRow: View {
     let bundleID: String
+    let remove: () -> Void
+
+    /// Names for the apps ignored by default, for when they aren't installed.
+    private static let knownNames = [
+        "com.apple.Passwords": "Passwords",
+        "com.apple.keychainaccess": "Keychain Access",
+        "com.1password.1password": "1Password",
+        "com.agilebits.onepassword7": "1Password 7",
+        "com.bitwarden.desktop": "Bitwarden",
+        "io.trezor.TrezorSuite": "Trezor Suite",
+        "com.ledger.live": "Ledger Live",
+    ]
 
     var body: some View {
         let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
-        HStack(spacing: 8) {
-            if let url {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path(percentEncoded: false)))
-                    .resizable()
-                    .frame(width: 18, height: 18)
-                Text(FileManager.default.displayName(atPath: url.path(percentEncoded: false)).replacingOccurrences(of: ".app", with: ""))
-            } else {
-                Image(systemName: "app.dashed")
-                    .frame(width: 18, height: 18)
-                    .foregroundStyle(.secondary)
-                Text(bundleID)
-                    .foregroundStyle(.secondary)
+        LabeledContent {
+            Button("Remove", systemImage: "minus.circle.fill", action: remove)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Stop ignoring this app")
+        } label: {
+            HStack(spacing: 8) {
+                if let url {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: url.path(percentEncoded: false)))
+                        .resizable()
+                        .frame(width: 20, height: 20)
+                    Text(FileManager.default.displayName(atPath: url.path(percentEncoded: false)).replacingOccurrences(of: ".app", with: ""))
+                } else {
+                    Image(systemName: "app.dashed")
+                        .font(.system(size: 16))
+                        .frame(width: 20, height: 20)
+                        .foregroundStyle(.tertiary)
+                    Text(Self.knownNames[bundleID] ?? bundleID)
+                    Text("Not installed")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
     }

@@ -416,7 +416,6 @@ private struct EditorStatusBar: View {
 
                 Text(verbatim: "\(Int(size.width)) × \(Int(size.height)) px")
                     .font(.system(.caption, design: .monospaced).weight(.medium))
-                    .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)

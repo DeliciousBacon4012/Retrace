@@ -1,31 +1,31 @@
 import AppKit
 import SwiftUI
 
-/// Explains why Screen Recording access is needed, above Recents, until it's granted.
+/// Asks for Screen Recording access above Recents, until it's granted. It stays to one
+/// compact row so the captures keep the room; the details are behind the info button.
 /// It's a notice in the content, so it uses a plain fill rather than glass.
 struct PermissionBanner: View {
     let model: ScreenRecordingAccessModel
+    @State private var showsDetails = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label {
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "lock.shield")
+                    .font(.title3)
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 1) {
                     Text("Screen Recording Access Needed")
                         .font(.headline)
-                    Text("Turn on Untitled in System Settings › Privacy & Security › Screen & System Audio Recording. If macOS offers to quit and reopen, Later is fine: Untitled notices on its own.")
+                    Text("Turn on Untitled in Privacy & Security › Screen & System Audio Recording.")
+                        .font(.callout)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(2)
                 }
-            } icon: {
-                Image(systemName: "lock.shield")
-                    .foregroundStyle(.orange)
-            }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack {
                 Button("Allow Access…") { model.requestScreenRecording() }
                     .buttonStyle(.borderedProminent)
-                Button("Open System Settings") { model.openScreenRecordingSettings() }
-                Spacer()
                 Button {
                     Task { await model.checkAgain() }
                 } label: {
@@ -36,15 +36,14 @@ struct PermissionBanner: View {
                     }
                 }
                 .disabled(model.isChecking)
+                Button("More", systemImage: "info.circle") { showsDetails.toggle() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .help("More about Screen Recording access")
+                    .popover(isPresented: $showsDetails, arrowEdge: .bottom) { details }
             }
             .controlSize(.small)
 
-            if !CodeSigningInfo.hasTeamIdentifier {
-                Text("This build is signed only to run locally, so macOS forgets the permission each time it's rebuilt. In Xcode, choose a Team under Signing & Capabilities.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             if model.checkFoundNoAccess {
                 HStack(spacing: 6) {
                     Text("Already turned it on? Some Macs only apply it after a restart.")
@@ -55,7 +54,21 @@ struct PermissionBanner: View {
                 .font(.callout)
             }
         }
-        .padding(14)
+        .padding(12)
         .background(.fill.quaternary, in: .rect(cornerRadius: 12))
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("If macOS offers to quit and reopen, Later is fine: Untitled notices on its own.")
+            if !CodeSigningInfo.hasTeamIdentifier {
+                Text("This build is signed only to run locally, so macOS forgets the permission each time it's rebuilt. In Xcode, choose a Team under Signing & Capabilities.")
+                    .foregroundStyle(.secondary)
+            }
+            Button("Open System Settings") { model.openScreenRecordingSettings() }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: 300, alignment: .leading)
+        .padding()
     }
 }

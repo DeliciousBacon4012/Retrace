@@ -391,9 +391,10 @@ private struct LibraryCell: View {
                         .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 3)
                 }
             VStack(alignment: .leading, spacing: 2) {
+                // Two lines, so a long name shows whole, with every cell the same height.
                 Text(item.name)
                     .font(.callout.weight(.medium))
-                    .lineLimit(1)
+                    .lineLimit(2, reservesSpace: true)
                     .truncationMode(.middle)
                 Text("\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(item.byteCount.formatted(.byteCount(style: .file)))")
                     .font(.caption)

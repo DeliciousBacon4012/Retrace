@@ -31,9 +31,6 @@ struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section {
-                LabeledContent("Version", value: Bundle.main.displayVersion)
-            }
         }
     }
 }

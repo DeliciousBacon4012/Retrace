@@ -28,6 +28,7 @@ struct UntitledApp: App {
                 .environment(dependencies)
                 .environment(dependencies.settings)
         }
+        .windowResizability(.contentSize)
 
         Window("Feature Roadmap", id: WindowID.roadmap) {
             NavigationStack {

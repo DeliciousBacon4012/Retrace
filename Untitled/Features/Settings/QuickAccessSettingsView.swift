@@ -11,7 +11,7 @@ struct QuickAccessSettingsView: View {
             Section {
                 Toggle("Show a thumbnail after each capture", isOn: $settings.showsQuickAccess)
             } footer: {
-                Text("Double-click a thumbnail to edit it. Drag it into any app, or flick it toward the screen edge to put it away.")
+                Text("Click a thumbnail to edit it. Drag it into any app, or flick it toward the screen edge to put it away.")
             }
 
             Section {
@@ -33,8 +33,13 @@ struct QuickAccessSettingsView: View {
                 }
                 .pickerStyle(.segmented)
 
-                Stepper(value: $settings.quickAccessMaxVisible, in: 1...8) {
-                    LabeledContent("Most shown at once", value: settings.quickAccessMaxVisible, format: .number)
+                LabeledContent("Most shown at once") {
+                    HStack(spacing: 8) {
+                        Text(settings.quickAccessMaxVisible, format: .number)
+                            .monospacedDigit()
+                        Stepper("Most shown at once", value: $settings.quickAccessMaxVisible, in: 1...8)
+                            .labelsHidden()
+                    }
                 }
             } header: {
                 Text("Layout")

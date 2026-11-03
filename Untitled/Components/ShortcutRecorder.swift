@@ -27,17 +27,19 @@ struct ShortcutRecorder: View {
             .accessibilityLabel(shortcut.map { Text("Shortcut \($0.displayString)") } ?? Text("No shortcut"))
             .accessibilityHint("Click, then press the keys to use")
 
-            if shortcut != nil, !isRecording {
-                Button {
-                    shortcut = nil
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Clear shortcut")
-                .accessibilityLabel("Clear shortcut")
+            // The clear button always keeps its space, so recorders line up row to row.
+            Button {
+                shortcut = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
             }
+            .buttonStyle(.plain)
+            .help("Clear shortcut")
+            .accessibilityLabel("Clear shortcut")
+            .opacity(shortcut != nil && !isRecording ? 1 : 0)
+            .disabled(shortcut == nil || isRecording)
+            .accessibilityHidden(shortcut == nil || isRecording)
         }
         .animation(.snappy, value: isRecording)
         .onDisappear(perform: stopRecording)

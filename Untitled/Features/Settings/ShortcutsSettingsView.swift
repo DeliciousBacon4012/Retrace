@@ -50,7 +50,13 @@ struct ShortcutsSettingsView: View {
             }
             .disabled(!isAvailable)
         } label: {
-            Label(action.title, systemImage: action.symbolName)
+            // A fixed-width icon, so every title starts in the same place.
+            Label {
+                Text(action.title)
+            } icon: {
+                Image(systemName: action.symbolName)
+                    .frame(width: 20)
+            }
             if let problem = dependencies.shortcuts.problems[action.id] {
                 Text(problem)
                     .foregroundStyle(.red)

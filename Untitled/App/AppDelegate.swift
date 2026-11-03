@@ -17,6 +17,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
+    /// Images opened from Finder, the Dock, or `open -a Untitled` go to the editor.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where url.isFileURL {
+            dependencies.editor.open(fileAt: url)
+        }
+    }
+
     /// Clicking the Dock icon with nothing open brings back the main window.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { launch.opensMainWindow = true }
