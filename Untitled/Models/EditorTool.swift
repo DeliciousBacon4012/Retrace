@@ -11,6 +11,7 @@ nonisolated enum EditorTool: String, CaseIterable, Identifiable, Hashable, Codab
     case text
     case counter
     case redact
+    case spotlight
     case crop
 
     var id: String { rawValue }
@@ -25,6 +26,7 @@ nonisolated enum EditorTool: String, CaseIterable, Identifiable, Hashable, Codab
         case .text: String(localized: "Text")
         case .counter: String(localized: "Step Counter")
         case .redact: String(localized: "Redact")
+        case .spotlight: String(localized: "Spotlight")
         case .crop: String(localized: "Crop")
         }
     }
@@ -39,6 +41,7 @@ nonisolated enum EditorTool: String, CaseIterable, Identifiable, Hashable, Codab
         case .text: "textformat"
         case .counter: "1.circle"
         case .redact: "eye.slash"
+        case .spotlight: "flashlight.on.fill"
         case .crop: "crop"
         }
     }
@@ -54,6 +57,7 @@ nonisolated enum EditorTool: String, CaseIterable, Identifiable, Hashable, Codab
         case .text: "t"
         case .counter: "n"
         case .redact: "b"
+        case .spotlight: "l"
         case .crop: "c"
         }
     }
@@ -62,5 +66,5 @@ nonisolated enum EditorTool: String, CaseIterable, Identifiable, Hashable, Codab
     /// Tools that draw a new mark, as opposed to selecting or cropping.
     var draws: Bool { self != .select && self != .crop }
     /// Tools whose marks are a box you can resize from its corners and edges.
-    var isBoxShaped: Bool { self == .shape || self == .redact }
+    var isBoxShaped: Bool { self == .shape || self == .redact || self == .spotlight }
 }

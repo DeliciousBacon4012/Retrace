@@ -18,6 +18,8 @@ struct AnnotationCanvas: View {
         GeometryReader { proxy in
             let layout = CanvasLayout(document: document, in: proxy.size)
             let redactor: AnnotationRenderer.Redactor = { document.redactedImage($0, strength: $1) }
+            // A spotlight being drawn sits on top, so it leads the shared shade while it's dragged.
+            let spotlights = (document.annotations + [document.draft].compactMap { $0 }).filter { $0.tool == .spotlight }
 
             ZStack(alignment: .topLeading) {
                 // A soft shadow under exactly the visible part of the image.
@@ -36,13 +38,15 @@ struct AnnotationCanvas: View {
                         .accessibilityLabel("Screenshot")
 
                     ForEach(document.annotations) { mark in
-                        MarkLayer(mark: mark, layout: layout, redactor: redactor)
+                        MarkLayer(mark: mark, holes: AnnotationRenderer.Spotlight.holes(for: mark, among: spotlights), layout: layout, redactor: redactor)
                             .equatable()
-                            .transition(.scale(scale: 0.6, anchor: layout.anchor(for: mark.center)).combined(with: .opacity))
+                            .transition(mark.tool == .spotlight
+                                ? .opacity
+                                : .scale(scale: 0.6, anchor: layout.anchor(for: mark.center)).combined(with: .opacity))
                     }
 
                     if let draft = document.draft {
-                        MarkLayer(mark: draft, layout: layout, redactor: redactor)
+                        MarkLayer(mark: draft, holes: AnnotationRenderer.Spotlight.holes(for: draft, among: spotlights), layout: layout, redactor: redactor)
                     }
                     ForEach(document.extraDrafts) { extra in
                         MarkLayer(mark: extra, layout: layout, redactor: redactor)
@@ -324,11 +328,13 @@ nonisolated struct CanvasLayout: Equatable {
 /// One mark, drawn on its own layer. It only redraws when the mark or the layout changes.
 private struct MarkLayer: View, Equatable {
     let mark: Annotation
+    /// For the spotlight that draws the shared shade: every spotlight's hole.
+    var holes: [Annotation] = []
     let layout: CanvasLayout
     let redactor: AnnotationRenderer.Redactor
 
     nonisolated static func == (lhs: MarkLayer, rhs: MarkLayer) -> Bool {
-        lhs.mark == rhs.mark && lhs.layout == rhs.layout
+        lhs.mark == rhs.mark && lhs.holes == rhs.holes && lhs.layout == rhs.layout
     }
 
     var body: some View {
@@ -336,7 +342,13 @@ private struct MarkLayer: View, Equatable {
             context.translateBy(x: layout.origin.x, y: layout.origin.y)
             context.scaleBy(x: layout.factor, y: layout.factor)
             context.clip(to: Path(CGRect(origin: .zero, size: layout.imageSize)))
-            AnnotationRenderer.draw(mark, redacted: redactor, in: &context)
+            AnnotationRenderer.draw(
+                mark,
+                redacted: redactor,
+                spotlights: holes,
+                canvas: CGRect(origin: .zero, size: layout.imageSize),
+                in: &context
+            )
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

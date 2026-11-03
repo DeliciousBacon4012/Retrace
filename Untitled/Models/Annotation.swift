@@ -137,10 +137,15 @@ nonisolated struct MarkStyle: Hashable, Codable, Sendable {
     /// 0 is light, 1 is heavy.
     var strength: Double = 0.6
 
+    // Spotlight: how the rest of the image recedes, each from 0 (untouched) to 1.
+    var dim: Double = 0.5
+    var fade: Double = 0
+    var blur: Double = 0
+
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case color, opacity, lineWidth, shadow, shadowRadius, shadowOpacity, dashed, route, startHead, endHead, headScale, tapered, shape, fill, cornerRadius, font, weight, fontSize, textStyle, counterStyle, redaction, strength
+        case color, opacity, lineWidth, shadow, shadowRadius, shadowOpacity, dashed, route, startHead, endHead, headScale, tapered, shape, fill, cornerRadius, font, weight, fontSize, textStyle, counterStyle, redaction, strength, dim, fade, blur
     }
 
     /// Reads saved styles leniently: a setting that's missing, or that an older or newer
@@ -169,6 +174,9 @@ nonisolated struct MarkStyle: Hashable, Codable, Sendable {
         counterStyle = (try? container.decodeIfPresent(type(of: counterStyle), forKey: .counterStyle)) ?? counterStyle
         redaction = (try? container.decodeIfPresent(type(of: redaction), forKey: .redaction)) ?? redaction
         strength = (try? container.decodeIfPresent(type(of: strength), forKey: .strength)) ?? strength
+        dim = (try? container.decodeIfPresent(type(of: dim), forKey: .dim)) ?? dim
+        fade = (try? container.decodeIfPresent(type(of: fade), forKey: .fade)) ?? fade
+        blur = (try? container.decodeIfPresent(type(of: blur), forKey: .blur)) ?? blur
     }
 
     var counterRadius: CGFloat { fontSize * 0.75 }
@@ -201,6 +209,10 @@ nonisolated struct MarkStyle: Hashable, Codable, Sendable {
             style.color = .ink
             style.shadow = false
             style.cornerRadius = 4 * scale
+        case .spotlight:
+            style.shape = .ellipse
+            style.shadow = false
+            style.cornerRadius = 16 * scale
         default:
             break
         }

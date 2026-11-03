@@ -414,7 +414,11 @@ final class EditorDocument {
                 let drawnWidth = style(for: .highlighter).lineWidth
                 extraDrafts = []
                 marquee = nil
-                if constrained, let first = rawHighlight.first {
+                if constrained, !Self.highlighterSnapsToText, let first = rawHighlight.first {
+                    // With snapping off, Shift draws one perfectly straight stroke.
+                    mark.points = [first, Geometry.snapped(from: first, to: point)]
+                    mark.style.lineWidth = drawnWidth
+                } else if constrained, let first = rawHighlight.first {
                     // Shift highlights every line of text inside the box dragged out, and
                     // draws freely only when there's no text there at all.
                     let box = CGRect(origin: first, size: .zero).union(CGRect(origin: point, size: .zero))
@@ -783,6 +787,9 @@ final class EditorDocument {
             let toolStyle = style(for: .redact)
             inUse.insert(Self.key(toolStyle.redaction, Self.level(for: toolStyle.strength)))
         }
+        if let lead = annotations.last(where: { $0.tool == .spotlight }), lead.style.blur > 0.01 {
+            inUse.insert(Self.key(.blur, Self.level(for: lead.style.blur)))
+        }
         for key in redactionLayers.keys where !inUse.contains(key) {
             redactionLayers[key] = nil
         }
@@ -1014,7 +1021,7 @@ nonisolated enum MarkHandle: Hashable, Sendable {
             return handles
         case .highlighter where mark.isStraightStroke:
             return [(.start, mark.points[0]), (.end, mark.points[1])]
-        case .shape, .redact:
+        case .shape, .redact, .spotlight:
             let r = mark.rect
             return [
                 (.corner(0), CGPoint(x: r.minX, y: r.minY)), (.corner(1), CGPoint(x: r.maxX, y: r.minY)),

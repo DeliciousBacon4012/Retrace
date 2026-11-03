@@ -35,7 +35,7 @@ struct EditorInspector: View {
                 VariantSection(document: document, tool: tool)
                 ColorSection(document: document, tool: tool)
                 ToolSection(document: document, tool: tool)
-                if tool != .highlighter, tool != .redact {
+                if tool != .highlighter, tool != .redact, tool != .spotlight {
                     EffectsSection(document: document)
                 }
                 if tool == .redact, !document.hasSelection {
@@ -155,6 +155,14 @@ private struct VariantSection: View {
                 .pickerStyle(.segmented)
                 .labelStyle(.iconOnly)
             }
+        case .spotlight:
+            Section("Spotlight") {
+                Picker("Shape", selection: $document.style.shape) {
+                    ForEach(ShapeKind.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelStyle(.iconOnly)
+            }
         case .text:
             Section("Text") {
                 Picker("Style", selection: $document.style.textStyle) {
@@ -188,7 +196,7 @@ private struct ColorSection: View {
     @AppStorage(EditorPalette.storageKey) private var palette: EditorPalette = .pastel
 
     var body: some View {
-        if tool != .redact || document.style.redaction == .solid {
+        if tool != .spotlight, tool != .redact || document.style.redaction == .solid {
             Section("Color") {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 8) {
                     ForEach(Array(zip(palette.colors, palette.names).enumerated()), id: \.offset) { index, swatch in
@@ -307,6 +315,19 @@ private struct ToolSection: View {
         case .counter:
             Section("Size") {
                 ValueSlider("Size", value: points(\.fontSize), in: 10...64, unit: "pt")
+            }
+        case .spotlight:
+            Section {
+                ValueSlider("Dim", value: $document.style.dim, in: 0...1, format: .percent)
+                ValueSlider("Fade", value: $document.style.fade, in: 0...1, format: .percent)
+                ValueSlider("Blur", value: $document.style.blur, in: 0...1, format: .percent)
+                if document.style.shape == .rectangle {
+                    ValueSlider("Roundness", value: points(\.cornerRadius), in: 0...80, unit: "pt")
+                }
+            } header: {
+                Text("Everything Else")
+            } footer: {
+                Text("Draw several spotlights to light up more than one area. The newest one sets how the rest of the image looks.")
             }
         case .redact:
             if document.style.redaction != .solid || document.style.shape == .rectangle {

@@ -7,16 +7,28 @@ enum AnnotationRenderer {
     typealias Redactor = (Redaction, Double) -> CGImage?
 
     static func draw(image: CGImage, annotations: [Annotation], redacted: Redactor, in context: inout GraphicsContext) {
-        context.draw(Image(decorative: image, scale: 1), in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let canvas = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        context.draw(Image(decorative: image, scale: 1), in: canvas)
+        let spotlights = annotations.filter { $0.tool == .spotlight }
         for annotation in annotations {
-            draw(annotation, redacted: redacted, in: &context)
+            draw(annotation, redacted: redacted, spotlights: Spotlight.holes(for: annotation, among: spotlights), canvas: canvas, in: &context)
         }
     }
 
-    static func draw(_ mark: Annotation, redacted: Redactor, in context: inout GraphicsContext) {
+    /// Several spotlights share one shade with a hole for each, so they don't darken each
+    /// other. The topmost one draws it, in its own style; the others draw nothing themselves.
+    enum Spotlight {
+        static func holes(for mark: Annotation, among spotlights: [Annotation]) -> [Annotation] {
+            guard mark.tool == .spotlight, spotlights.last?.id == mark.id else { return [] }
+            return spotlights
+        }
+    }
+
+    /// `spotlights` and `canvas` matter only for the spotlight that draws the shade.
+    static func draw(_ mark: Annotation, redacted: Redactor, spotlights: [Annotation] = [], canvas: CGRect = .zero, in context: inout GraphicsContext) {
         let style = mark.style
         var outer = context
-        if style.shadow, mark.tool != .highlighter, mark.tool != .redact {
+        if style.shadow, mark.tool != .highlighter, mark.tool != .redact, mark.tool != .spotlight {
             outer.addFilter(.shadow(
                 color: .black.opacity(style.shadowOpacity),
                 radius: style.shadowRadius,
@@ -27,7 +39,7 @@ enum AnnotationRenderer {
         if mark.tool == .highlighter {
             outer.blendMode = .multiply
         }
-        outer.opacity = mark.tool == .redact ? 1 : style.opacity
+        outer.opacity = mark.tool == .redact || mark.tool == .spotlight ? 1 : style.opacity
 
         // Everything is drawn into one layer first, so the shadow and opacity
         // apply to the mark as a whole and overlapping parts don't double up.
@@ -40,6 +52,7 @@ enum AnnotationRenderer {
             case .text: drawText(mark, in: &layer)
             case .counter: drawCounter(mark, in: &layer)
             case .redact: drawRedaction(mark, redacted: redacted, in: &layer)
+            case .spotlight: drawSpotlight(mark, holes: spotlights, canvas: canvas, redacted: redacted, in: &layer)
             case .select, .crop: break
             }
         }
@@ -332,6 +345,29 @@ enum AnnotationRenderer {
         }
     }
 
+    // MARK: Spotlight
+
+    /// Everything outside the spotlights recedes: blurred, faded toward gray, then dimmed.
+    private static func drawSpotlight(_ mark: Annotation, holes: [Annotation], canvas: CGRect, redacted: Redactor, in layer: inout GraphicsContext) {
+        guard !holes.isEmpty, !canvas.isEmpty else { return }
+        let style = mark.style
+        var lit = Path()
+        for hole in holes {
+            lit.addPath(shapePath(hole.style.shape, in: hole.rect, cornerRadius: hole.style.cornerRadius))
+        }
+        var shade = layer
+        shade.clip(to: lit, options: .inverse)
+        if style.blur > 0.01, let blurred = redacted(.blur, style.blur) {
+            shade.draw(Image(decorative: blurred, scale: 1), in: CGRect(x: 0, y: 0, width: blurred.width, height: blurred.height))
+        }
+        if style.fade > 0.01 {
+            shade.fill(Path(canvas), with: .color(Color(white: 0.55).opacity(style.fade * 0.75)))
+        }
+        if style.dim > 0.01 {
+            shade.fill(Path(canvas), with: .color(.black.opacity(style.dim * 0.85)))
+        }
+    }
+
     /// A curve through freehand points, smoothed with midpoint quadratics.
     static func smoothPath(through points: [CGPoint]) -> Path {
         var path = Path()
@@ -363,9 +399,16 @@ enum AnnotationRenderer {
 
         // Make every redaction layer up front, so rendering only reads values.
         var layers: [String: CGImage] = [:]
-        for mark in annotations where mark.tool == .redact {
-            let key = "\(mark.style.redaction.rawValue)-\(mark.style.strength)"
-            if layers[key] == nil, let layer = document.redactedImageNow(mark.style.redaction, strength: mark.style.strength) {
+        var needed: [(Redaction, Double)] = annotations
+            .filter { $0.tool == .redact && $0.style.redaction != .solid }
+            .map { ($0.style.redaction, $0.style.strength) }
+        // Only the topmost spotlight's blur is drawn; see `Spotlight`.
+        if let lead = annotations.last(where: { $0.tool == .spotlight }), lead.style.blur > 0.01 {
+            needed.append((.blur, lead.style.blur))
+        }
+        for (redaction, strength) in needed {
+            let key = "\(redaction.rawValue)-\(strength)"
+            if layers[key] == nil, let layer = document.redactedImageNow(redaction, strength: strength) {
                 layers[key] = layer
             }
         }
