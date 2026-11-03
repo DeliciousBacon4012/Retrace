@@ -99,22 +99,27 @@ final class ReplayBuffer: NSObject {
     @discardableResult
     func save(to url: URL, lastSeconds: Double? = nil) async throws -> Double {
         guard case .running(let since) = state, let writer else { throw ReplayError.notRunning }
+        // The clip ends exactly at this moment, on the clock the screen's frames use.
+        let requested = CMClockGetTime(CMClockGetHostTimeClock())
         state = .saving
         defer {
             if self.writer != nil { state = .running(since: since) }
         }
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("replay-\(UUID().uuidString).mp4")
         defer { try? FileManager.default.removeItem(at: temporary) }
-        try await Task.detached(priority: .userInitiated) {
-            try writer.writeSnapshot(to: temporary, lastSeconds: lastSeconds)
+        let overhang = try await Task.detached(priority: .userInitiated) {
+            // The newest second is still being encoded; wait for it so nothing is cut off.
+            await writer.waitUntilBuffered(through: requested)
+            return try writer.writeSnapshot(to: temporary, lastSeconds: lastSeconds, endingAt: requested)
         }.value
-        return try await Self.export(temporary, to: url, lastSeconds: lastSeconds)
+        return try await Self.export(temporary, to: url, lastSeconds: lastSeconds, trimmingEnd: overhang)
     }
 
     /// Rewrites the fragmented snapshot into a regular movie whose timeline starts at zero,
-    /// keeping only the last `lastSeconds` when given. The cut can fall between keyframes:
-    /// the movie's edit list starts playback exactly there without re-encoding.
-    private static func export(_ source: URL, to destination: URL, lastSeconds: Double?) async throws -> Double {
+    /// ending `trimmingEnd` seconds before the snapshot does (the moment the save was asked
+    /// for) and keeping only the last `lastSeconds` when given. The cut can fall between
+    /// keyframes: the movie's edit list starts playback exactly there without re-encoding.
+    private static func export(_ source: URL, to destination: URL, lastSeconds: Double?, trimmingEnd: Double) async throws -> Double {
         let asset = AVURLAsset(url: source)
         let tracks = try await asset.loadTracks(withMediaType: .video) + asset.loadTracks(withMediaType: .audio)
         var ranges: [CMTimeRange] = []
@@ -122,8 +127,9 @@ final class ReplayBuffer: NSObject {
             ranges.append(try await track.load(.timeRange))
         }
         guard let first = ranges.first else { throw ReplayError.empty }
-        let end = ranges.dropFirst().reduce(first.end) { CMTimeMaximum($0, $1.end) }
         let earliest = ranges.dropFirst().reduce(first.start) { CMTimeMinimum($0, $1.start) }
+        let latest = ranges.dropFirst().reduce(first.end) { CMTimeMaximum($0, $1.end) }
+        let end = CMTimeMaximum(earliest, CMTimeSubtract(latest, CMTime(seconds: trimmingEnd, preferredTimescale: 600)))
         var start = earliest
         if let lastSeconds {
             start = CMTimeMaximum(earliest, CMTimeSubtract(end, CMTime(seconds: lastSeconds, preferredTimescale: 600)))

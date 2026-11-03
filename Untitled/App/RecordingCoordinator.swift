@@ -75,6 +75,10 @@ final class RecordingCoordinator {
 
     var isRecording: Bool { recorder.isActive }
 
+    /// True from the moment a recording is asked for until it starts or is called off, so a
+    /// second press of the shortcut meanwhile can't open a second picker or overlay.
+    @ObservationIgnored private var isPreparing = false
+
     /// Starts a recording, or stops the one in progress. During the countdown, cancels it.
     func toggle(_ mode: CaptureMode) async {
         if countdown != nil {
@@ -85,10 +89,13 @@ final class RecordingCoordinator {
             recorder.stop()
             return
         }
+        guard !isPreparing else { return }
         guard permissions.screenRecordingStatus == .granted else {
             toasts.showScreenRecordingNeeded(then: String(localized: "Try again."))
             return
         }
+        isPreparing = true
+        defer { isPreparing = false }
         if settings.recordsMicrophone, await !microphoneAllowed() {
             ErrorPresenter.present(String(localized: "Untitled can't use the microphone."), recovery: String(localized: "Allow it in System Settings › Privacy & Security › Microphone, or turn off microphone audio in Settings › Recording."))
             return

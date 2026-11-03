@@ -22,6 +22,8 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
         let url: URL
         let seconds: Double
         let bytes: Int
+        /// When its last frame ends, on the host clock that the screen's frames use.
+        let end: CMTime
     }
 
     let sampleQueue = DispatchQueue(label: "io.github.deliciousbacon4012.Untitled.replay", qos: .userInitiated)
@@ -35,6 +37,13 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
     private var failed = false
+    /// The newest frame given to the encoder, kept so it can be repeated while the screen
+    /// is still. ScreenCaptureKit sends no frames then, and without frames no segments
+    /// come out, so a save would miss the still stretch at the end.
+    private var lastImageBuffer: CVImageBuffer?
+    private var lastFormat: CMFormatDescription?
+    private var lastVideoTime = CMTime.invalid
+    private var keepAlive: DispatchSourceTimer?
 
     // Guarded by `lock`.
     private var initializationSegment: Data?
@@ -87,11 +96,16 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
         switch type {
         case .screen:
             guard Self.isCompleteFrame(sampleBuffer) else { return }
+            let time = sampleBuffer.presentationTimeStamp
             if writer == nil {
-                startWriter(at: sampleBuffer.presentationTimeStamp)
+                startWriter(at: time)
             }
-            if let videoInput, videoInput.isReadyForMoreMediaData {
-                videoInput.append(sampleBuffer)
+            // A repeated frame may already have taken this moment; times must only go up.
+            if lastVideoTime.isValid, time <= lastVideoTime { return }
+            if let videoInput, videoInput.isReadyForMoreMediaData, videoInput.append(sampleBuffer) {
+                lastVideoTime = time
+                lastImageBuffer = sampleBuffer.imageBuffer
+                lastFormat = sampleBuffer.formatDescription
             }
         case .audio:
             guard writer?.status == .writing, let audioInput, audioInput.isReadyForMoreMediaData else { return }
@@ -153,6 +167,36 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
         }
         writer.startSession(atSourceTime: time)
         self.writer = writer
+        startKeepAlive()
+    }
+
+    /// Repeats the newest frame whenever the screen has been still for half a second.
+    private func startKeepAlive() {
+        let timer = DispatchSource.makeTimerSource(queue: sampleQueue)
+        timer.schedule(deadline: .now() + 0.25, repeating: 0.25, leeway: .milliseconds(50))
+        timer.setEventHandler { [weak self] in self?.repeatFrameIfStill() }
+        timer.resume()
+        keepAlive = timer
+    }
+
+    private func repeatFrameIfStill() {
+        guard !failed, writer?.status == .writing, lastVideoTime.isValid,
+              let imageBuffer = lastImageBuffer, let format = lastFormat,
+              let videoInput, videoInput.isReadyForMoreMediaData
+        else { return }
+        let now = CMClockGetTime(CMClockGetHostTimeClock())
+        guard (now - lastVideoTime).seconds >= 0.5 else { return }
+        var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: now, decodeTimeStamp: .invalid)
+        var sample: CMSampleBuffer?
+        let status = CMSampleBufferCreateReadyWithImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: imageBuffer,
+            formatDescription: format,
+            sampleTiming: &timing,
+            sampleBufferOut: &sample
+        )
+        guard status == noErr, let sample, videoInput.append(sample) else { return }
+        lastVideoTime = now
     }
 
     /// ScreenCaptureKit also sends "nothing changed" frames without pixels; only complete ones are encoded.
@@ -180,8 +224,12 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
                     Log.capture.error("Writing a replay segment failed: \(error.localizedDescription, privacy: .public)")
                     return
                 }
-                let seconds = segmentReport?.trackReports.map(\.duration.seconds).max() ?? 1
-                segments.append(Segment(url: url, seconds: seconds.isFinite ? seconds : 1, bytes: segmentData.count))
+                let reports = segmentReport?.trackReports ?? []
+                let seconds = reports.map(\.duration.seconds).max() ?? 1
+                let ends = reports.map { $0.earliestPresentationTimeStamp + $0.duration }.filter(\.isNumeric)
+                let previousEnd = segments.last?.end ?? .zero
+                let end = ends.max() ?? previousEnd + CMTime(seconds: seconds.isFinite ? seconds : 1, preferredTimescale: 600)
+                segments.append(Segment(url: url, seconds: seconds.isFinite ? seconds : 1, bytes: segmentData.count, end: end))
                 trim()
             @unknown default:
                 break
@@ -208,12 +256,31 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
 
     // MARK: Saving and stopping
 
+    /// Waits, up to `timeout` seconds, until the segments on disk reach `time` on the host
+    /// clock, so a save includes the moment it was asked for. Segments come out about
+    /// once a second, and still stretches are kept flowing by repeated frames.
+    func waitUntilBuffered(through time: CMTime, timeout: Double = 2.5) async {
+        let deadline = Date.now.addingTimeInterval(timeout)
+        while Date.now < deadline {
+            let reached = lock.withLock { segments.last.map { $0.end >= time } ?? false }
+            if reached { return }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
     /// Writes the buffered segments into one playable fragmented MP4 file: all of them, or
-    /// with `lastSeconds`, just enough of the newest to cover that long.
-    func writeSnapshot(to url: URL, lastSeconds: Double? = nil) throws {
-        let (header, files) = lock.withLock {
+    /// with `lastSeconds`, just enough of the newest to cover that long before `end`.
+    /// Returns how many seconds the file runs past `end`, so the export can stop there.
+    @discardableResult
+    func writeSnapshot(to url: URL, lastSeconds: Double? = nil, endingAt end: CMTime? = nil) throws -> Double {
+        let (header, files, overhang) = lock.withLock {
             snapshotsInProgress += 1
-            return (initializationSegment, Self.newest(segments, covering: lastSeconds).map(\.url))
+            var overhang = 0.0
+            if let end, let last = segments.last?.end, end.isNumeric {
+                overhang = max((last - end).seconds, 0)
+            }
+            let covering = lastSeconds.map { $0 + overhang }
+            return (initializationSegment, Self.newest(segments, covering: covering).map(\.url), overhang)
         }
         defer { lock.withLock { finishSnapshot() } }
         guard let header, !files.isEmpty else { throw ReplayError.empty }
@@ -224,6 +291,7 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
         for file in files {
             try handle.write(contentsOf: Data(contentsOf: file))
         }
+        return overhang
     }
 
     /// The newest segments that together last at least `seconds`, plus one more so the
@@ -256,6 +324,9 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
     /// Stops encoding and deletes every buffered segment, once any save in progress is done.
     func shutDown() {
         sampleQueue.async { [self] in
+            keepAlive?.cancel()
+            keepAlive = nil
+            lastImageBuffer = nil
             videoInput?.markAsFinished()
             audioInput?.markAsFinished()
             writer?.cancelWriting()
