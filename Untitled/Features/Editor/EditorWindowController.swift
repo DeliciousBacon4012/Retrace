@@ -56,15 +56,26 @@ final class EditorPresenter {
             NSApp.activate()
             return
         }
+        guard let (image, scale) = Self.loadImage(at: url) else { return }
+        present(EditorDocument(image: image, scale: scale, fileURL: url))
+    }
+
+    /// Opens a copy of an image as a new, unsaved capture, leaving the file itself alone.
+    func openCopy(ofImageAt url: URL) {
+        guard let (image, scale) = Self.loadImage(at: url) else { return }
+        present(EditorDocument(image: image, scale: scale, fileURL: nil))
+    }
+
+    private static func loadImage(at url: URL) -> (CGImage, CGFloat)? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
         else {
             ErrorPresenter.present(String(localized: "This file can't be opened in the editor."), recovery: String(localized: "Only images can be annotated."))
-            return
+            return nil
         }
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         let dpi = properties?[kCGImagePropertyDPIWidth] as? Double ?? 144
-        present(EditorDocument(image: image, scale: max(dpi / 72, 1), fileURL: url))
+        return (image, max(dpi / 72, 1))
     }
 
     private func present(_ document: EditorDocument) {

@@ -17,15 +17,21 @@ final class MainWindowRouter {
     /// Brings the main window forward, opening it if needed. The app is activated too,
     /// since a menu bar app is often in the background.
     func show(recentsFilter: LibraryViewModel.KindFilter? = nil, using openWindow: OpenWindowAction) {
-        if let recentsFilter { pendingRecentsFilter = recentsFilter }
+        if let recentsFilter { showCaptures(filter: recentsFilter) }
         NSApplication.shared.activate()
         openWindow(id: WindowID.main)
     }
 
     /// Like `show(recentsFilter:using:)`, for code with no `openWindow` at hand.
     func request(recentsFilter: LibraryViewModel.KindFilter? = nil) {
-        if let recentsFilter { pendingRecentsFilter = recentsFilter }
+        if let recentsFilter { showCaptures(filter: recentsFilter) }
         openRequests += 1
+    }
+
+    /// Switches the window to captures, with this filter.
+    private func showCaptures(filter: LibraryViewModel.KindFilter) {
+        pendingRecentsFilter = filter
+        UserDefaults.standard.set(MainSection.captures.rawValue, forKey: MainSection.storageKey)
     }
 
     /// Opens Settings, on `pane` if one is given, otherwise on the tab last used.

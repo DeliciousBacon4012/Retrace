@@ -26,6 +26,8 @@ final class AppDependencies {
     let textHistory: TextHistory
     /// The originals of captures saved over in the editor.
     let versions: CaptureVersions
+    /// Everything copied in any app, for the Clipboard view.
+    let clipboardHistory: ClipboardHistory
     let memory = MemoryMonitor()
 
     init(
@@ -35,7 +37,8 @@ final class AppDependencies {
         dockIcon: any DockIconControlling,
         clipboard: any ClipboardWriting,
         textHistoryFile: URL? = TextHistory.defaultFileURL,
-        originalsFolder: URL? = CaptureVersions.defaultFolder
+        originalsFolder: URL? = CaptureVersions.defaultFolder,
+        clipboardFolder: URL? = ClipboardHistory.defaultFolder
     ) {
         self.settings = settings
         self.permissions = permissions
@@ -47,6 +50,7 @@ final class AppDependencies {
         self.toasts = toasts
         let textHistory = TextHistory(settings: settings, fileURL: textHistoryFile)
         self.textHistory = textHistory
+        clipboardHistory = ClipboardHistory(settings: settings, clipboard: clipboard, folder: clipboardFolder)
         let versions = CaptureVersions(folder: originalsFolder)
         self.versions = versions
         let editor = EditorPresenter(settings: settings, clipboard: clipboard, textHistory: textHistory, versions: versions)
@@ -121,6 +125,7 @@ final class AppDependencies {
         followSaveFolderSetting()
         shortcuts.start()
         replay.start()
+        clipboardHistory.start()
         followThumbnailMemorySetting()
         memory.onPressure = { [weak self] pressure in self?.relieveMemory(pressure) }
         memory.start()
@@ -180,7 +185,8 @@ extension AppDependencies {
             dockIcon: PreviewDockIconService(),
             clipboard: PreviewClipboard(),
             textHistoryFile: nil,
-            originalsFolder: nil
+            originalsFolder: nil,
+            clipboardFolder: nil
         )
     }
 }

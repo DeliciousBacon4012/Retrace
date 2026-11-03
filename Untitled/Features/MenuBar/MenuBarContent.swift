@@ -69,6 +69,7 @@ struct MenuBarContent: View {
                     MainWindowRouter.shared.show(using: openWindow)
                 }
             }
+            ClipboardHistoryMenu()
         }
 
         Section {
@@ -151,6 +152,46 @@ struct QuickActionButton: View {
         action.recordingMode != nil && dependencies.recording.isRecording
             ? String(localized: "Stop Recording")
             : action.title
+    }
+}
+
+/// The last few things copied in any app. Choosing one copies it again.
+private struct ClipboardHistoryMenu: View {
+    @Environment(AppDependencies.self) private var dependencies
+    @Environment(SettingsStore.self) private var settings
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        @Bindable var settings = settings
+        Menu("Clipboard History", systemImage: "clipboard") {
+            let entries = dependencies.clipboardHistory.entries.prefix(8)
+            if entries.isEmpty {
+                Text(settings.keepsClipboardHistory ? "What you copy appears here" : "Clipboard history is off")
+            } else {
+                ForEach(entries) { entry in
+                    Button(title(for: entry), systemImage: entry.isImage ? "photo" : "text.alignleft") {
+                        dependencies.clipboardHistory.copy(entry)
+                    }
+                }
+            }
+            Divider()
+            Toggle("Keep Clipboard History", isOn: $settings.keepsClipboardHistory)
+            Button("Show All") {
+                UserDefaults.standard.set(MainSection.clipboard.rawValue, forKey: MainSection.storageKey)
+                MainWindowRouter.shared.show(using: openWindow)
+            }
+        }
+    }
+
+    private func title(for entry: ClipboardEntry) -> String {
+        switch entry.content {
+        case .text(let text):
+            let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return trimmed.count > 48 ? String(trimmed.prefix(47)) + "…" : trimmed
+        case .image(_, let width, let height):
+            return String(localized: "Image \(width) × \(height)")
+        }
     }
 }
 

@@ -5,6 +5,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
     case general
     case capture
     case quickAccess
+    case clipboard
     case notifications
     case editor
     case recording
@@ -21,6 +22,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
         case .general: String(localized: "General")
         case .capture: String(localized: "Capture")
         case .quickAccess: String(localized: "Quick Access")
+        case .clipboard: String(localized: "Clipboard")
         case .notifications: String(localized: "Notifications")
         case .editor: String(localized: "Editor")
         case .recording: String(localized: "Recording")
@@ -34,6 +36,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
         case .general: "gearshape"
         case .capture: "camera.viewfinder"
         case .quickAccess: "rectangle.stack"
+        case .clipboard: "clipboard"
         case .notifications: "bell.badge"
         case .editor: "pencil.and.scribble"
         case .recording: "record.circle"
