@@ -129,7 +129,7 @@ final class CaptureCoordinator {
                 image = result.image
             }
             Log.capture.info("Reading text from a \(image.width, privacy: .public)×\(image.height, privacy: .public) area")
-            let content = try await TextRecognizer.recognize(image)
+            let content = try await readText(in: image.upscaledForReading() ?? image)
             if settings.playsSounds {
                 CaptureSound.play()
             }
@@ -137,6 +137,28 @@ final class CaptureCoordinator {
         } catch {
             Log.capture.error("Text capture failed: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
+        }
+    }
+
+    /// Reads `image`, and says so if that takes longer than a moment, as a first read can.
+    private func readText(in image: CGImage) async throws -> RecognizedContent {
+        let notice = Task { [toast] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            toast.show(.init(
+                kind: .textCopied,
+                symbolName: "text.viewfinder",
+                title: String(localized: "Reading text…"),
+                detail: String(localized: "The first read after an update can take a minute."),
+                staysUntilReplaced: true
+            ))
+        }
+        defer { notice.cancel() }
+        do {
+            return try await TextRecognizer.recognize(image)
+        } catch {
+            toast.hide(animated: true)
+            throw error
         }
     }
 

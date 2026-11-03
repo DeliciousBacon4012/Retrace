@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreText
 import Foundation
 import os
 import OSLog
@@ -71,10 +72,30 @@ nonisolated enum TextRecognizer {
 
     private static let queue = DispatchQueue(label: "io.github.deliciousbacon4012.Untitled.vision", qos: .userInitiated)
     private static let log = Logger(subsystem: Log.subsystem, category: "text")
+    /// Seconds a call may wait, counting any work ahead of it. The first read by a new build of
+    /// the app, or after an OS update, makes Vision set up its models: about 45 seconds when measured.
+    private static let timeLimit: TimeInterval = 120
+
+    /// Sets up Vision's models ahead of the first read. The system keeps them for this build of
+    /// the app, so later launches take a moment. Text has to be drawn: a blank image never gets
+    /// as far as the recognizer.
+    static func prepare() {
+        queue.async(qos: .utility, flags: .enforceQoS) {
+            guard let image = warmUpImage() else { return }
+            let started = ContinuousClock.now
+            do {
+                let request = textRequest(correctsLanguage: true)
+                try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+                log.info("Vision ready after \(started.duration(to: .now), privacy: .public), read \(request.results?.count ?? 0, privacy: .public) lines")
+            } catch {
+                log.error("Preparing Vision failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
 
     /// Reads every line of text and every QR code or barcode.
     static func recognize(_ image: CGImage) async throws -> RecognizedContent {
-        try await run(limit: .seconds(20)) {
+        try await run {
             let text = textRequest(correctsLanguage: true)
             let codes = VNDetectBarcodesRequest()
             try VNImageRequestHandler(cgImage: image, options: [:]).perform([text, codes])
@@ -95,7 +116,7 @@ nonisolated enum TextRecognizer {
     /// Where each line of text sits, with a box for every word, for snapping marks to text.
     /// In image pixels with the origin at the top left.
     static func textLayout(in image: CGImage) async throws -> [TextLine] {
-        try await run(limit: .seconds(20)) {
+        try await run {
             let size = CGSize(width: image.width, height: image.height)
             let request = textRequest(correctsLanguage: false)
             try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
@@ -117,7 +138,7 @@ nonisolated enum TextRecognizer {
 
     /// Areas worth hiding before sharing, in image pixels with the origin at the top left.
     static func sensitiveAreas(in image: CGImage, kinds: Set<SensitiveKind>) async throws -> [CGRect] {
-        try await run(limit: .seconds(30)) {
+        try await run {
             let size = CGSize(width: image.width, height: image.height)
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
             var areas: [CGRect] = []
@@ -200,26 +221,51 @@ nonisolated enum TextRecognizer {
         )
     }
 
-    /// Runs `work` on the Vision queue and gives up after `limit`, whichever comes first.
-    private static func run<T: Sendable>(limit: Duration, _ work: @escaping @Sendable () throws -> T) async throws -> T {
+    /// A line of black text on white, for `prepare()`.
+    private static func warmUpImage() -> CGImage? {
+        guard let context = CGContext(
+            data: nil,
+            width: 600,
+            height: 120,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 600, height: 120))
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
+        let attributes: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName("Helvetica" as CFString, 36, nil),
+            NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
+        ]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "Getting ready to read", attributes: attributes))
+        context.textPosition = CGPoint(x: 20, y: 40)
+        CTLineDraw(line, context)
+        return context.makeImage()
+    }
+
+    /// Runs `work` on the Vision queue and gives up after `timeLimit`, whichever comes first.
+    private static func run<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         let started = ContinuousClock.now
         defer { log.info("Vision work took \(started.duration(to: .now), privacy: .public)") }
         return try await withCheckedThrowingContinuation { continuation in
             let finished = OSAllocatedUnfairLock(initialState: false)
-            let finish: @Sendable (Result<T, any Error>) -> Void = { result in
+            let finish: @Sendable (Result<T, any Error>) -> Bool = { result in
                 let first = finished.withLock { done in
                     defer { done = true }
                     return !done
                 }
                 if first { continuation.resume(with: result) }
+                return first
             }
             queue.async {
-                finish(Result { try work() })
+                _ = finish(Result { try work() })
             }
-            let seconds = Double(limit.components.seconds)
-            DispatchQueue.global().asyncAfter(deadline: .now() + seconds) {
-                log.error("Vision work timed out")
-                finish(.failure(RecognitionError.timedOut))
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeLimit) {
+                if finish(.failure(RecognitionError.timedOut)) {
+                    log.error("Vision work timed out")
+                }
             }
         }
     }

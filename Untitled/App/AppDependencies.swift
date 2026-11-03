@@ -119,6 +119,7 @@ final class AppDependencies {
         followThumbnailMemorySetting()
         memory.onPressure = { [weak self] pressure in self?.relieveMemory(pressure) }
         memory.start()
+        TextRecognizer.prepare()
         Log.app.info("Untitled \(Bundle.main.displayVersion, privacy: .public) started")
     }
 

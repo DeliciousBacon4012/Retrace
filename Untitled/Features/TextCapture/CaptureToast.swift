@@ -13,6 +13,8 @@ final class CaptureToastController {
         var title: String
         var detail: String?
         var actions: [Action] = []
+        /// Ignores the time set for its kind, for a toast that says work is under way.
+        var staysUntilReplaced = false
     }
 
     struct Action: Identifiable {
@@ -81,7 +83,7 @@ final class CaptureToastController {
         self.panel = panel
 
         let seconds = settings.toastSeconds(for: toast.kind)
-        if seconds > 0 {
+        if seconds > 0, !toast.staysUntilReplaced {
             startClock(.seconds(seconds))
         }
         return true
