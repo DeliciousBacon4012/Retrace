@@ -36,7 +36,7 @@ struct ClipboardSettingsView: View {
             } header: {
                 Text("History")
             } footer: {
-                Text("Text and images you copy in any app are kept on this Mac only. Choosing a shorter limit removes older items right away.")
+                Text("Text and images you copy in any app stay on this Mac only and are removed after 30 days by default. Choosing a shorter limit removes older items right away.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -51,7 +51,7 @@ struct ClipboardSettingsView: View {
             } header: {
                 Text("Ignore copies from")
             } footer: {
-                Text("Copies that password managers mark as private are never kept, whichever app they come from.")
+                Text("Copies marked private by an app are skipped. App exclusions use the app in front when the clipboard change is detected and may miss copies written by a different app.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

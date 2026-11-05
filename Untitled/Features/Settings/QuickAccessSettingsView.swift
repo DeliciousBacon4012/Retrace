@@ -3,6 +3,7 @@ import SwiftUI
 /// Where the floating thumbnails appear, how they stack, how fast they move, and when they leave.
 struct QuickAccessSettingsView: View {
     @Environment(SettingsStore.self) private var settings
+    @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
         @Bindable var settings = settings
@@ -33,6 +34,11 @@ struct QuickAccessSettingsView: View {
                 }
                 .pickerStyle(.segmented)
 
+                Picker("Aspect Ratio", selection: $settings.quickAccessAspectRatio) {
+                    ForEach(QuickAccessAspectRatio.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
                 LabeledContent("Most shown at once") {
                     HStack(spacing: 8) {
                         Text(settings.quickAccessMaxVisible, format: .number)
@@ -45,8 +51,8 @@ struct QuickAccessSettingsView: View {
                 Text("Layout")
             } footer: {
                 Text(settings.quickAccessLayout == .stack
-                    ? "Thumbnails stack in the corner and rise into a column while the pointer is over them."
-                    : "Thumbnails always stand in a column, newest nearest the corner.")
+                    ? "Thumbnails crop to the chosen shape, stack in the corner, and rise into a column while the pointer is over them. The capture itself is unchanged."
+                    : "Thumbnails crop to the chosen shape in a column, newest nearest the corner. The capture itself is unchanged.")
             }
 
             Section {
@@ -69,14 +75,18 @@ struct QuickAccessSettingsView: View {
                 Text("The countdown pauses while the pointer is over the thumbnails.")
             }
         }
+        .onChange(of: settings.quickAccessAspectRatio) { dependencies.quickAccess.refreshLayout() }
+        .onChange(of: settings.quickAccessSize) { dependencies.quickAccess.refreshLayout() }
         .disabled(!settings.showsQuickAccess)
     }
 }
 
 #if DEBUG
 #Preview {
+    let dependencies = AppDependencies.preview()
     QuickAccessSettingsView()
-        .environment(SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard))
+        .environment(dependencies)
+        .environment(dependencies.settings)
         .settingsPage()
 }
 #endif

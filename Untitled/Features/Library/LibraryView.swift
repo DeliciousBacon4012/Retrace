@@ -3,9 +3,9 @@ import QuickLook
 import SwiftUI
 
 /// Every screenshot and recording in the save folder, and the text Capture Text copied,
-/// newest first. This is the main window's content; its filter lives in the window toolbar.
+/// newest first. The main window's Library section shows these items.
 ///
-/// Click selects, or previews with Quick Look while that's switched on in the toolbar.
+/// Click selects, or previews captures with Quick Look when enabled in Library options.
 /// Double-click opens: images in the editor, recordings in their app, text in the text app.
 struct LibraryView: View {
     @Bindable var viewModel: LibraryViewModel
@@ -16,71 +16,93 @@ struct LibraryView: View {
     @State private var copiedSnippet: TextSnippet.ID?
     @FocusState private var isGridFocused: Bool
     /// The item under the pointer, kept out of view state so moving it doesn't redraw the grid.
-    @State private var pointer = PointerItem()
-    @State private var rightClickMonitor: Any?
+    @State private var gridInteraction = GridInteractionState()
+    @State private var interactionMonitor: Any?
 
-    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 14)]
+    private let columns = [GridItem(.adaptive(minimum: 160, maximum: 320), spacing: 20)]
 
     var body: some View {
         let library = dependencies.library
         let history = dependencies.textHistory
-        let items = viewModel.visibleItems(files: library.items, snippets: history.snippets)
+        let items = viewModel.visibleItems
 
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 18) {
-                ForEach(items) { item in
-                    cell(for: item)
-                        .onHover { pointer.item = $0 ? item : (pointer.item?.id == item.id ? nil : pointer.item) }
-                        .onTapGesture { click(item, in: items) }
-                        .onDrag { itemProvider(for: item) }
-                        .contextMenu { contextMenu(for: item, in: items) }
+        ScrollViewReader { scrollProxy in
+            GeometryReader { geometry in
+                let columnCount = max(1, Int((geometry.size.width - 56 + 20) / 180))
+
+                ZStack {
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 22) {
+                            ForEach(items) { item in
+                                cell(for: item)
+                                    .id(item.id)
+                                    .onHover { gridInteraction.pointerItem = $0 ? item : (gridInteraction.pointerItem?.id == item.id ? nil : gridInteraction.pointerItem) }
+                                    .onTapGesture { click(item, in: items) }
+                                    .onDrag { itemProvider(for: item) }
+                                    .contextMenu { contextMenu(for: item, in: items) }
+                            }
+                        }
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 20)
+                    }
+                    .searchable(text: $viewModel.searchText, prompt: "Search captures")
+                    .contentShape(.rect)
+                    .onTapGesture {
+                        viewModel.clearSelection()
+                        isGridFocused = true
+                    }
+                    .quickLookPreview($viewModel.previewURL, in: items.compactMap(\.file).map(\.url))
+                    .overlay { emptyState(library: library, history: history, isEmpty: items.isEmpty) }
+                    .onChange(of: library.items) {
+                        viewModel.updateSources(files: library.items, snippets: history.snippets)
+                        if !library.isLoading, library.loadError == nil {
+                            dependencies.versions.prune(keeping: library.items.map(\.url))
+                        }
+                    }
+                    .onChange(of: history.snippets) {
+                        viewModel.updateSources(files: library.items, snippets: history.snippets)
+                    }
+                    .onAppear {
+                        viewModel.updateSources(files: library.items, snippets: history.snippets)
+                        applyPendingFilter()
+                        gridInteraction.columnCount = columnCount
+                        isGridFocused = true
+                        gridInteraction.isFocused = true
+                        installEventMonitor(scrollProxy: scrollProxy)
+                    }
+                    .onDisappear(perform: removeEventMonitor)
+                    .onChange(of: MainWindowRouter.shared.pendingRecentsFilter) { applyPendingFilter() }
+                    .task(id: copiedSnippet) {
+                        guard copiedSnippet != nil else { return }
+                        try? await Task.sleep(for: .seconds(1.2))
+                        guard !Task.isCancelled else { return }
+                        copiedSnippet = nil
+                    }
+                }
+                .focusable()
+                .focused($isGridFocused)
+                .focusEffectDisabled()
+                .onKeyPress(.space) {
+                    viewModel.togglePreview(in: items)
+                    return .handled
+                }
+                .onKeyPress(.return) {
+                    guard let item = viewModel.selectedItems(in: items).first else { return .ignored }
+                    open(item)
+                    return .handled
+                }
+                .onCommand(#selector(NSResponder.selectAll(_:))) { viewModel.selectAll(items) }
+                .onDeleteCommand {
+                    delete(viewModel.selectedItems(in: items))
+                }
+                .onExitCommand { viewModel.clearSelection() }
+                .onChange(of: geometry.size.width) { _, width in
+                    gridInteraction.columnCount = max(1, Int((width - 56 + 20) / 180))
+                }
+                .onChange(of: isGridFocused) { _, isFocused in
+                    gridInteraction.isFocused = isFocused
                 }
             }
-            .padding(16)
-        }
-        .contentShape(.rect)
-        .onTapGesture {
-            viewModel.selection.removeAll()
-            isGridFocused = true
-        }
-        .focusable()
-        .focused($isGridFocused)
-        .focusEffectDisabled()
-        .onKeyPress(.space) {
-            viewModel.togglePreview(in: items)
-            return .handled
-        }
-        .onKeyPress(.return) {
-            guard let item = viewModel.selectedItems(in: items).first else { return .ignored }
-            open(item)
-            return .handled
-        }
-        .onCommand(#selector(NSResponder.selectAll(_:))) { viewModel.selectAll(items) }
-        .onDeleteCommand {
-            delete(viewModel.selectedItems(in: items))
-        }
-        .onExitCommand { viewModel.selection.removeAll() }
-        .quickLookPreview($viewModel.previewURL, in: items.compactMap(\.file).map(\.url))
-        .overlay { emptyState(library: library, history: history, isEmpty: items.isEmpty) }
-        .onChange(of: library.items) {
-            pruneSelection()
-            if !library.isLoading, library.loadError == nil {
-                dependencies.versions.prune(keeping: library.items.map(\.url))
-            }
-        }
-        .onChange(of: history.snippets) { pruneSelection() }
-        .onAppear {
-            applyPendingFilter()
-            isGridFocused = true
-            installRightClickMonitor()
-        }
-        .onDisappear(perform: removeRightClickMonitor)
-        .onChange(of: MainWindowRouter.shared.pendingRecentsFilter) { applyPendingFilter() }
-        .task(id: copiedSnippet) {
-            guard copiedSnippet != nil else { return }
-            try? await Task.sleep(for: .seconds(1.2))
-            guard !Task.isCancelled else { return }
-            copiedSnippet = nil
         }
     }
 
@@ -92,7 +114,8 @@ struct LibraryView: View {
                 item: file,
                 original: dependencies.versions.original(for: file.url),
                 isSelected: viewModel.selection.contains(item.id),
-                openInEditor: { dependencies.editor.open(fileAt: $0) }
+                openInEditor: { dependencies.editor.open(fileAt: $0) },
+                showQuickLook: { viewModel.previewURL = $0 }
             )
         case .text(let snippet):
             TextCard(snippet: snippet, isSelected: viewModel.selection.contains(item.id), isCopied: copiedSnippet == snippet.id)
@@ -107,14 +130,15 @@ struct LibraryView: View {
             ProgressView()
         } else if isEmpty, showsFiles, let error = library.loadError {
             ContentUnavailableView {
-                Label("Can't Open the Save Folder", systemImage: "exclamationmark.triangle")
+                Label("Can't Open a Library Location", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(error)
             } actions: {
                 Button("Choose Another Folder…") {
                     let settings = dependencies.settings
                     if let folder = FolderPicker.chooseFolder(startingAt: settings.saveFolderURL) {
-                        settings.saveFolderPath = folder.path
+                        settings.addSaveFolder(folder)
+                        settings.setDefaultSaveFolder(folder.path)
                     }
                 }
             }
@@ -195,22 +219,51 @@ struct LibraryView: View {
 
     /// A right-click selects the item under it, so it's clear what the menu acts on. An item
     /// that's already selected keeps the selection, and the menu acts on all of it.
-    private func installRightClickMonitor() {
-        guard rightClickMonitor == nil else { return }
-        rightClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { [viewModel, pointer] event in
+    private func installEventMonitor(scrollProxy: ScrollViewProxy) {
+        guard interactionMonitor == nil else { return }
+        interactionMonitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown, .keyDown]) { [viewModel, gridInteraction] event in
+            if event.type == .keyDown {
+                // ScrollView uses arrow keys to scroll, so handle them only while the Library grid has focus.
+                guard gridInteraction.isFocused,
+                      NSApp.keyWindow === event.window,
+                      !(NSApp.keyWindow?.firstResponder is NSTextView),
+                      !(NSApp.keyWindow?.firstResponder is NSTextField),
+                      event.modifierFlags.intersection([.command, .option, .control]).isEmpty
+                else { return event }
+
+                let offset: Int
+                // AppKit virtual key codes for the four arrow keys.
+                switch event.keyCode {
+                case 123: offset = -1
+                case 124: offset = 1
+                case 125: offset = gridInteraction.columnCount
+                case 126: offset = -gridInteraction.columnCount
+                default: return event
+                }
+
+                guard let item = viewModel.moveSelection(
+                    by: offset,
+                    columns: gridInteraction.columnCount,
+                    extendingSelection: event.modifierFlags.contains(.shift),
+                    in: viewModel.visibleItems
+                ) else { return event }
+                scrollProxy.scrollTo(item.id, anchor: .center)
+                return nil
+            }
+
             if event.type == .rightMouseDown || event.modifierFlags.contains(.control),
-               let item = pointer.item, !viewModel.selection.contains(item.id) {
+               let item = gridInteraction.pointerItem, !viewModel.selection.contains(item.id) {
                 viewModel.select(item)
             }
             return event
         }
     }
 
-    private func removeRightClickMonitor() {
-        if let rightClickMonitor {
-            NSEvent.removeMonitor(rightClickMonitor)
+    private func removeEventMonitor() {
+        if let interactionMonitor {
+            NSEvent.removeMonitor(interactionMonitor)
         }
-        rightClickMonitor = nil
+        interactionMonitor = nil
     }
 
     /// One gesture for single and double clicks, so a click never waits to see if another follows.
@@ -267,10 +320,6 @@ struct LibraryView: View {
         }
     }
 
-    private func pruneSelection() {
-        viewModel.pruneSelection(keeping: RecentItem.merged(files: dependencies.library.items, snippets: dependencies.textHistory.snippets))
-    }
-
     private func applyPendingFilter() {
         guard let filter = MainWindowRouter.shared.pendingRecentsFilter else { return }
         viewModel.kindFilter = filter
@@ -278,8 +327,10 @@ struct LibraryView: View {
     }
 }
 
-private final class PointerItem {
-    var item: RecentItem?
+private final class GridInteractionState {
+    var pointerItem: RecentItem?
+    var columnCount = 1
+    var isFocused = false
 }
 
 /// Captured text in the grid. Clicking it copies it again; double-clicking opens it.
@@ -295,8 +346,8 @@ private struct TextCard: View {
                 .lineLimit(5)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(12)
-                .frame(height: 116)
-                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+                .aspectRatio(CapturePreviewLayout.aspectRatio, contentMode: .fit)
+                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: CapturePreviewLayout.cornerRadius))
                 .overlay(alignment: .bottomTrailing) {
                     if isCopied {
                         Label("Copied", systemImage: "checkmark")
@@ -309,8 +360,8 @@ private struct TextCard: View {
                     }
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 3)
+                    RoundedRectangle(cornerRadius: CapturePreviewLayout.cornerRadius)
+                        .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
                 }
                 .animation(.response, value: isCopied)
             VStack(alignment: .leading, spacing: 2) {
@@ -339,24 +390,18 @@ private struct LibraryCell: View {
     let original: URL?
     let isSelected: Bool
     let openInEditor: (URL) -> Void
+    let showQuickLook: (URL) -> Void
 
     @State private var showsVersions = false
 
     var body: some View {
+        let metadata = "\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(item.byteCount.formatted(.byteCount(style: .file)))"
+
         VStack(alignment: .leading, spacing: 8) {
             FileThumbnail(url: item.url, version: item.modified)
-                .padding(6)
-                .frame(height: 116)
-                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
-                .background(alignment: .top) {
-                    if original != nil {
-                        // The original, a step behind: the same stacked edge as Quick Access.
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(.quaternary.opacity(0.5))
-                            .padding(.horizontal, 10)
-                            .offset(y: -5)
-                    }
-                }
+                .aspectRatio(CapturePreviewLayout.aspectRatio, contentMode: .fit)
+                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: CapturePreviewLayout.cornerRadius))
+                .clipShape(.rect(cornerRadius: CapturePreviewLayout.cornerRadius))
                 .overlay(alignment: .bottomLeading) {
                     if item.kind == .video {
                         Image(systemName: "video.fill")
@@ -387,8 +432,8 @@ private struct LibraryCell: View {
                     }
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 3)
+                    RoundedRectangle(cornerRadius: CapturePreviewLayout.cornerRadius)
+                        .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
                 }
             VStack(alignment: .leading, spacing: 2) {
                 // Two lines, so a long name shows whole, with every cell the same height.
@@ -396,10 +441,11 @@ private struct LibraryCell: View {
                     .font(.callout.weight(.medium))
                     .lineLimit(2, reservesSpace: true)
                     .truncationMode(.middle)
-                Text("\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(item.byteCount.formatted(.byteCount(style: .file)))")
+                Text(item.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .help(metadata)
             }
             .padding(.horizontal, 4)
         }
@@ -407,6 +453,16 @@ private struct LibraryCell: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityValue(original != nil ? Text("Edited") : Text(""))
+        .accessibilityAction(named: Text(item.kind == .image ? "Open in Editor" : "Open")) {
+            if item.kind == .image {
+                openInEditor(item.url)
+            } else {
+                NSWorkspace.shared.open(item.url)
+            }
+        }
+        .accessibilityAction(named: Text("Quick Look")) {
+            showQuickLook(item.url)
+        }
     }
 }
 

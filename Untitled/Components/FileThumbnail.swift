@@ -2,12 +2,20 @@ import AppKit
 import QuickLookThumbnailing
 import SwiftUI
 
+/// Shared presentation metrics keep image and text previews aligned in Library and Clipboard.
+enum CapturePreviewLayout {
+    static let aspectRatio: CGFloat = 3.0 / 2.0
+    static let cornerRadius: CGFloat = 8
+    static let thumbnailSize = CGSize(width: 320, height: 214)
+}
+
 /// A Quick Look thumbnail of a file, loaded in the background and cached.
 struct FileThumbnail: View {
     let url: URL
     /// When the file last changed. A new value reloads the thumbnail, such as after an edit.
     var version: Date?
-    var maximumSize = CGSize(width: 320, height: 220)
+    /// Matches the largest 3:2 Library/Clipboard preview, so Quick Look doesn't render extra pixels.
+    var maximumSize = CapturePreviewLayout.thumbnailSize
 
     @Environment(\.displayScale) private var displayScale
     @State private var image: NSImage?
@@ -18,7 +26,6 @@ struct FileThumbnail: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .transition(.opacity)
             } else {
                 Image(systemName: "photo")
                     .font(.title)
@@ -27,8 +34,16 @@ struct FileThumbnail: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: LoadKey(url: url, version: version)) {
+            image = nil
+            #if DEBUG
+            if url.deletingLastPathComponent().lastPathComponent == "retrace-Library-Preview" {
+                image = NSImage(contentsOf: url)
+                return
+            }
+            #endif
             let loaded = await ThumbnailCache.shared.thumbnail(for: url, size: maximumSize, scale: displayScale)
-            withAnimation(.easeOut(duration: 0.15)) { image = loaded }
+            guard !Task.isCancelled else { return }
+            image = loaded
         }
         .accessibilityHidden(true)
     }

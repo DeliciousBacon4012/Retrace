@@ -10,14 +10,14 @@ struct ClipboardView: View {
     @State private var previewURL: URL?
     @FocusState private var isFocused: Bool
 
-    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 14)]
+    private let columns = [GridItem(.adaptive(minimum: 190, maximum: 320), spacing: 20)]
 
     var body: some View {
         let history = dependencies.clipboardHistory
         let entries = history.entries
 
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 18) {
+            LazyVGrid(columns: columns, spacing: 22) {
                 ForEach(entries) { entry in
                     ClipboardCard(
                         entry: entry,
@@ -30,7 +30,8 @@ struct ClipboardView: View {
                     .contextMenu { contextMenu(for: entry) }
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 20)
         }
         .focusable()
         .focused($isFocused)
@@ -141,9 +142,9 @@ private struct ClipboardCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             preview
-                .frame(height: 116)
                 .frame(maxWidth: .infinity)
-                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+                .aspectRatio(CapturePreviewLayout.aspectRatio, contentMode: .fit)
+                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: CapturePreviewLayout.cornerRadius))
                 .overlay(alignment: .bottomTrailing) {
                     if isCopied {
                         Label("Copied", systemImage: "checkmark")
@@ -156,7 +157,7 @@ private struct ClipboardCard: View {
                     }
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14)
+                    RoundedRectangle(cornerRadius: CapturePreviewLayout.cornerRadius)
                         .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 3)
                 }
                 .animation(.response, value: isCopied)

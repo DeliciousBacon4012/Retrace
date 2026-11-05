@@ -10,24 +10,64 @@ struct FilesPrivacySettingsView: View {
 
         Group {
             Section {
-                LabeledContent("Save to") {
-                    HStack {
-                        Text(settings.saveFolderURL.lastPathComponent)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(settings.saveFolderPath)
-                        Button("Choose…") {
-                            if let folder = FolderPicker.chooseFolder(startingAt: settings.saveFolderURL) {
-                                settings.saveFolderPath = folder.path
-                            }
+                if settings.saveFolderPaths.count > 1 {
+                    Picker("Default location", selection: Binding(
+                        get: { settings.saveFolderPath },
+                        set: { settings.setDefaultSaveFolder($0) }
+                    )) {
+                        ForEach(settings.saveFolderPaths, id: \.self) { path in
+                            Text(settings.saveFolderDisplayName(for: path)).tag(path)
                         }
+                    }
+                }
+
+                ForEach(settings.saveFolderPaths, id: \.self) { path in
+                    HStack(spacing: 12) {
+                        Image(systemName: path == settings.saveFolderPath ? "checkmark.circle.fill" : "folder")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(settings.saveFolderDisplayName(for: path))
+                                .lineLimit(1)
+                            if path == settings.saveFolderPath {
+                                Text("Default")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(path)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .help(path)
+
+                        Spacer(minLength: 8)
+
                         Button {
-                            NSWorkspace.shared.activateFileViewerSelecting([settings.saveFolderURL])
+                            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path, isDirectory: true)])
                         } label: {
                             Image(systemName: "magnifyingglass")
                         }
                         .help("Show in Finder")
-                        .accessibilityLabel("Show in Finder")
+                        .accessibilityLabel("Show \(settings.saveFolderDisplayName(for: path)) in Finder")
+
+                        if settings.saveFolderPaths.count > 1 {
+                            Button(role: .destructive) {
+                                settings.removeSaveFolder(path)
+                            } label: {
+                                Image(systemName: "minus")
+                            }
+                            .help("Remove save location")
+                            .accessibilityLabel("Remove \(settings.saveFolderDisplayName(for: path))")
+                        }
+                    }
+                }
+
+                Button("Add Location…", systemImage: "plus") {
+                    if let folder = FolderPicker.chooseFolder(startingAt: settings.saveFolderURL) {
+                        settings.addSaveFolder(folder)
                     }
                 }
                 TextField("File name", text: $settings.filenameTemplate)
@@ -40,7 +80,7 @@ struct FilesPrivacySettingsView: View {
             } header: {
                 Text("Location")
             } footer: {
-                Text("Use {date} and {time} to insert when the capture was taken.")
+                Text("Choose a default for shortcuts and add other folders for individual captures. Removing a location only removes it from retrace; its files stay in place. Use {date} and {time} in the filename.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

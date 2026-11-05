@@ -10,7 +10,7 @@ nonisolated enum FeatureCatalog {
         Feature("capture.window", .capture, .core, String(localized: "Window capture with shadow and background options"), isAvailable: true),
         Feature("capture.screen", .capture, .core, String(localized: "Full screen and all-displays capture"), isAvailable: true),
         Feature("capture.shortcuts", .capture, .core, String(localized: "Global shortcuts you can record"), isAvailable: true),
-        Feature("capture.repeat", .capture, .core, String(localized: "Repeat the last area")),
+        Feature("capture.repeat", .capture, .core, String(localized: "Repeat the last area"), isAvailable: true),
         Feature("capture.keys", .capture, .core, String(localized: "Keyboard controls while selecting")),
         Feature("capture.freeze", .capture, .core, String(localized: "Freeze the screen while selecting")),
         Feature("capture.timer", .capture, .next, String(localized: "Timed capture")),
@@ -23,22 +23,22 @@ nonisolated enum FeatureCatalog {
         // Quick Access
         Feature("quick.thumbnail", .quickAccess, .core, String(localized: "Floating thumbnail after each capture"), isAvailable: true),
         Feature("quick.drag", .quickAccess, .core, String(localized: "Drag captures into any app"), isAvailable: true),
-        Feature("quick.actions", .quickAccess, .core, String(localized: "Copy, save, annotate, pin, and delete buttons")),
-        Feature("quick.autoClose", .quickAccess, .core, String(localized: "Auto-close after a delay")),
-        Feature("quick.position", .quickAccess, .next, String(localized: "Choose overlay corner and size")),
+        Feature("quick.actions", .quickAccess, .core, String(localized: "Copy, save, annotate, pin, and delete buttons"), isAvailable: true),
+        Feature("quick.autoClose", .quickAccess, .core, String(localized: "Auto-close after a delay"), isAvailable: true),
+        Feature("quick.position", .quickAccess, .core, String(localized: "Choose overlay corner and size"), isAvailable: true),
         Feature("quick.share", .quickAccess, .next, String(localized: "Share sheet and AirDrop")),
         Feature("quick.restore", .quickAccess, .maybe, String(localized: "Restore the last closed capture")),
 
         // Clipboard
         Feature("clipboard.copy", .clipboard, .core, String(localized: "Copy to clipboard after capture"), isAvailable: true),
-        Feature("clipboard.annotate", .clipboard, .core, String(localized: "Annotate the image on the clipboard")),
-        Feature("clipboard.asFile", .clipboard, .core, String(localized: "Copy as image or as file")),
+        Feature("clipboard.annotate", .clipboard, .core, String(localized: "Annotate the image on the clipboard"), isAvailable: true),
+        Feature("clipboard.asFile", .clipboard, .core, String(localized: "Copy as image or as file"), isAvailable: true),
         Feature("clipboard.markdown", .clipboard, .next, String(localized: "Copy as Markdown or HTML")),
-        Feature("clipboard.history", .clipboard, .maybe, String(localized: "Image clipboard history")),
+        Feature("clipboard.history", .clipboard, .core, String(localized: "Text and image clipboard history"), isAvailable: true),
 
         // Editor
         Feature("editor.tools", .editor, .core, String(localized: "Arrow, shapes, text, pen, highlighter, steps, blur, crop"), isAvailable: true),
-        Feature("editor.inspector", .editor, .core, String(localized: "Inspector shows only the selected tool's options")),
+        Feature("editor.inspector", .editor, .core, String(localized: "Inspector shows only the selected tool's options"), isAvailable: true),
         Feature("editor.editable", .editor, .core, String(localized: "Editable annotations with undo and redo"), isAvailable: true),
         Feature("editor.spotlight", .editor, .next, String(localized: "Spotlight, magnifier, and smart redact")),
         Feature("editor.background", .editor, .next, String(localized: "Padding, rounded corners, shadow, and backdrops")),
@@ -64,7 +64,7 @@ nonisolated enum FeatureCatalog {
         Feature("replay.segments", .replayBuffer, .core, String(localized: "Rolling on-disk segments with flat memory use"), isAvailable: true),
         Feature("replay.caps", .replayBuffer, .core, String(localized: "Disk caps and low-space warnings")),
         Feature("replay.indicator", .replayBuffer, .core, String(localized: "Always-visible indicator while running"), isAvailable: true),
-        Feature("replay.lengths", .replayBuffer, .next, String(localized: "Save a chosen length on demand")),
+        Feature("replay.lengths", .replayBuffer, .core, String(localized: "Save a chosen length on demand"), isAvailable: true),
         Feature("replay.autoStart", .replayBuffer, .next, String(localized: "Start at login or when an app opens")),
         Feature("replay.pause", .replayBuffer, .next, String(localized: "Pause on battery, idle, or lock")),
         Feature("replay.markers", .replayBuffer, .maybe, String(localized: "Markers while the buffer runs")),
@@ -83,16 +83,16 @@ nonisolated enum FeatureCatalog {
 
         // iCloud and Storage
         Feature("storage.folder", .storage, .core, String(localized: "Save folder and filename template"), isAvailable: true),
-        Feature("storage.formats", .storage, .core, String(localized: "PNG, JPEG, HEIC, TIFF, and PDF"), isAvailable: true),
+        Feature("storage.formats", .storage, .core, String(localized: "Image formats supported by this Mac"), isAvailable: true),
         Feature("storage.icloud", .storage, .next, String(localized: "Save to iCloud Drive")),
         Feature("storage.settingsSync", .storage, .next, String(localized: "Sync settings across Macs")),
         Feature("storage.uploads", .storage, .maybe, String(localized: "Custom upload destinations")),
 
         // Utilities
-        Feature("util.ocr", .utilities, .next, String(localized: "Capture text from the screen"), isAvailable: true),
+        Feature("util.ocr", .utilities, .core, String(localized: "Capture text from the screen"), isAvailable: true),
         Feature("util.pin", .utilities, .next, String(localized: "Pin a capture on top of other windows")),
         Feature("util.colorPicker", .utilities, .next, String(localized: "Color picker")),
-        Feature("util.qr", .utilities, .maybe, String(localized: "QR and barcode reader"), isAvailable: true),
+        Feature("util.qr", .utilities, .core, String(localized: "QR and barcode reader"), isAvailable: true),
         Feature("util.ruler", .utilities, .maybe, String(localized: "Pixel ruler")),
         Feature("util.drawOnScreen", .utilities, .maybe, String(localized: "Draw on screen live")),
     ]

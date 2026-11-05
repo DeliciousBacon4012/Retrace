@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GeneralSettingsView: View {
     @Environment(SettingsStore.self) private var settings
+    @AppStorage(LibraryViewModel.quickLookOnClickKey) private var quickLookOnClick = false
     @State private var viewModel: GeneralSettingsViewModel
 
     init(launchAtLogin: any LaunchAtLoginControlling) {
@@ -31,6 +32,15 @@ struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section {
+                Toggle("Preview screenshots and recordings on click", isOn: $quickLookOnClick)
+            } header: {
+                Text("Library")
+            } footer: {
+                Text("When off, a single click selects an item. Press Space to preview; double-click opens it.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

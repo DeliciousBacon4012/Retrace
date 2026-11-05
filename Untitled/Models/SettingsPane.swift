@@ -1,6 +1,6 @@
 import Foundation
 
-/// A tab of the Settings window. Each one gathers related topics, so the toolbar stays short.
+/// A Settings destination that gathers one related group of preferences.
 nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sendable {
     case general
     case capture
