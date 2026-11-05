@@ -2,22 +2,16 @@ import Foundation
 import OSLog
 
 /// Writes captures to disk with names built from the filename template.
-protocol CaptureStoring: AnyObject {
+nonisolated protocol CaptureStoring: AnyObject, Sendable {
     /// Saves the data in `folder`, creating it if needed, and returns the new file's URL.
-    func save(_ data: Data, template: String, date: Date, fileExtension: String, in folder: URL) throws -> URL
+    func save(_ data: Data, template: String, date: Date, fileExtension: String, in folder: URL) async throws -> URL
     /// Returns a free file URL in `folder` for something written later, such as a recording.
-    func reserveURL(template: String, date: Date, fileExtension: String, in folder: URL) throws -> URL
+    func reserveURL(template: String, date: Date, fileExtension: String, in folder: URL) async throws -> URL
 }
 
-final class FileCaptureStorage: CaptureStoring {
-    private let fileManager: FileManager
-
-    init(fileManager: FileManager = .default) {
-        self.fileManager = fileManager
-    }
-
-    func save(_ data: Data, template: String, date: Date, fileExtension: String, in folder: URL) throws -> URL {
-        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+actor FileCaptureStorage: CaptureStoring {
+    func save(_ data: Data, template: String, date: Date, fileExtension: String, in folder: URL) async throws -> URL {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let baseName = FileNameTemplate.fileName(from: template, date: date)
         let url = uniqueURL(in: folder, baseName: baseName, fileExtension: fileExtension)
         try data.write(to: url, options: .atomic)
@@ -25,13 +19,13 @@ final class FileCaptureStorage: CaptureStoring {
         return url
     }
 
-    func reserveURL(template: String, date: Date, fileExtension: String, in folder: URL) throws -> URL {
-        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+    func reserveURL(template: String, date: Date, fileExtension: String, in folder: URL) async throws -> URL {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let baseName = FileNameTemplate.fileName(from: template, date: date)
         return uniqueURL(in: folder, baseName: baseName, fileExtension: fileExtension)
     }
 
-    /// Adds " 2", " 3", and so on until the name is free, so nothing is overwritten.
+    /// Reserves " 2", " 3", and so on until the name is free, so delayed writers cannot collide.
     private func uniqueURL(in folder: URL, baseName: String, fileExtension: String) -> URL {
         CaptureURLReservationRegistry.shared.uniqueURL(in: folder, baseName: baseName, fileExtension: fileExtension)
     }

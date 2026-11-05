@@ -17,6 +17,7 @@ final class AppDependencies {
     let capture: CaptureCoordinator
     let recording: RecordingCoordinator
     let replay: ReplayCoordinator
+    let quickAccess: QuickAccessController
     let shortcuts: GlobalShortcuts
     let editor: EditorPresenter
     let pins: PinController
@@ -45,7 +46,7 @@ final class AppDependencies {
         self.launchAtLogin = launchAtLogin
         self.dockIcon = dockIcon
         self.clipboard = clipboard
-        library = CaptureLibrary(folder: settings.saveFolderURL)
+        library = CaptureLibrary(folders: settings.saveFolderURLs)
         let toasts = CaptureToastController(settings: settings, permissions: permissions)
         self.toasts = toasts
         let textHistory = TextHistory(settings: settings, fileURL: textHistoryFile)
@@ -59,6 +60,7 @@ final class AppDependencies {
         pins.onEdit = { [weak editor] capture in editor?.open(capture) }
         self.pins = pins
         let quickAccess = QuickAccessController(settings: settings, clipboard: clipboard)
+        self.quickAccess = quickAccess
         quickAccess.onAnnotate = { [weak editor] capture in editor?.open(capture) }
         quickAccess.onPin = { [weak pins] capture in pins?.pin(capture) }
         let capture = CaptureCoordinator(
@@ -73,7 +75,7 @@ final class AppDependencies {
             textHistory: textHistory
         )
         self.capture = capture
-        quickAccess.onSave = { [weak capture] image in capture?.save(image) }
+        quickAccess.onSave = { [weak capture] image in await capture?.save(image) }
         let recording = RecordingCoordinator(
             settings: settings,
             permissions: permissions,
@@ -163,16 +165,33 @@ final class AppDependencies {
         }
     }
 
-    /// Points the library at the save folder whenever it changes.
+    /// Keeps the Library in sync with every configured save location.
     private func followSaveFolderSetting() {
-        let folder = withObservationTracking {
-            settings.saveFolderURL
+        let folders = withObservationTracking {
+            settings.saveFolderURLs
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.followSaveFolderSetting()
             }
         }
-        library.setFolder(folder)
+        library.setFolders(folders)
+    }
+}
+
+/// Resolves the session's optional capture-menu destination against configured save locations.
+enum CaptureDestinationSelection {
+    static func folder(for selection: String?, in settings: SettingsStore) -> URL? {
+        guard let selection, settings.saveFolderPaths.contains(selection) else { return nil }
+        return URL(fileURLWithPath: selection, isDirectory: true)
+    }
+
+    static func activePath(for selection: String?, in settings: SettingsStore) -> String {
+        guard let selection, settings.saveFolderPaths.contains(selection) else { return settings.saveFolderPath }
+        return selection
+    }
+
+    static func selection(for path: String, defaultPath: String) -> String? {
+        path == defaultPath ? nil : path
     }
 }
 

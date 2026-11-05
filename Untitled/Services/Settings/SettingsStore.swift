@@ -14,7 +14,7 @@ final class SettingsStore {
 
     var showsDockIcon = Defaults.showsDockIcon { didSet { save(showsDockIcon, .showsDockIcon) } }
     var playsSounds = Defaults.playsSounds { didSet { save(playsSounds, .playsSounds) } }
-    /// Opens the main window when you start Untitled yourself. Starting at login never does.
+    /// Opens the main window when you start retrace yourself. Starting at login never does.
     var opensWindowAtLaunch = Defaults.opensWindowAtLaunch { didSet { save(opensWindowAtLaunch, .opensWindowAtLaunch) } }
 
     // MARK: After capture
@@ -35,6 +35,7 @@ final class SettingsStore {
     var overlaySpeed = Defaults.overlaySpeed { didSet { save(overlaySpeed.rawValue, .overlaySpeed) } }
     var quickAccessLayout = Defaults.quickAccessLayout { didSet { save(quickAccessLayout.rawValue, .quickAccessLayout) } }
     var quickAccessSize = Defaults.quickAccessSize { didSet { save(quickAccessSize.rawValue, .quickAccessSize) } }
+    var quickAccessAspectRatio = Defaults.quickAccessAspectRatio { didSet { save(quickAccessAspectRatio.rawValue, .quickAccessAspectRatio) } }
     /// The most thumbnails shown at once; older ones close first.
     var quickAccessMaxVisible = Defaults.quickAccessMaxVisible { didSet { save(quickAccessMaxVisible, .quickAccessMaxVisible) } }
 
@@ -73,7 +74,12 @@ final class SettingsStore {
     var stripsMetadata = Defaults.stripsMetadata { didSet { save(stripsMetadata, .stripsMetadata) } }
     /// Removes descriptive metadata from recordings and replay clips.
     var stripsVideoMetadata = Defaults.stripsVideoMetadata { didSet { save(stripsVideoMetadata, .stripsVideoMetadata) } }
+    /// The default used by shortcuts and captures when no session destination override is selected.
     var saveFolderPath = Defaults.saveFolderPath { didSet { save(saveFolderPath, .saveFolderPath) } }
+    /// Configured folders, in the order they were added. Removing one never deletes its files.
+    private(set) var saveFolderPaths = [Defaults.saveFolderPath] { didSet { save(saveFolderPaths, .saveFolderPaths) } }
+    /// Optional destination selected in the capture menu for this app session; nil uses the configured default.
+    var captureDestinationOverridePath: String?
     var filenameTemplate = Defaults.filenameTemplate { didSet { save(filenameTemplate, .filenameTemplate) } }
 
     // MARK: Recording
@@ -163,9 +169,57 @@ final class SettingsStore {
         storedToastSeconds[kind.rawValue] = seconds == kind.defaultSeconds ? nil : seconds
     }
 
-    /// The folder captures are saved to, as a file URL.
+    /// The currently selected folder captures are saved to.
     var saveFolderURL: URL {
         URL(fileURLWithPath: saveFolderPath, isDirectory: true)
+    }
+
+    /// All configured destinations in their menu and Library order.
+    var saveFolderURLs: [URL] {
+        saveFolderPaths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    func setDefaultSaveFolder(_ path: String) {
+        let normalized = Self.standardizedSaveFolderPath(path)
+        guard saveFolderPaths.contains(normalized) else { return }
+        saveFolderPath = normalized
+    }
+
+    /// Adds a folder without changing the current destination or moving any files.
+    @discardableResult
+    func addSaveFolder(_ url: URL) -> Bool {
+        let path = Self.standardizedSaveFolderPath(url.path(percentEncoded: false))
+        guard !saveFolderPaths.contains(path) else { return false }
+        saveFolderPaths.append(path)
+        return true
+    }
+
+    /// Stops including a folder in retrace's Library. Its contents remain untouched on disk.
+    func removeSaveFolder(_ path: String) {
+        guard saveFolderPaths.count > 1 else { return }
+        let normalized = Self.standardizedSaveFolderPath(path)
+        guard let index = saveFolderPaths.firstIndex(of: normalized) else { return }
+        let wasDefault = saveFolderPath == normalized
+        saveFolderPaths.remove(at: index)
+        if captureDestinationOverridePath == normalized {
+            captureDestinationOverridePath = nil
+        }
+        if wasDefault, let replacement = saveFolderPaths.first {
+            saveFolderPath = replacement
+        }
+    }
+
+    /// Disambiguates folders that share a name while keeping the common case compact.
+    func saveFolderDisplayName(for path: String) -> String {
+        let url = URL(fileURLWithPath: path, isDirectory: true)
+        if Self.standardizedSaveFolderPath(path) == Self.standardizedSaveFolderPath(Defaults.saveFolderPath) {
+            return String(localized: "Pictures › Untitled")
+        }
+        let sameName = saveFolderPaths.filter {
+            URL(fileURLWithPath: $0, isDirectory: true).lastPathComponent == url.lastPathComponent
+        }
+        guard sameName.count > 1 else { return url.lastPathComponent }
+        return "\(url.lastPathComponent) — \(url.deletingLastPathComponent().lastPathComponent)"
     }
 
     /// Restores every preference to its default value.
@@ -200,6 +254,7 @@ final class SettingsStore {
         overlaySpeed = OverlaySpeed(rawValue: value(.overlaySpeed, default: "")) ?? Defaults.overlaySpeed
         quickAccessLayout = QuickAccessLayout(rawValue: value(.quickAccessLayout, default: "")) ?? Defaults.quickAccessLayout
         quickAccessSize = QuickAccessSize(rawValue: value(.quickAccessSize, default: "")) ?? Defaults.quickAccessSize
+        quickAccessAspectRatio = QuickAccessAspectRatio(rawValue: value(.quickAccessAspectRatio, default: "")) ?? Defaults.quickAccessAspectRatio
         quickAccessMaxVisible = min(max(value(.quickAccessMaxVisible, default: Defaults.quickAccessMaxVisible), 1), 8)
         showsToasts = value(.showsToasts, default: Defaults.showsToasts)
         toastPosition = ToastPosition(rawValue: value(.toastPosition, default: "")) ?? Defaults.toastPosition
@@ -224,7 +279,9 @@ final class SettingsStore {
             : Defaults.imageQuality
         stripsMetadata = value(.stripsMetadata, default: Defaults.stripsMetadata)
         stripsVideoMetadata = value(.stripsVideoMetadata, default: Defaults.stripsVideoMetadata)
-        saveFolderPath = value(.saveFolderPath, default: Defaults.saveFolderPath)
+        saveFolderPath = Self.standardizedSaveFolderPath(value(.saveFolderPath, default: Defaults.saveFolderPath))
+        let storedSaveFolders: [String] = value(.saveFolderPaths, default: [])
+        saveFolderPaths = Self.cleanedSaveFolderPaths(storedSaveFolders, including: saveFolderPath)
         filenameTemplate = value(.filenameTemplate, default: Defaults.filenameTemplate)
         videoCodec = VideoCodec(rawValue: value(.videoCodec, default: "")) ?? Defaults.videoCodec
         framesPerSecond = Self.supportedChoice(
@@ -320,6 +377,7 @@ private extension SettingsStore {
         case overlaySpeed
         case quickAccessLayout
         case quickAccessSize
+        case quickAccessAspectRatio
         case quickAccessMaxVisible
         case showsToasts
         case toastPosition
@@ -337,6 +395,7 @@ private extension SettingsStore {
         case stripsMetadata
         case stripsVideoMetadata
         case saveFolderPath
+        case saveFolderPaths
         case filenameTemplate
         case videoCodec
         case framesPerSecond
@@ -369,6 +428,7 @@ private extension SettingsStore {
         static let overlaySpeed = OverlaySpeed.normal
         static let quickAccessLayout = QuickAccessLayout.stack
         static let quickAccessSize = QuickAccessSize.medium
+        static let quickAccessAspectRatio = QuickAccessAspectRatio.threeTwo
         static let quickAccessMaxVisible = 5
         static let showsToasts = true
         static let toastPosition = ToastPosition.topCenter
@@ -377,7 +437,7 @@ private extension SettingsStore {
         static let textHistoryLimit = 50
         static let thumbnailMemoryMB = 64
         static let keepsClipboardHistory = true
-        static let clipboardRetention = ClipboardRetention.forever
+        static let clipboardRetention = ClipboardRetention.month
         /// Password managers and wallets. Most also mark what they copy as private, which is
         /// always skipped; this catches the ones that don't.
         static let clipboardExcludedApps = [
@@ -422,5 +482,26 @@ private extension SettingsStore {
                 ?? FileManager.default.homeDirectoryForCurrentUser
             return pictures.appendingPathComponent("Untitled", isDirectory: true).path
         }
+    }
+
+    static func standardizedSaveFolderPath(_ path: String) -> String {
+        guard !path.isEmpty else { return Defaults.saveFolderPath }
+        return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL.path
+    }
+
+    static func cleanedSaveFolderPaths(_ paths: [String], including defaultPath: String) -> [String] {
+        let defaultPath = standardizedSaveFolderPath(defaultPath)
+        var result: [String] = []
+        var seen = Set<String>()
+        for path in paths {
+            let normalized = standardizedSaveFolderPath(path)
+            if seen.insert(normalized).inserted {
+                result.append(normalized)
+            }
+        }
+        if seen.insert(defaultPath).inserted {
+            result.insert(defaultPath, at: 0)
+        }
+        return result
     }
 }

@@ -3,7 +3,7 @@ import Observation
 import OSLog
 import UniformTypeIdentifiers
 
-/// The captures in the save folder, kept up to date as files are added, renamed, or removed.
+/// The captures in the configured save folders, kept up to date as files are added, renamed, or removed.
 ///
 /// The folder itself is the source of truth, so captures moved or deleted in Finder
 /// disappear here too, and nothing is lost if the app quits.
@@ -13,24 +13,38 @@ final class CaptureLibrary {
     private(set) var isLoading = false
     /// Set when the folder can't be read, such as when it was deleted or is on an unplugged disk.
     private(set) var loadError: String?
-    private(set) var folder: URL
+    private(set) var folders: [URL]
 
-    @ObservationIgnored private var watcher: FolderWatcher?
+    @ObservationIgnored private var watchers: [String: FolderWatcher] = [:]
     @ObservationIgnored private var loadTask: Task<Void, Never>?
 
     init(folder: URL) {
-        self.folder = folder
+        folders = [folder]
     }
+
+    init(folders: [URL]) {
+        self.folders = Self.normalized(folders)
+    }
+
+    #if DEBUG
+    func setPreviewItems(_ items: [LibraryItem]) {
+        loadTask?.cancel()
+        self.items = items
+        loadError = nil
+        isLoading = false
+    }
+    #endif
 
     func start() {
         watch()
         reload()
     }
 
-    /// Points the library at another folder, such as after the save location changes.
-    func setFolder(_ url: URL) {
-        guard url.standardizedFileURL != folder.standardizedFileURL else { return }
-        folder = url
+    /// Points the library at the configured folders without losing their combined ordering.
+    func setFolders(_ urls: [URL]) {
+        let updated = Self.normalized(urls)
+        guard updated.map(\.path) != folders.map(\.path) else { return }
+        folders = updated
         items = []
         watch()
         reload()
@@ -38,18 +52,19 @@ final class CaptureLibrary {
 
     func reload() {
         loadTask?.cancel()
-        let folder = folder
+        let folders = folders
         isLoading = items.isEmpty
         loadTask = Task {
-            let result = await Self.scan(folder)
+            let result = await Self.scan(folders)
             guard !Task.isCancelled else { return }
-            switch result {
-            case .success(let found):
-                items = found
-                loadError = nil
-            case .failure(let error):
-                items = []
-                loadError = error.localizedDescription
+            if watch() {
+                reload()
+                return
+            }
+            items = result.items
+            loadError = result.items.isEmpty ? result.errors.first : nil
+            if !result.items.isEmpty, !result.errors.isEmpty {
+                Log.app.error("Couldn't read \(result.errors.count, privacy: .public) Library location(s)")
             }
             isLoading = false
         }
@@ -67,49 +82,71 @@ final class CaptureLibrary {
         reload()
     }
 
-    private func watch() {
-        watcher = FolderWatcher(url: folder) { [weak self] in
-            self?.reload()
+    @discardableResult
+    private func watch() -> Bool {
+        var addedWatcher = false
+        let paths = Set(folders.map(\.path))
+        watchers = watchers.filter { paths.contains($0.key) }
+        for folder in folders where watchers[folder.path]?.isWatching != true {
+            watchers[folder.path] = FolderWatcher(url: folder) { [weak self] in
+                self?.reload()
+            }
+            addedWatcher = watchers[folder.path]?.isWatching == true || addedWatcher
+        }
+        return addedWatcher
+    }
+
+    private static func normalized(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return urls.compactMap { url in
+            let standardized = url.standardizedFileURL
+            return seen.insert(standardized.path).inserted ? standardized : nil
         }
     }
 
-    /// Reads the folder off the main thread. Only images and movies are listed.
+    /// Reads all configured folders off the main thread. A missing folder doesn't stop
+    /// other locations from appearing; the first unreadable location is shown if none work.
     @concurrent
-    nonisolated private static func scan(_ folder: URL) async -> Result<[LibraryItem], any Error> {
+    nonisolated private static func scan(_ folders: [URL]) async -> (items: [LibraryItem], errors: [String]) {
         let keys: [URLResourceKey] = [.contentTypeKey, .creationDateKey, .contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let urls = try FileManager.default.contentsOfDirectory(
-                at: folder,
-                includingPropertiesForKeys: keys,
-                options: [.skipsHiddenFiles, .skipsPackageDescendants]
-            )
-            let items = urls.compactMap { url -> LibraryItem? in
-                guard let values = try? url.resourceValues(forKeys: Set(keys)),
-                      values.isRegularFile == true,
-                      let type = values.contentType
-                else { return nil }
-                let kind: LibraryItem.Kind
-                if type.conforms(to: .image) {
-                    kind = .image
-                } else if type.conforms(to: .movie) {
-                    kind = .video
-                } else {
-                    return nil
-                }
-                let date = values.creationDate ?? values.contentModificationDate ?? .distantPast
-                return LibraryItem(
-                    url: url,
-                    date: date,
-                    modified: values.contentModificationDate ?? date,
-                    kind: kind,
-                    byteCount: values.fileSize ?? 0
+        var found: [LibraryItem] = []
+        var errors: [String] = []
+        for folder in folders {
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let urls = try FileManager.default.contentsOfDirectory(
+                    at: folder,
+                    includingPropertiesForKeys: keys,
+                    options: [.skipsHiddenFiles, .skipsPackageDescendants]
                 )
+                let items = urls.compactMap { url -> LibraryItem? in
+                    guard let values = try? url.resourceValues(forKeys: Set(keys)),
+                          values.isRegularFile == true,
+                          let type = values.contentType
+                    else { return nil }
+                    let kind: LibraryItem.Kind
+                    if type.conforms(to: .image) {
+                        kind = .image
+                    } else if type.conforms(to: .movie) {
+                        kind = .video
+                    } else {
+                        return nil
+                    }
+                    let date = values.creationDate ?? values.contentModificationDate ?? .distantPast
+                    return LibraryItem(
+                        url: url,
+                        date: date,
+                        modified: values.contentModificationDate ?? date,
+                        kind: kind,
+                        byteCount: values.fileSize ?? 0
+                    )
+                }
+                found.append(contentsOf: items)
+            } catch {
+                errors.append("\(folder.lastPathComponent): \(error.localizedDescription)")
             }
-            return .success(items.sorted { $0.date > $1.date })
-        } catch {
-            return .failure(error)
         }
+        return (found.sorted { $0.date > $1.date }, errors)
     }
 }
 
@@ -117,6 +154,8 @@ final class CaptureLibrary {
 nonisolated final class FolderWatcher: @unchecked Sendable {
     private let source: (any DispatchSourceFileSystemObject)?
     private var pending: DispatchWorkItem?
+
+    var isWatching: Bool { source != nil }
 
     init(url: URL, onChange: @escaping @MainActor () -> Void) {
         let descriptor = open(url.path(percentEncoded: false), O_EVTONLY)

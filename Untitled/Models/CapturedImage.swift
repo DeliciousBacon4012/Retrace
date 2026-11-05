@@ -10,6 +10,8 @@ struct CapturedImage: Identifiable {
     let date: Date
     /// Where the image was saved, if it was saved.
     var fileURL: URL?
+    /// The destination chosen for this capture, used if it is saved later from Quick Access.
+    var preferredSaveFolderURL: URL?
     /// True when this is a recording's poster frame rather than a screenshot.
     var isVideo = false
 

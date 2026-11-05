@@ -136,13 +136,43 @@ nonisolated enum QuickAccessSize: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Every thumbnail has the same 16:10 shape, so a stack lines up exactly.
+    /// The default aspect ratio keeps callers that don't have Settings available consistent.
     var cardSize: CGSize {
+        cardSize(for: .threeTwo)
+    }
+
+    /// Every size uses the same selected shape, so stacked cards line up exactly.
+    func cardSize(for aspectRatio: QuickAccessAspectRatio) -> CGSize {
         let width: CGFloat = switch self {
         case .small: 168
         case .medium: 200
         case .large: 240
         }
-        return CGSize(width: width, height: (width * 10 / 16).rounded())
+        return CGSize(width: width, height: (width / aspectRatio.widthOverHeight).rounded())
+    }
+}
+
+/// The crop shape shared by every Quick Access thumbnail.
+nonisolated enum QuickAccessAspectRatio: String, CaseIterable, Identifiable, Sendable {
+    case fourThree
+    case threeTwo
+    case sixteenNine
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .fourThree: "4:3"
+        case .threeTwo: "3:2"
+        case .sixteenNine: "16:9"
+        }
+    }
+
+    var widthOverHeight: CGFloat {
+        switch self {
+        case .fourThree: 4 / 3
+        case .threeTwo: 3 / 2
+        case .sixteenNine: 16 / 9
+        }
     }
 }

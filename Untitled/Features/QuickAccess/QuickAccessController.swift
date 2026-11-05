@@ -21,18 +21,24 @@ final class QuickAccessController {
     private var isPointerInside = false
     private var hoverTask: Task<Void, Never>?
     private var closeTasks: [UUID: Task<Void, Never>] = [:]
+    private var thumbnailTasks: [UUID: ThumbnailTask] = [:]
     /// When each thumbnail closes on its own, so hovering can pause and resume the countdown.
     private var deadlines: [UUID: Date] = [:]
     private var pausedRemaining: [UUID: TimeInterval] = [:]
     private var screenObserver: (any NSObjectProtocol)?
     private var pointerMonitors: [Any] = []
 
+    private struct ThumbnailTask {
+        let token: UUID
+        let task: Task<Void, Never>
+    }
+
     /// Opens a capture in the editor; set once the editor exists.
     var onAnnotate: ((CapturedImage) -> Void)?
     /// Pins a capture to the screen.
     var onPin: ((CapturedImage) -> Void)?
     /// Saves a capture that wasn't saved yet and returns where it went.
-    var onSave: ((CapturedImage) -> URL?)?
+    var onSave: ((CapturedImage) async -> URL?)?
 
     init(settings: SettingsStore, clipboard: any ClipboardWriting) {
         self.settings = settings
@@ -47,15 +53,22 @@ final class QuickAccessController {
     private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     private var alwaysExpanded: Bool { settings.quickAccessLayout == .column }
 
+    /// Applies thumbnail size and shape changes while a stack is already on screen.
+    func refreshLayout() {
+        if applySettings() { refreshThumbnailsForCurrentSize() }
+        guard !model.cards.isEmpty else { return }
+        placePanel()
+    }
+
     // MARK: Showing and closing
 
     func show(_ capture: CapturedImage) {
         if model.cards.isEmpty {
             screen = NSScreen.underPointer ?? NSScreen.main
         }
-        applySettings()
+        if applySettings() { refreshThumbnailsForCurrentSize() }
 
-        let card = QuickAccessStackModel.Card(id: capture.id, capture: capture, thumbnail: Self.thumbnail(of: capture, size: model.geometry.cardSize))
+        let card = QuickAccessStackModel.Card(id: capture.id, capture: capture, thumbnail: capture.nsImage)
         let panel = panel ?? makePanel()
         placePanel()
         panel.orderFrontRegardless()
@@ -64,6 +77,7 @@ final class QuickAccessController {
         withAnimation(insertAnimation) {
             model.cards.insert(card, at: 0)
         }
+        scheduleThumbnail(for: capture, size: model.geometry.cardSize)
         scheduleAutoClose(capture.id)
 
         while model.cards.count > visibleLimit, let oldest = model.cards.last {
@@ -74,13 +88,17 @@ final class QuickAccessController {
     func dismiss(_ id: UUID, animated: Bool = true) {
         guard model.cards.contains(where: { $0.id == id }) else { return }
         closeTasks.removeValue(forKey: id)?.cancel()
+        thumbnailTasks.removeValue(forKey: id)?.task.cancel()
         deadlines[id] = nil
         pausedRemaining[id] = nil
         if model.hoveredID == id { model.hoveredID = nil }
 
-        withAnimation(animated ? removeAnimation : nil) {
+        withAnimation(animated ? removeAnimation : nil, completionCriteria: .removed) {
             model.cards.removeAll { $0.id == id }
             if model.cards.count < 2, !alwaysExpanded { model.isExpanded = false }
+        } completion: { [weak self] in
+            guard let self, self.model.cards.isEmpty else { return }
+            self.panel?.orderOut(nil)
         }
         model.swipeOffsets[id] = nil
 
@@ -88,12 +106,6 @@ final class QuickAccessController {
             isPointerInside = false
             hoverTask?.cancel()
             stopFollowingPointer()
-            let panel = panel
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(0.3))
-                guard let self, model.cards.isEmpty else { return }
-                panel?.orderOut(nil)
-            }
         } else {
             followPointer()
         }
@@ -127,9 +139,9 @@ final class QuickAccessController {
         }
     }
 
-    private func save(_ id: UUID) {
+    private func save(_ id: UUID) async {
         guard let capture = card(id)?.capture else { return }
-        if capture.fileURL == nil, onSave?(capture) == nil {
+        if capture.fileURL == nil, await onSave?(capture) == nil {
             return
         }
         dismiss(id)
@@ -286,22 +298,80 @@ final class QuickAccessController {
 
     // MARK: Window
 
-    private func applySettings() {
+    @discardableResult
+    private func applySettings() -> Bool {
         model.corner = settings.overlayCorner
         model.speed = settings.overlaySpeed.factor
-        let size = settings.quickAccessSize.cardSize
-        if model.geometry.cardSize != size {
-            model.geometry.cardSize = size
-        }
+        let size = settings.quickAccessSize.cardSize(for: settings.quickAccessAspectRatio)
+        let sizeChanged = model.geometry.cardSize != size
+        if sizeChanged { model.geometry.cardSize = size }
         if alwaysExpanded {
             model.isExpanded = true
+        }
+        return sizeChanged
+    }
+
+    /// Shows the original immediately, then replaces it with a Retina-sized copy off the UI path.
+    private func scheduleThumbnail(for capture: CapturedImage, size: CGSize) {
+        thumbnailTasks.removeValue(forKey: capture.id)?.task.cancel()
+        guard QuickAccessThumbnailRenderer.needsDownsampling(capture.image, for: size) else { return }
+
+        let token = UUID()
+        let id = capture.id
+        let source = capture.image
+        let pointSize = capture.pointSize
+        let task = Task.detached(priority: .userInitiated) { [weak self] in
+            guard !Task.isCancelled else { return }
+            let thumbnail = QuickAccessThumbnailRenderer.downsample(source, for: size)
+            guard !Task.isCancelled else { return }
+            await self?.finishThumbnail(
+                thumbnail,
+                pointSize: pointSize,
+                captureID: id,
+                targetSize: size,
+                token: token
+            )
+        }
+        thumbnailTasks[id] = ThumbnailTask(token: token, task: task)
+    }
+
+    @MainActor
+    private func finishThumbnail(
+        _ thumbnail: CGImage?,
+        pointSize: CGSize,
+        captureID: UUID,
+        targetSize: CGSize,
+        token: UUID
+    ) {
+        guard thumbnailTasks[captureID]?.token == token else { return }
+        thumbnailTasks[captureID] = nil
+        guard !Task.isCancelled,
+              model.geometry.cardSize == targetSize,
+              let index = model.cards.firstIndex(where: { $0.id == captureID }),
+              let thumbnail
+        else { return }
+        model.cards[index].thumbnail = NSImage(cgImage: thumbnail, size: pointSize)
+    }
+
+    private func refreshThumbnailsForCurrentSize() {
+        let size = model.geometry.cardSize
+        for index in model.cards.indices {
+            let capture = model.cards[index].capture
+            if QuickAccessThumbnailRenderer.needsDownsampling(capture.image, for: size) {
+                scheduleThumbnail(for: capture, size: size)
+            } else {
+                thumbnailTasks.removeValue(forKey: capture.id)?.task.cancel()
+                model.cards[index].thumbnail = capture.nsImage
+            }
         }
     }
 
     private func makePanel() -> QuickAccessPanel {
         let actions = QuickAccessStackView.Actions(
             copy: { [weak self] in self?.copy($0) },
-            save: { [weak self] in self?.save($0) },
+            save: { [weak self] id in
+                Task { @MainActor [weak self] in await self?.save(id) }
+            },
             delete: { [weak self] in self?.delete($0) },
             pin: { [weak self] in self?.pin($0) },
             open: { [weak self] in self?.open($0) },
@@ -354,28 +424,6 @@ final class QuickAccessController {
         placePanel()
     }
 
-    /// A copy at twice the thumbnail's size, enough for Retina without holding the full capture twice.
-    private static func thumbnail(of capture: CapturedImage, size: CGSize) -> NSImage {
-        let image = capture.image
-        let target = CGSize(width: size.width * 2, height: size.height * 2)
-        let factor = max(target.width / CGFloat(image.width), target.height / CGFloat(image.height))
-        guard factor < 1,
-              let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: nil,
-                  width: Int((CGFloat(image.width) * factor).rounded()),
-                  height: Int((CGFloat(image.height) * factor).rounded()),
-                  bitsPerComponent: 8,
-                  bytesPerRow: 0,
-                  space: space,
-                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              )
-        else { return capture.nsImage }
-        context.interpolationQuality = .high
-        context.draw(image, in: CGRect(x: 0, y: 0, width: context.width, height: context.height))
-        guard let small = context.makeImage() else { return capture.nsImage }
-        return NSImage(cgImage: small, size: capture.pointSize)
-    }
 }
 
 /// A floating window that never takes focus away from the app you're working in.
@@ -528,7 +576,7 @@ final class QuickAccessHostingView: NSHostingView<QuickAccessStackView> {
             writer = card.capture.nsImage
         }
         let item = NSDraggingItem(pasteboardWriter: writer)
-        let size = model?.geometry.cardSize ?? CGSize(width: 200, height: 125)
+        let size = model?.geometry.cardSize ?? QuickAccessSize.medium.cardSize
         let imageSize = NSSize(width: size.width * 0.8, height: size.height * 0.8)
         let origin = convert(event.locationInWindow, from: nil)
         item.setDraggingFrame(

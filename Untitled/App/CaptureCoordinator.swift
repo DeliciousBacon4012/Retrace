@@ -44,20 +44,20 @@ final class CaptureCoordinator {
     }
 
     /// Runs a screenshot quick action, including Capture Text.
-    func run(_ action: QuickAction) async {
+    func run(_ action: QuickAction, savingTo folder: URL? = nil) async {
         if let mode = action.captureMode {
-            await capture(mode)
+            await capture(mode, savingTo: folder)
         } else if action.capturesText {
             await captureText()
         } else if action.repeatsArea {
-            await capturePreviousArea()
+            await capturePreviousArea(savingTo: folder)
         }
     }
 
     /// Captures the same area as last time without selecting it again.
-    func capturePreviousArea() async {
+    func capturePreviousArea(savingTo folder: URL? = nil) async {
         guard let lastArea, NSScreen.screens.contains(lastArea.screen) else {
-            await capture(.area)
+            await capture(.area, savingTo: folder)
             return
         }
         guard await claimCapture() else { return }
@@ -69,7 +69,7 @@ final class CaptureCoordinator {
                 rect: lastArea.screen.topLeftRelativeRect(for: lastArea.rect),
                 options: options()
             )
-            finish(CapturedImage(image: frame.image, scale: frame.scale, date: .now))
+            await finish(CapturedImage(image: frame.image, scale: frame.scale, date: .now), savingTo: folder)
         } catch {
             Log.capture.error("Capture failed: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
@@ -94,7 +94,7 @@ final class CaptureCoordinator {
         editor.open(CapturedImage(image: cgImage, scale: scale, date: .now))
     }
 
-    func capture(_ mode: CaptureMode) async {
+    func capture(_ mode: CaptureMode, savingTo folder: URL? = nil) async {
         guard await claimCapture() else { return }
         defer { isCapturing = false }
 
@@ -103,7 +103,7 @@ final class CaptureCoordinator {
                 Log.capture.info("Capture cancelled")
                 return
             }
-            finish(CapturedImage(image: frame.image, scale: frame.scale, date: .now))
+            await finish(CapturedImage(image: frame.image, scale: frame.scale, date: .now), savingTo: folder)
         } catch {
             Log.capture.error("Capture failed: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
@@ -281,7 +281,7 @@ final class CaptureCoordinator {
         )
     }
 
-    /// Untitled's panels and overlays (thumbnails, toasts, pins, the HUD) stay out of captures;
+    /// retrace's panels and overlays (thumbnails, toasts, pins, the HUD) stay out of captures;
     /// its ordinary windows, like the editor and Recents, can be captured.
     private func ownFloatingWindows() -> Set<CGWindowID> {
         Set(NSApplication.shared.windows.lazy
@@ -291,10 +291,11 @@ final class CaptureCoordinator {
 
     // MARK: After capture
 
-    private func finish(_ capture: CapturedImage) {
+    private func finish(_ capture: CapturedImage, savingTo folder: URL? = nil) async {
         var capture = capture
+        capture.preferredSaveFolderURL = folder ?? settings.saveFolderURL
         if settings.savesToFolder {
-            capture.fileURL = save(capture)
+            capture.fileURL = await save(capture)
         }
         if settings.copiesToClipboard {
             clipboard.copy(capture.nsImage)
@@ -326,30 +327,33 @@ final class CaptureCoordinator {
         } else if settings.copiesToClipboard {
             let save = CaptureToastController.Action(title: String(localized: "Save"), systemImage: "square.and.arrow.down") { [weak self] in
                 guard let self else { return }
-                var saved = capture
-                saved.fileURL = self.save(capture)
-                if saved.fileURL != nil { confirm(saved) }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    var saved = capture
+                    saved.fileURL = await self.save(capture)
+                    if saved.fileURL != nil { self.confirm(saved) }
+                }
             }
             toast.show(.init(kind: .imageCopied, symbolName: "doc.on.clipboard", title: String(localized: "Image copied"), actions: [edit, save]))
         }
     }
 
     /// Saves to the chosen folder, falling back to Pictures/Untitled if that fails.
-    func save(_ capture: CapturedImage) -> URL? {
+    func save(_ capture: CapturedImage) async -> URL? {
         let options = settings.exportOptions(for: capture.scale)
         let format = options.format
         let data: Data
         do {
-            data = try ImageEncoder.data(for: capture.image, options: options, pointScale: capture.scale)
+            data = try await ImageEncoder.encodeInBackground(capture.image, options: options, pointScale: capture.scale)
         } catch {
             Log.capture.error("Encoding failed: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
             return nil
         }
 
-        let preferred = settings.saveFolderURL
+        let preferred = capture.preferredSaveFolderURL ?? settings.saveFolderURL
         do {
-            return try storage.save(data, template: settings.filenameTemplate, date: capture.date, fileExtension: format.fileExtension, in: preferred)
+            return try await storage.save(data, template: settings.filenameTemplate, date: capture.date, fileExtension: format.fileExtension, in: preferred)
         } catch {
             Log.capture.error("Saving to the chosen folder failed: \(error.localizedDescription, privacy: .public)")
         }
@@ -357,12 +361,12 @@ final class CaptureCoordinator {
         let fallback = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first?
             .appendingPathComponent("Untitled", isDirectory: true)
         guard let fallback, fallback.standardizedFileURL != preferred.standardizedFileURL else {
-            ErrorPresenter.present(String(localized: "The screenshot couldn't be saved."), recovery: String(localized: "Choose another folder in Settings › General. It's still on the clipboard if copying is on."))
+            ErrorPresenter.present(String(localized: "The screenshot couldn't be saved."), recovery: String(localized: "Choose another folder in Settings › Capture. It's still on the clipboard if copying is on."))
             return nil
         }
         do {
-            let url = try storage.save(data, template: settings.filenameTemplate, date: capture.date, fileExtension: format.fileExtension, in: fallback)
-            ErrorPresenter.present(String(localized: "Saved to Pictures › Untitled instead."), recovery: String(localized: "The chosen folder couldn't be written to. You can pick another one in Settings › General."))
+            let url = try await storage.save(data, template: settings.filenameTemplate, date: capture.date, fileExtension: format.fileExtension, in: fallback)
+            ErrorPresenter.present(String(localized: "Saved to Pictures › Untitled instead."), recovery: String(localized: "The chosen folder couldn't be written to. You can pick another one in Settings › Capture."))
             return url
         } catch {
             ErrorPresenter.present(error)

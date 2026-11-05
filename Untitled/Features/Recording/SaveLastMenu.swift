@@ -3,6 +3,8 @@ import SwiftUI
 /// The Save Last choices: each saved length, the whole buffer, and a way to edit the list.
 /// Used in the menu bar, the Capture menu, and on the Capture page.
 struct SaveLastMenu: View {
+    var saveFolder: URL? = nil
+
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
     @Environment(\.openSettings) private var openSettings
@@ -11,7 +13,7 @@ struct SaveLastMenu: View {
         Menu("Save Last", systemImage: "gobackward") {
             ForEach(settings.saveLastDurations, id: \.self) { seconds in
                 Button(Self.title(for: seconds)) {
-                    Task { await dependencies.replay.saveClip(lastSeconds: seconds) }
+                    Task { await dependencies.replay.saveClip(lastSeconds: seconds, to: saveFolder) }
                 }
                 .menuShortcut(settings.shortcuts[QuickAction.saveLast(seconds).id])
                 // The buffer never holds more than its own length.
@@ -19,7 +21,7 @@ struct SaveLastMenu: View {
             }
             Divider()
             Button("Entire Buffer") {
-                Task { await dependencies.replay.saveClip() }
+                Task { await dependencies.replay.saveClip(to: saveFolder) }
             }
             .menuShortcut(settings.shortcuts["saveReplay"])
             Divider()
