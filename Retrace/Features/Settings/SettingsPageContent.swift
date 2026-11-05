@@ -8,7 +8,7 @@ struct SettingsView: View {
         PagedTabs(selection: $pane, pages: SettingsPane.allCases) { pane in
             SettingsPageContent(pane: pane)
         }
-        .frame(width: 680, height: 600)
+        .frame(width: 720, height: 620)
         .capsuleControls()
         .navigationTitle(pane.title)
         .toolbar {

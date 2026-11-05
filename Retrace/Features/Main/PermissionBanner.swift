@@ -10,7 +10,7 @@ struct PermissionBanner: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
+            HStack(spacing: Design.spacingM) {
                 Image(systemName: "lock.shield")
                     .font(.title3)
                     .foregroundStyle(.orange)
@@ -42,7 +42,6 @@ struct PermissionBanner: View {
                     .help("More about Screen Recording access")
                     .popover(isPresented: $showsDetails, arrowEdge: .bottom) { details }
             }
-            .controlSize(.small)
 
             if model.checkFoundNoAccess {
                 HStack(spacing: 6) {

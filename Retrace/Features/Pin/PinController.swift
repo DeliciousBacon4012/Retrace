@@ -135,8 +135,8 @@ private struct PinnedImageView: View {
                 if isHovering {
                     Button(action: close) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .frame(width: 24, height: 24)
+                            .font(.system(size: 12, weight: .bold))
+                            .frame(width: 30, height: 30)
                     }
                     .buttonStyle(.plain)
                     .glassEffect(.regular.interactive(), in: .circle)

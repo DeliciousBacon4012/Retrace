@@ -7,7 +7,7 @@ struct EditorView: View {
     @Bindable var document: EditorDocument
     let actions: EditorActions
     /// Set when the editor sits in the main window's Editor tab rather than a window of its own.
-    /// That window's toolbar belongs to the app, so the tools get a bar of their own.
+    /// Its tools join that window's toolbar while the tab is in front.
     var tabControls: TabControls?
 
     struct TabControls {
@@ -43,15 +43,13 @@ struct EditorView: View {
     private var showsPanelInspector: Bool { showsInspector && inspectorPlacement != .window }
     private var paletteRoom: CGFloat { EditorToolPalette.thickness + Design.spacingL }
     private var dockedInspectorRoom: CGFloat { EditorInspector.width + Design.spacingL }
-    /// Room above the image for the bar shown in the Editor tab.
-    private var tabBarRoom: CGFloat { tabControls == nil ? 0 : 56 }
 
     /// Room kept clear on each side for docked panels, so they never cover the image. The
     /// image keeps its own margin inside, so it sits as far from a panel as from the edge.
     private var canvasInsets: EdgeInsets {
         let docked = showsPanelInspector && dragOrigin == nil
         return EdgeInsets(
-            top: tabBarRoom,
+            top: 0,
             leading: (toolbarPosition == .left ? paletteRoom : 0) + (docked && inspectorPlacement == .left ? dockedInspectorRoom : 0),
             bottom: toolbarPosition == .bottom ? paletteRoom : 0,
             trailing: (toolbarPosition == .right ? paletteRoom : 0) + (docked && inspectorPlacement == .right ? dockedInspectorRoom : 0)
@@ -65,10 +63,6 @@ struct EditorView: View {
 
             if toolbarPosition != .top {
                 toolPalette
-            }
-
-            if tabControls != nil {
-                tabBar
             }
 
             if showsPanelInspector {
@@ -176,104 +170,24 @@ struct EditorView: View {
         // along the bottom, they center between the docked panels.
         .padding(.leading, Design.spacingL + (toolbarPosition == .bottom ? leftInspector : 0))
         .padding(.trailing, Design.spacingL + (toolbarPosition == .bottom ? rightInspector : 0))
-        .padding(.top, Design.spacingL + tabBarRoom)
-        .padding(.bottom, Design.spacingL)
+        .padding(.vertical, Design.spacingL)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
         .transition(.opacity.combined(with: .scale(0.9)))
-    }
-
-    /// The editor's window toolbar, as floating glass controls for when it's in the Editor tab.
-    private var tabBar: some View {
-        GlassEffectContainer(spacing: Design.spacingS) {
-            HStack(spacing: Design.spacingS) {
-                glassGroup {
-                    barButton("Undo", symbol: "arrow.uturn.backward", help: "Undo (⌘Z)") { document.undo() }
-                        .keyboardShortcut("z", modifiers: .command)
-                        .disabled(!document.canUndo)
-                    barButton("Redo", symbol: "arrow.uturn.forward", help: "Redo (⇧⌘Z)") { document.redo() }
-                        .keyboardShortcut("z", modifiers: [.command, .shift])
-                        .disabled(!document.canRedo)
-                }
-
-                Spacer(minLength: 0)
-
-                if toolbarPosition == .top {
-                    EditorToolPalette(
-                        document: document,
-                        axis: .horizontal,
-                        symbol: symbol(for:),
-                        position: $toolbarPosition
-                    )
-                }
-
-                Spacer(minLength: 0)
-
-                glassGroup {
-                    barButton("Copy Text", symbol: "text.viewfinder", help: "Copy text: drag over an area, or press Return for all of it (⇧⌘T)") {
-                        textAreaBinding.wrappedValue.toggle()
-                    }
-                    .disabled(isReadingText)
-                    .symbolEffect(.pulse, isActive: isReadingText)
-                    .foregroundStyle(document.isPickingTextArea ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
-                    barButton("Copy", symbol: "doc.on.doc", help: "Copy the edited image (⇧⌘C)") { actions.copy() }
-                        .keyboardShortcut("c", modifiers: [.command, .shift])
-                    barButton("Save", symbol: "square.and.arrow.down", help: "Save (⌘S)") { actions.save() }
-                        .keyboardShortcut("s", modifiers: .command)
-                    barButton("Export", symbol: "square.and.arrow.up", help: "Export with a different format, size, or quality (⌘E)") { startExport() }
-                        .keyboardShortcut("e", modifiers: .command)
-                    barButton("Inspector", symbol: "sidebar.right", help: "Show or hide the inspector (⌥⌘I)") { showsInspector.toggle() }
-                        .keyboardShortcut("i", modifiers: [.command, .option])
-                    barButton("Open in New Window", symbol: "macwindow.badge.plus", help: "Open in New Window") { tabControls?.moveToWindow() }
-                    barButton("Close", symbol: "xmark", help: "Close this image (⇧⌘W)") { tabControls?.close() }
-                        .keyboardShortcut("w", modifiers: [.command, .shift])
-                }
-
-                Button("Done") { actions.done() }
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.large)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .help("Save, copy, and close (⌘↩)")
-            }
-        }
-        .padding(.horizontal, Design.spacingL)
-        .padding(.top, Design.spacingS)
-        .frame(maxWidth: .infinity, alignment: .top)
-    }
-
-    /// Related buttons sharing one glass capsule, the same height as the tools.
-    private func glassGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 2) { content() }
-            .padding(4)
-            .glassEffect(.regular.interactive(), in: .capsule)
-    }
-
-    /// One icon the same size as a tool's, with a name for VoiceOver and a tooltip.
-    private func barButton(_ title: LocalizedStringKey, symbol: String, help: LocalizedStringKey, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: EditorToolPalette.thickness - 8, height: EditorToolPalette.thickness - 8)
-                .contentShape(.circle)
-        }
-        .buttonStyle(.plain)
-        .help(help)
-        .accessibilityLabel(title)
     }
 
     /// The inspector's top left corner when it isn't being dragged.
     private var inspectorOrigin: CGPoint {
         let margin = Design.spacingL
-        let top = margin + tabBarRoom
         switch inspectorPlacement {
         case .left:
-            return CGPoint(x: margin + (toolbarPosition == .left ? paletteRoom : 0), y: top)
+            return CGPoint(x: margin + (toolbarPosition == .left ? paletteRoom : 0), y: margin)
         case .floating:
             let roomX = max(contentSize.width - EditorInspector.width - margin * 2, 0)
             let roomY = max(contentSize.height - 200 - margin * 2, 0)
             return CGPoint(x: margin + roomX * min(max(floatX, 0), 1), y: margin + roomY * min(max(floatY, 0), 1))
         case .right, .window:
             let palette = toolbarPosition == .right ? paletteRoom : 0
-            return CGPoint(x: contentSize.width - EditorInspector.width - margin - palette, y: top)
+            return CGPoint(x: contentSize.width - EditorInspector.width - margin - palette, y: margin)
         }
     }
 
@@ -381,7 +295,7 @@ struct EditorView: View {
             .contextMenu { canvasMenu }
             .onGeometryChange(for: CGSize.self) { $0.size } action: { document.canvasSize = $0 }
             .overlay(alignment: .bottom) {
-                EditorStatusBar(document: document)
+                EditorStatusBar(document: document, isInFront: tabControls?.isInFront ?? true)
                     .padding(.bottom, Design.spacingL)
             }
             .overlay(alignment: .top) {
@@ -408,7 +322,7 @@ struct EditorView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        if tabControls == nil {
+        if tabControls?.isInFront != false {
             windowToolbar
         }
     }
@@ -472,6 +386,18 @@ struct EditorView: View {
             }
             .keyboardShortcut("i", modifiers: [.command, .option])
             .help("Show or hide the inspector (⌥⌘I)")
+        }
+
+        if let tabControls {
+            ToolbarItem(placement: .primaryAction) {
+                Menu("More", systemImage: "ellipsis") {
+                    Button("Open in New Window", systemImage: "macwindow.badge.plus", action: tabControls.moveToWindow)
+                    Button("Close Image", systemImage: "xmark", action: tabControls.close)
+                        .keyboardShortcut("w", modifiers: [.command, .shift])
+                }
+                .menuIndicator(.hidden)
+                .help("More")
+            }
         }
     }
 
@@ -702,6 +628,7 @@ private struct EditorNoticeView: View {
 /// Native zoom controls and image dimensions, grouped on a single glass surface.
 private struct EditorStatusBar: View {
     let document: EditorDocument
+    var isInFront = true
 
     @Namespace private var glass
 
@@ -710,7 +637,7 @@ private struct EditorStatusBar: View {
 
         GlassEffectContainer(spacing: Design.spacingS) {
             HStack(spacing: Design.spacingS) {
-                ZoomControl(document: document)
+                ZoomControl(document: document, isInFront: isInFront)
 
                 Text(verbatim: "\(Int(size.width)) × \(Int(size.height)) px")
                     .font(.caption.weight(.medium).monospacedDigit())
@@ -754,6 +681,8 @@ enum ZoomScrub {
 /// A compact zoom readout you can scrub directly. Click it to reveal a native slider.
 private struct ZoomControl: View {
     let document: EditorDocument
+    /// False while the Editor tab is out of view, when the slider's popover must not linger.
+    let isInFront: Bool
 
     @State private var anchor: ZoomAnchor?
     @State private var restingStop: CGFloat?
@@ -816,7 +745,10 @@ private struct ZoomControl: View {
             .popover(isPresented: $showsSlider) {
                 sliderPopover
             }
-            .help("Drag to zoom. Click for the slider; hold Option while dragging for finer control.")
+            .onChange(of: isInFront) { _, isInFront in
+                if !isInFront { showsSlider = false }
+            }
+            .help("Drag or scroll to zoom. Click for the slider; hold Option while dragging for finer control.")
             .accessibilityLabel("Zoom")
             .accessibilityValue(Text(Double(zoom), format: .percent.precision(.fractionLength(0))))
             .accessibilityHint("Drag to adjust. Click to show the slider and presets.")
@@ -869,10 +801,11 @@ private struct ZoomControl: View {
                     scheduleDismissal()
                 }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.bordered)
         }
-        .padding(14)
-        .frame(width: 220)
+        .capsuleControls()
+        .padding(Design.spacingL)
+        .frame(width: 260)
     }
 
     private var drag: some Gesture {
@@ -895,16 +828,16 @@ private struct ZoomControl: View {
             .onEnded { _ in
                 anchor = nil
                 restingStop = nil
-                revealSlider()
             }
     }
 
     private func scroll(_ event: NSEvent) {
+        // A sideways swipe is moving between tabs, not zooming.
+        guard abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) else { return }
         let step = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 120 : event.scrollingDeltaY / 8
         let direction: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
         set(document.currentZoom(fitFactor: fitFactor) * pow(2, step * direction))
         restingStop = nil
-        revealSlider()
     }
 
     /// Snaps gently to Fit, 50%, 100%, and 200%; the haptic plays once per stop.

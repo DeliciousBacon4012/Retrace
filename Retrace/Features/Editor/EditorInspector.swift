@@ -23,7 +23,7 @@ struct EditorInspector: View {
     let onLiftSubject: () -> Void
     let isLiftingSubject: Bool
 
-    nonisolated static let width: CGFloat = 280
+    nonisolated static let width: CGFloat = 304
     private static let shape = RoundedRectangle(cornerRadius: Design.radiusL, style: .continuous)
     private static let gripHeight: CGFloat = 22
 
@@ -62,7 +62,7 @@ struct EditorInspector: View {
     private var content: some View {
         let tool = document.inspectedTool
 
-        return VStack(alignment: .leading, spacing: 14) {
+        return VStack(alignment: .leading, spacing: 20) {
             InspectorGroup {
                 InspectorHeader(tool: tool, selectionCount: document.selectedIDs.count, isMixed: document.selectionIsMixed)
             }
@@ -137,9 +137,8 @@ struct EditorInspector: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .controlSize(.small)
+        .padding(.horizontal, Design.spacingL)
+        .padding(.vertical, Design.spacingM)
         .labeledContentStyle(InspectorRowStyle())
         .capsuleControls()
         .animation(.smooth(duration: 0.22), value: tool)
@@ -231,10 +230,10 @@ private struct InspectorGroup<Content: View, Footer: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Design.spacingM) {
             if let title {
                 Text(title)
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
 

@@ -31,6 +31,8 @@ private struct MainContent: View {
 
     @Environment(AppDependencies.self) private var dependencies
 
+    private var isEditingInTab: Bool { tab == .editor && dependencies.editor.tabSession != nil }
+
     var body: some View {
         VStack(spacing: 0) {
             if access.screenRecording == .notGranted {
@@ -56,7 +58,8 @@ private struct MainContent: View {
         }
         .navigationTitle(tab.title)
         .toolbar {
-            ToolbarItem(placement: .principal) {
+            // While editing, the tools take the middle of the toolbar and the tabs sit at the start.
+            ToolbarItem(placement: isEditingInTab ? .navigation : .principal) {
                 Picker("Workspace", selection: $tab) {
                     ForEach(MainTab.allCases) { tab in
                         Text(tab.title).tag(tab)
@@ -75,13 +78,15 @@ private struct MainContent: View {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
 
-            ToolbarItemGroup(placement: .primaryAction) {
-                CaptureMenu()
-                RecordControl()
+            if !isEditingInTab {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    CaptureMenu()
+                    RecordControl()
+                }
             }
         }
         .capsuleControls()
-        // Wide enough for the editor's bar while an image is open there.
+        // Wide enough for the editor's toolbar while an image is open there.
         .frame(minWidth: dependencies.editor.tabSession == nil ? 800 : EditorView.minimumSize.width + 120, minHeight: 520)
         .onChange(of: tab, initial: true) { _, tab in
             dependencies.editor.isEditorTabInFront = tab == .editor

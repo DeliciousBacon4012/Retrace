@@ -253,7 +253,6 @@ struct LibraryView: View {
                     withAnimation(.panel) { viewModel.similarResults = nil }
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
             }
             .padding(.horizontal, Self.gridInset)
             .padding(.vertical, Design.spacingS)
