@@ -4,13 +4,16 @@
 
 - Branch: feature/stability-and-performance
 - Baseline commit: `d9028354c0bc0b9a9267ead9f6f136c0519d2ae0`
-- Source checkpoint: c630108, 21 commits ahead of origin/main. This handoff/roadmap refresh adds one docs-only commit, taking the branch to 22. No push or merge occurred; origin remains https://github.com/DeliciousBacon4012/untitled-mac.git.
+- Source checkpoint: b05c71d, 25 commits ahead of origin/main. This handoff/roadmap refresh is a docs-only commit, taking the branch to 26. No push or merge occurred; origin remains https://github.com/DeliciousBacon4012/untitled-mac.git.
 - Source and test changes are committed. The existing Untitled.xcodeproj, Untitled application target, UntitledTests hosted test target, active shared retrace scheme, and compatibility shared Untitled scheme remain in use. Product is retrace.app, version 0.1.0 (build 1), minimum macOS 26.0.
-- Xcode MCP built and launched on My Mac with no reported warnings. All 42 tests passed. git diff --check passed before this documentation refresh. The app bundle contains retrace_app icons.
-- Automatic local signing is configured with the existing Personal Team and hardened runtime; this Mac has zero valid signing identities. The built app runs locally but is not verified for distribution. App Sandbox remains disabled pending a distribution decision.
+- Xcode MCP built and launched on My Mac. All 47 tests passed. The build reported one App Intents metadata-extraction warning because the app does not link `AppIntents.framework`; there were no Swift compiler errors. `git diff --check` passed before this documentation refresh. The app bundle contains retrace_app icons.
+- Automatic signing is configured for local development with team ZX34GARNUS and hardened runtime. This Mac has zero valid signing identities, and strict `codesign` verification returns `CSSMERR_TP_NOT_TRUSTED`. The built app launches locally but is not verified for distribution. App Sandbox remains disabled pending a distribution decision.
 - The original bundle/module/target and data paths remain for continuity. See ENGINEERING_HANDOFF.md for the full impact inventory and signing evidence.
-- On 2026-11-05, Apple lists macOS 27.2 as latest stable and macOS 27.3 as beta; the app stays on its macOS 26.0 deployment target and stable Xcode 27.2 toolchain. Standalone command-line Analyze still fails in actool while opening the Icon Composer document, so static analysis is unverified.
-- The detailed dated entries below are historical checkpoints. The 2026-11-05 section at the end is the current plan.
+- On 2026-11-05, Apple lists macOS 27.2 as latest stable and macOS 27.3 as beta; the app stays on its macOS 26.0 deployment target and stable Xcode 27.2 toolchain.
+- The main window now has Library/Editor/Settings navigation. Library, empty Editor, and Settings were reviewed live; the Settings sidebar has no redundant toggle. An area screenshot and short area movie were created successfully after fixing the crash caused by an out-of-range AppKit window number. This verifies the reported area-capture failure only, not all recording modes or audio.
+- Replay buffer menu time is capped at its configured duration and its red indicator pulses at the cap while recording continues. The retrace menu-bar logo remains visible.
+- The source wishlist is inventoried in ENGINEERING_HANDOFF.md. Existing Vision face/OCR, Core Image redaction, Carbon hotkeys, ScreenCaptureKit, UTType, and OCR clipboard paths are distinguished from future foreground/saliency/human detection, accessibility snapping, transfer/share/Finder extensions, codec preferences, cursor effects, and scripting. No novelty API or beta-only API was added.
+- Older dated entries below are historical checkpoints. The handoff contains the current verification evidence and prioritized remaining work.
 
 ## Earlier completed work logged 2026-11-04
 
@@ -84,9 +87,9 @@
 3. Verify clipboard file cleanup and source-app exclusion behavior under real pasteboard changes; the 30-day default is implemented, but exclusions cannot guarantee clipboard provenance.
 4. Decide distribution (Mac App Store, direct, or both), then assess sandboxing, signing, notarization, update delivery, and data migration. Do not implement an updater until distribution is decided.
 
-## Remaining known risks rechecked 2026-11-05
+## Historical risks recorded before the latest capture and UI verification
 
-- Forty-two deterministic tests cover redaction, storage, Library, clipboard, editor interactions, metadata, and recording policies; live ScreenCaptureKit lifecycle behavior is still unverified.
+- Forty-two deterministic tests covered redaction, storage, Library, clipboard, editor interactions, metadata, and recording policies at that earlier checkpoint. The current count is 47; area screenshot and short area movie capture have since been verified, while the broader lifecycle matrix remains open.
 - If ScreenCaptureKit never completes `stopCapture()`, the recorder times out and recovers to idle; a partial file may remain if the stream never releases it.
 - Clipboard exclusions use the frontmost app observed by a polling watcher and cannot guarantee source-app provenance.
 - Clipboard history remains enabled by default; new/defaulted settings expire items after 30 days, while any stored user choice is preserved. Source-app exclusions remain best-effort because macOS does not expose reliable pasteboard provenance to this watcher.
@@ -390,12 +393,22 @@ Phase 1 — Product shell and visual design. The main window has a native Librar
 - Apple documentation/release check was made on 2026-11-04: macOS 27.2 stable and macOS 27.3 beta 1 are distinguished in the handoff. The app still targets macOS 26.0.
 - Remaining: live VoiceOver and resizing checks, representative Instruments measurements, interactive clipboard and ScreenCaptureKit lifecycle checks, and review/commit of the larger existing worktree. Standalone command-line Analyze failed in actool while opening the Icon Composer document; Xcode MCP build/test succeeds, but static analysis is not claimed.
 
-## Latest checkpoint — 2026-11-05: native UI, editor, storage, and Xcode setup
+## Historical checkpoint — 2026-11-05: native UI, editor, storage, and Xcode setup
 
 - Completed and committed the Library/Clipboard/Settings UI pass, configurable multi-folder storage, per-capture session destinations, Quick Access crop ratios and background thumbnail rendering, editor interaction/accessibility and asynchronous saves, custom editor colors, and ScreenCaptureKit finalization handling.
-- Source checkpoint c630108 is 21 commits ahead of origin/main; eight source commits follow the prior checkpoint. This docs refresh is a separate docs-only follow-up that takes the branch to 22 local commits. No push or merge occurred. See ENGINEERING_HANDOFF.md for all 21 source commits.
+- Source checkpoint c630108 was 21 commits ahead of origin/main. Eight source commits followed the prior checkpoint. See ENGINEERING_HANDOFF.md for the current source commit inventory.
 - Xcode is open to the original Untitled.xcodeproj with shared retrace active, legacy shared Untitled retained, My Mac selected, app version 0.1.0 (build 1), and macOS 26.0 deployment target. The generated retrace product launches.
-- Xcode MCP reports 42 tests passed, no failures/skips/not-run cases, and zero warnings. Live app UI was reviewed at Library, Capture settings, Quick Access settings, and Editor settings without changing preferences or capture data.
+- At that checkpoint Xcode MCP reported 42 tests passed, no failures/skips/not-run cases. The latest build warning and the expanded UI/capture verification are documented in the current checkpoint above and ENGINEERING_HANDOFF.md.
 - Product naming and signature impact are recorded in the handoff. Automatic local signing is set with the existing Personal Team, but the machine has zero valid identities; distribution is not established. Sandbox and bundle identity remain unchanged.
 - Apple documentation was checked 2026-11-05: macOS 27.2 stable; 27.3 beta, released Nov 3, is tracked separately. The current Xcode 27.2 stable toolchain is used and no beta-only APIs were added.
-- Remaining: live VoiceOver, keyboard-only, minimum-window-size, larger-system-text and light/dark checks; permissioned ScreenCaptureKit lifecycle exercise; real pasteboard race/cleanup verification; representative Instruments traces; static analysis through a workflow that handles the icon asset; and a distribution decision.
+- Remaining priorities from that earlier checkpoint were expanded after the crash fix and live capture checks; see ENGINEERING_HANDOFF.md.
+
+## Latest checkpoint — 2026-11-05: area capture, replay timer, and workspace navigation
+
+- Fixed the area-capture crash: AppKit's window list can contain `4294967296`, which cannot be represented by `CGWindowID`. Checked conversion now rejects null/out-of-range identifiers without trapping. A regression test covers the 32-bit boundary.
+- Xcode MCP launched the existing Retrace app, captured an area PNG, and created a short area MOV. The app remained responsive. This confirms the reported flow; display/window modes, audio, cancellation, long duration, and replay finalization still need individual live checks.
+- Added centered Library/Editor/Settings navigation to the existing main window, preserved Library/Clipboard destinations, rebuilt settings categories as a sidebar list, removed the redundant sidebar toggle, and added an empty Editor drop zone with Choose Image and Browse Library actions. Live review covered Library, Editor, and Settings.
+- Added replay-buffer timer state that counts up and caps at the configured duration. At the cap, the red dot pulses while the buffer continues recording and rotating old footage. The menu-bar logo remains. Three tests cover timer boundaries and normal direct-recording time.
+- Source commits since the prior checkpoint: `e1d45c0`, `95978c6`, and `b05c71d`. The docs-only commit follows these; branch count is 26 ahead of origin/main. No history rewrite, push, or merge occurred.
+- Xcode reports 47 tests passed. The successful build emits one App Intents metadata warning because no `AppIntents.framework` dependency is declared. Local signing configuration builds and launches, but no valid signing identity is installed and strict signature trust verification fails. Distribution signing is not established.
+- Next: complete the live ScreenCaptureKit lifecycle matrix and accessibility/layout checks; verify OCR and redaction against controlled content and triage system TextRecognition logs if OCR fails; test pasteboard races; profile representative workloads; run static analysis through an Icon Composer-compatible workflow; then stage native API additions according to user need, permission burden, and deployment target. See ENGINEERING_HANDOFF.md for the API inventory and exact release check.
