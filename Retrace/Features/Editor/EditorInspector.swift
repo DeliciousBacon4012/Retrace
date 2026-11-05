@@ -540,7 +540,7 @@ private struct EffectsSection: View {
 private struct CropSection: View {
     let document: EditorDocument
     @State private var isFindingSubject = false
-    @AppStorage(SmartCropMode.storageKey) private var smartCropMode: SmartCropMode = .attention
+    @AppStorage(SmartCropMode.storageKey) private var smartCropMode: SmartCropMode = .automatic
     @State private var message: String?
 
     var body: some View {

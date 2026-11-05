@@ -15,7 +15,7 @@ struct NotificationsSettingsView: View {
                         Text(position.title).tag(position)
                     }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
                 .disabled(!settings.showsToasts)
             } footer: {
                 Text("Toasts are short notices at the top of the screen, such as “Copied 3 lines”. Hover over one to keep it and see what you can do with it, or click it to close it.")

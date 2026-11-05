@@ -5,27 +5,23 @@ struct SettingsView: View {
     @AppStorage(SettingsPane.storageKey) private var pane: SettingsPane = .general
 
     var body: some View {
-        PagedTabs(selection: $pane, pages: SettingsPane.allCases) { pane in
+        // Every page is built once when Settings opens, so switching is instant.
+        PagedTabs(selection: $pane, pages: SettingsPane.allCases, loadsAllPages: true) { pane in
             SettingsPageContent(pane: pane)
         }
-        .frame(width: 720, height: 620)
+        .frame(width: 900, height: 620)
         .capsuleControls()
         .navigationTitle(pane.title)
         .toolbar {
-            // Icons in the toolbar, where the system draws them as one glass capsule. The title
-            // bar names the current category; each icon's tooltip and VoiceOver label give its name.
+            // In the toolbar, where the system draws the picker as one glass capsule.
             ToolbarItem(placement: .principal) {
                 Picker("Settings Category", selection: $pane) {
                     ForEach(SettingsPane.allCases) { pane in
-                        Label(pane.title, systemImage: pane.symbolName)
-                            .help(pane.title)
-                            .tag(pane)
+                        Text(pane.title).tag(pane)
                     }
                 }
-                .tabPickerStyle()
-                .labelStyle(.iconOnly)
+                .pickerStyle(.segmented)
                 .labelsHidden()
-                // At this size the selected icon's highlight is a capsule too.
                 .controlSize(.large)
                 .fixedSize()
             }
@@ -44,6 +40,7 @@ struct SettingsPageContent: View {
             switch pane {
             case .general:
                 GeneralSettingsView(launchAtLogin: dependencies.launchAtLogin)
+                LibrarySearchSettingsView()
                 Section("About") {
                     LabeledContent("Version", value: Bundle.main.displayVersion)
                 }
@@ -58,8 +55,7 @@ struct SettingsPageContent: View {
                 ClipboardSettingsView()
             case .editor:
                 EditorSettingsView()
-            case .intelligence:
-                IntelligenceSettingsView()
+                VisionSettingsView()
             case .recording:
                 RecordingSettingsView()
                 ReplayBufferSettingsView()

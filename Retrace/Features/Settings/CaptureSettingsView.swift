@@ -33,7 +33,7 @@ struct CaptureSettingsView: View {
                 Picker("Background", selection: $settings.windowBackground) {
                     ForEach(WindowBackground.allCases) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
             }
         }
     }

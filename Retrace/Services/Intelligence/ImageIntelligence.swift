@@ -5,6 +5,8 @@ import Vision
 
 /// Which part of an image Smart Crop looks for.
 nonisolated enum SmartCropMode: String, CaseIterable, Identifiable, Sendable {
+    /// Decides from what's in the image.
+    case automatic
     /// Where a person's eye goes first.
     case attention
     /// The distinct objects in the frame.
@@ -17,6 +19,7 @@ nonisolated enum SmartCropMode: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
+        case .automatic: String(localized: "Automatic")
         case .attention: String(localized: "Attention")
         case .objects: String(localized: "Objects")
         case .document: String(localized: "Document")
@@ -100,6 +103,21 @@ nonisolated enum ImageIntelligence {
         let box: CGRect? = try await run {
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
             switch mode {
+            case .automatic:
+                // A page or card that fills a good share of the frame wins, then several objects
+                // framed together, then the single most eye-catching area.
+                let document = VNDetectDocumentSegmentationRequest()
+                let objects = VNGenerateObjectnessBasedSaliencyImageRequest()
+                let attention = VNGenerateAttentionBasedSaliencyImageRequest()
+                try handler.perform([document, objects, attention])
+                if let page = document.results?.first, page.confidence > 0.8,
+                   page.boundingBox.width * page.boundingBox.height > 0.2 {
+                    return page.boundingBox
+                }
+                if let found = objects.results?.first?.salientObjects, found.count > 1 {
+                    return allObjects(in: objects.results?.first)
+                }
+                return strongestObject(in: attention.results?.first)
             case .attention:
                 let request = VNGenerateAttentionBasedSaliencyImageRequest()
                 try handler.perform([request])

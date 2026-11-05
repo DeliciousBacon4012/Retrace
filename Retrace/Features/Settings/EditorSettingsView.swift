@@ -40,7 +40,7 @@ struct EditorSettingsView: View {
                 Picker("Palette", selection: $palette) {
                     ForEach(EditorPalette.allCases) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
                 PaletteStrip(palette: palette, customColors: EditorPalette.customColors(from: customPaletteData))
                 if palette == .custom {
                     Button("Edit Custom Palette…", systemImage: "slider.horizontal.3") {
@@ -59,7 +59,7 @@ struct EditorSettingsView: View {
                 Picker("Open images in", selection: $openPlacement) {
                     ForEach(EditorOpenPlacement.allCases) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
             } footer: {
                 Text("If the Editor tab has unsaved changes, the next image opens in a new window, so your work is never replaced. You can also right-click a Library item and choose Open in New Window.")
                     .font(.footnote)
@@ -70,7 +70,7 @@ struct EditorSettingsView: View {
                 Picker("Blur preview", selection: $blurQuality) {
                     ForEach(EditorBlurQuality.allCases) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
             } footer: {
                 Text("Fast keeps blur and Spotlight responsive on large images. Saved and exported images always use the full-quality blur.")
                     .font(.footnote)

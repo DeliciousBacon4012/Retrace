@@ -99,6 +99,27 @@ final class SettingsStore {
     /// How many frames ScreenCaptureKit may hold at once. More rides out busy moments; fewer uses less memory.
     var captureQueueDepth = Defaults.captureQueueDepth { didSet { save(captureQueueDepth, .captureQueueDepth) } }
     static let captureQueueDepthRange = 3...8
+
+    /// The preset every recording setting matches, or nil when they've been mixed by hand.
+    var recordingPreset: RecordingPreset? {
+        RecordingPreset.allCases.first { preset in
+            preset.codec == videoCodec && preset.framesPerSecond == framesPerSecond
+                && preset.quality == videoQuality && preset.encoder == videoEncoder
+                && preset.color == videoColor && preset.queueDepth == captureQueueDepth
+        }
+    }
+
+    func apply(_ preset: RecordingPreset) {
+        videoCodec = preset.codec
+        framesPerSecond = preset.framesPerSecond
+        videoQuality = preset.quality
+        videoEncoder = preset.encoder
+        videoColor = preset.color
+        captureQueueDepth = preset.queueDepth
+    }
+
+    /// Retrace's own notices stay hidden while recording. They're never in the movie either way.
+    var hidesNoticesWhileRecording = Defaults.hidesNoticesWhileRecording { didSet { save(hidesNoticesWhileRecording, .hidesNoticesWhileRecording) } }
     var cursorBlurEnabled = Defaults.cursorBlurEnabled { didSet { save(cursorBlurEnabled, .cursorBlurEnabled) } }
     var cursorBlurMode = Defaults.cursorBlurMode { didSet { save(cursorBlurMode.rawValue, .cursorBlurMode) } }
     /// How long the shutter stays open, as a share of one frame. 0.5 is film's 180° shutter.
@@ -318,6 +339,7 @@ final class SettingsStore {
         recordsMicrophone = value(.recordsMicrophone, default: Defaults.recordsMicrophone)
         showsClicks = value(.showsClicks, default: Defaults.showsClicks)
         indexesLibraryContent = value(.indexesLibraryContent, default: Defaults.indexesLibraryContent)
+        hidesNoticesWhileRecording = value(.hidesNoticesWhileRecording, default: Defaults.hidesNoticesWhileRecording)
         videoColor = VideoColor(rawValue: value(.videoColor, default: "")) ?? Defaults.videoColor
         videoQuality = VideoQuality(rawValue: value(.videoQuality, default: "")) ?? Defaults.videoQuality
         videoEncoder = VideoEncoderChoice(rawValue: value(.videoEncoder, default: "")) ?? Defaults.videoEncoder
@@ -445,6 +467,7 @@ private extension SettingsStore {
         case recordsMicrophone
         case showsClicks
         case indexesLibraryContent
+        case hidesNoticesWhileRecording
         case videoColor
         case videoQuality
         case videoEncoder
@@ -519,6 +542,7 @@ private extension SettingsStore {
         static let recordsMicrophone = false
         static let showsClicks = false
         static let indexesLibraryContent = true
+        static let hidesNoticesWhileRecording = true
         static let videoColor = VideoColor.automatic
         static let videoQuality = VideoQuality.original
         static let videoEncoder = VideoEncoderChoice.automatic

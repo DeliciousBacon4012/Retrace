@@ -34,6 +34,9 @@ final class CaptureToastController {
     private var remaining: Duration?
     private var clockStarted: ContinuousClock.Instant?
 
+    /// Whether a screen recording is running, for the setting that keeps notices away meanwhile.
+    var isRecording: () -> Bool = { false }
+
     init(settings: SettingsStore, permissions: any PermissionProviding) {
         self.settings = settings
         self.permissions = permissions
@@ -44,6 +47,8 @@ final class CaptureToastController {
     @discardableResult
     func show(_ toast: Toast, on screen: NSScreen? = NSScreen.underPointer ?? NSScreen.main) -> Bool {
         guard settings.showsToasts else { return false }
+        // Errors still show; everything else waits until the recording ends.
+        if settings.hidesNoticesWhileRecording, isRecording(), toast.kind != .error { return false }
         hide(animated: false)
         guard let screen else { return false }
 

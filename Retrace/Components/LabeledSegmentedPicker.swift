@@ -35,7 +35,7 @@ struct LabeledSegmentedPicker<Value: Hashable, Item: View>: View {
                         .help(name(option))
                 }
             }
-            .pickerStyle(.segmented)
+            .capsuleSegmentedStyle()
             .labelsHidden()
             .accessibilityLabel(title)
         }

@@ -89,6 +89,7 @@ final class AppDependencies {
             toasts: toasts
         )
         self.recording = recording
+        toasts.isRecording = { [weak recording] in recording?.isRecording == true }
         shortcuts = GlobalShortcuts(settings: settings) { [weak settings, weak capture, weak recording, weak replay] actionID in
             guard let settings, let action = QuickAction.withID(actionID, saveLastDurations: settings.saveLastDurations) else { return }
             Self.perform(action, capture: capture, recording: recording, replay: replay)

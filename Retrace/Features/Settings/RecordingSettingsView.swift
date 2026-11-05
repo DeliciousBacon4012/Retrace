@@ -9,6 +9,23 @@ struct RecordingSettingsView: View {
 
         Group {
             Section {
+                Picker("Preset", selection: Binding(
+                    get: { settings.recordingPreset },
+                    set: { if let preset = $0 { settings.apply(preset) } }
+                )) {
+                    ForEach(RecordingPreset.allCases) { Text($0.title).tag(RecordingPreset?.some($0)) }
+                    if settings.recordingPreset == nil {
+                        Divider()
+                        Text("Custom").tag(RecordingPreset?.none)
+                    }
+                }
+            } footer: {
+                Text("Better Performance uses the least power and space. Studio records ProRes for editing, and its files are large. Changing any setting below makes this Custom.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 Picker("Codec", selection: $settings.videoCodec) {
                     ForEach(VideoCodec.allCases) { Text($0.title).tag($0) }
                 }
@@ -44,7 +61,7 @@ struct RecordingSettingsView: View {
                     Picker("Blur mode", selection: $settings.cursorBlurMode) {
                         ForEach(CursorBlurMode.allCases) { Text($0.title).tag($0) }
                     }
-                    .pickerStyle(.segmented)
+                    .capsuleSegmentedStyle()
                     LabeledContent("Amount") {
                         Slider(value: $settings.cursorBlurAmount, in: SettingsStore.cursorBlurAmountRange) {
                             Text("Amount")
@@ -76,10 +93,11 @@ struct RecordingSettingsView: View {
                         Text(seconds == 0 ? "Off" : "\(seconds) s").tag(seconds)
                     }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
                 Toggle("Show time in the menu bar", isOn: $settings.showsRecordingTimeInMenuBar)
+                Toggle("Hide Retrace's notices while recording", isOn: $settings.hidesNoticesWhileRecording)
             } footer: {
-                Text("The countdown appears in the menu bar; click it to cancel. While recording, a red dot and the time so far appear there; click them to stop.")
+                Text("The countdown appears in the menu bar; click it to cancel. While recording, a red dot and the time so far appear there; click them to stop. Retrace's notices never appear in the movie. To quiet other apps, turn on a Focus in Control Center.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

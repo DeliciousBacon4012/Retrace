@@ -219,7 +219,7 @@ nonisolated enum TextRecognizer {
     }
 
     /// Suggests a crop around what Vision finds most salient, in top-left image pixels.
-    static func attentionCrop(in image: CGImage, mode: SmartCropMode = .attention) async throws -> CGRect? {
+    static func attentionCrop(in image: CGImage, mode: SmartCropMode = .automatic) async throws -> CGRect? {
         try validateImageSize(image)
         return try await ImageIntelligence.suggestedCrop(in: image, mode: mode)
     }

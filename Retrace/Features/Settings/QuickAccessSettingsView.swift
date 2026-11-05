@@ -15,23 +15,23 @@ struct QuickAccessSettingsView: View {
                         Label(corner.title, systemImage: corner.symbolName).tag(corner)
                     }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
                 .labelStyle(.iconOnly)
 
                 Picker("Arrange", selection: $settings.quickAccessLayout) {
                     ForEach(QuickAccessLayout.allCases) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
 
                 Picker("Size", selection: $settings.quickAccessSize) {
                     ForEach(QuickAccessSize.allCases) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
 
                 Picker("Aspect Ratio", selection: $settings.quickAccessAspectRatio) {
                     ForEach(QuickAccessAspectRatio.allCases) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
 
                 LabeledContent("Most shown at once") {
                     HStack(spacing: 8) {
@@ -53,7 +53,7 @@ struct QuickAccessSettingsView: View {
                 Picker("Speed", selection: $settings.overlaySpeed) {
                     ForEach(OverlaySpeed.allCases) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.segmented)
+                .capsuleSegmentedStyle()
 
                 Picker("Close automatically", selection: $settings.overlayAutoCloseSeconds) {
                     ForEach(SettingsStore.overlayAutoCloseChoices, id: \.self) { seconds in

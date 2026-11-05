@@ -132,3 +132,67 @@ nonisolated enum EditorBlurQuality: String, CaseIterable, Identifiable, Sendable
         UserDefaults.standard.string(forKey: storageKey).flatMap(Self.init(rawValue:)) ?? .quality
     }
 }
+
+/// Starting points for every recording setting at once. Changing any one setting by hand
+/// makes the preset read as Custom.
+nonisolated enum RecordingPreset: String, CaseIterable, Identifiable, Sendable {
+    case performance
+    case balanced
+    case highQuality
+    case studio
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .performance: String(localized: "Better Performance")
+        case .balanced: String(localized: "Balanced")
+        case .highQuality: String(localized: "High Quality")
+        case .studio: String(localized: "Studio")
+        }
+    }
+
+    var codec: VideoCodec {
+        switch self {
+        case .performance, .balanced, .highQuality: .hevc
+        case .studio: .proRes422HQ
+        }
+    }
+
+    var framesPerSecond: Int {
+        switch self {
+        case .performance: 30
+        default: 60
+        }
+    }
+
+    var quality: VideoQuality {
+        switch self {
+        case .performance: .small
+        case .balanced, .studio: .original
+        case .highQuality: .high
+        }
+    }
+
+    var encoder: VideoEncoderChoice {
+        switch self {
+        case .performance, .highQuality: .hardware
+        case .balanced, .studio: .automatic
+        }
+    }
+
+    var color: VideoColor {
+        switch self {
+        case .performance, .balanced: .automatic
+        case .highQuality, .studio: .displayP3
+        }
+    }
+
+    var queueDepth: Int {
+        switch self {
+        case .performance: 4
+        case .balanced: 6
+        case .highQuality, .studio: 8
+        }
+    }
+}
