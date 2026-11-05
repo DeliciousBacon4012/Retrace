@@ -22,11 +22,11 @@ struct GeneralSettingsView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
-                Toggle("Open this window when Untitled starts", isOn: $settings.opensWindowAtLaunch)
+                Toggle("Open this window when retrace starts", isOn: $settings.opensWindowAtLaunch)
                 Toggle("Show icon in the Dock", isOn: $settings.showsDockIcon)
                 Toggle("Play sounds", isOn: $settings.playsSounds)
             } footer: {
-                Text("When Untitled opens at login, it starts in the menu bar only.")
+                Text("When retrace opens at login, it starts in the menu bar only.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

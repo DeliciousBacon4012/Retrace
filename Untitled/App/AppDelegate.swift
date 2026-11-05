@@ -10,14 +10,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task.detached(priority: .utility) { ReplayWriter.removeLeftovers() }
         launch.finishLaunching(opensWindowSetting: dependencies.settings.opensWindowAtLaunch)
         #if DEBUG
-        // Lets automated checks open the editor: `open Untitled.app --args -UntitledDebugOpenImage <path>`.
+        // Lets automated checks open the editor: `open retrace.app --args -UntitledDebugOpenImage <path>`.
         if let path = UserDefaults.standard.string(forKey: "UntitledDebugOpenImage") {
             dependencies.editor.open(fileAt: URL(fileURLWithPath: path))
         }
         #endif
     }
 
-    /// Images opened from Finder, the Dock, or `open -a Untitled` go to the editor.
+    /// Images opened from Finder, the Dock, or `open -a retrace` go to the editor.
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.isFileURL {
             dependencies.editor.open(fileAt: url)

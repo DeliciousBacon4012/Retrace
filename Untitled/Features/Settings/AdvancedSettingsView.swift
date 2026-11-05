@@ -35,7 +35,7 @@ struct AdvancedSettingsView: View {
             } header: {
                 Text("History")
             } footer: {
-                Text("Text you capture stays on this Mac, in Untitled's own folder rather than your save folder. Lowering the number removes the oldest snippets.")
+                Text("Text you capture stays on this Mac, in retrace's own folder rather than your save folder. Lowering the number removes the oldest snippets.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -60,7 +60,7 @@ struct AdvancedSettingsView: View {
             } header: {
                 Text("Memory")
             } footer: {
-                Text("The same number Activity Monitor shows. When macOS runs short of memory, Untitled lets go of thumbnails and editor previews by itself; they come back when needed.")
+                Text("The same number Activity Monitor shows. When macOS runs short of memory, retrace lets go of thumbnails and editor previews by itself; they come back when needed.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

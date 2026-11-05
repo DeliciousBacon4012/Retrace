@@ -7,7 +7,7 @@ struct UntitledApp: App {
     var body: some Scene {
         let dependencies = appDelegate.dependencies
 
-        Window("Untitled", id: WindowID.main) {
+        Window("retrace", id: WindowID.main) {
             MainView()
                 .environment(dependencies)
                 .environment(dependencies.settings)

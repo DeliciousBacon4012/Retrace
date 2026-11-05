@@ -130,7 +130,7 @@ final class AppDependencies {
         memory.onPressure = { [weak self] pressure in self?.relieveMemory(pressure) }
         memory.start()
         TextRecognizer.prepare()
-        Log.app.info("Untitled \(Bundle.main.displayVersion, privacy: .public) started")
+        Log.app.info("retrace \(Bundle.main.displayVersion, privacy: .public) started")
     }
 
     /// Lets go of caches, cheapest to rebuild first: thumbnails, then the editor's spare

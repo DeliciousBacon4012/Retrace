@@ -26,7 +26,7 @@ final class GeneralSettingsViewModel {
 
         launchesAtLogin = launchAtLogin.isEnabled
         if launchAtLogin.requiresApproval {
-            message = String(localized: "Approve Untitled in System Settings › General › Login Items.")
+            message = String(localized: "Approve retrace in System Settings › General › Login Items.")
         }
     }
 }

@@ -5,7 +5,7 @@ import OSLog
 /// Every snippet Capture Text copied, newest first, kept between launches up to the
 /// number set in Settings › Advanced.
 ///
-/// It's stored as JSON in Untitled's Application Support folder, never in the save folder:
+/// It's stored as JSON in retrace's Application Support folder, never in the save folder:
 /// copied text can be private, and it isn't a file anyone chose to save.
 @Observable
 final class TextHistory {

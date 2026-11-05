@@ -360,7 +360,7 @@ private extension SettingsStore {
         static let imageQuality = 0.85
         static let stripsMetadata = true
         static let stripsVideoMetadata = true
-        static let filenameTemplate = "Untitled {date} at {time}"
+        static let filenameTemplate = "retrace {date} at {time}"
         static let videoCodec = VideoCodec.hevc
         static let framesPerSecond = 60
         static let recordsSystemAudio = true

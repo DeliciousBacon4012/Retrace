@@ -73,7 +73,7 @@ struct MenuBarContent: View {
         }
 
         Section {
-            Button("Open Untitled", systemImage: "macwindow") {
+            Button("Open retrace", systemImage: "macwindow") {
                 MainWindowRouter.shared.show(using: openWindow)
             }
             Button("Settings…", systemImage: "gearshape") {
@@ -82,7 +82,7 @@ struct MenuBarContent: View {
             .keyboardShortcut(",")
         }
 
-        Button("Quit Untitled") {
+        Button("Quit retrace") {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
@@ -125,13 +125,17 @@ struct MenuBarLabel: View {
         if recording.isRecording, !settings.showsRecordingTimeInMenuBar {
             Image(systemName: "record.circle.fill")
                 .symbolRenderingMode(.multicolor)
-                .accessibilityLabel("Untitled, recording")
+                .accessibilityLabel("retrace, recording")
         } else if replay.buffer.isOn {
             Image(systemName: "gobackward")
-                .accessibilityLabel("Untitled, replay buffer on")
+                .accessibilityLabel("retrace, replay buffer on")
         } else {
-            Image(systemName: "camera.aperture")
-                .accessibilityLabel("Untitled")
+            Image("retrace_menubar_template")
+                .renderingMode(.template)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 14, height: 18)
+                .accessibilityLabel("retrace")
         }
     }
 }

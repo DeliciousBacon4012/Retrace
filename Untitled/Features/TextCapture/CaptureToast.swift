@@ -104,7 +104,7 @@ final class CaptureToastController {
             }]
         ))
         if !shown {
-            ErrorPresenter.present(CaptureError.permissionDenied, recovery: String(localized: "Turn on Untitled in System Settings › Privacy & Security › Screen & System Audio Recording, then \(retry.lowercased())"))
+            ErrorPresenter.present(CaptureError.permissionDenied, recovery: String(localized: "Turn on retrace in System Settings › Privacy & Security › Screen & System Audio Recording, then \(retry.lowercased())"))
         }
     }
 

@@ -170,7 +170,7 @@ nonisolated enum ImageEncoder {
             formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
             let date = formatter.string(from: .now)
             properties[kCGImagePropertyTIFFDictionary] = [
-                kCGImagePropertyTIFFSoftware: "Untitled",
+                kCGImagePropertyTIFFSoftware: "retrace",
                 kCGImagePropertyTIFFDateTime: date,
             ]
             properties[kCGImagePropertyExifDictionary] = [

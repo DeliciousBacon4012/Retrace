@@ -97,7 +97,7 @@ final class RecordingCoordinator {
         isPreparing = true
         defer { isPreparing = false }
         if settings.recordsMicrophone, await !microphoneAllowed() {
-            ErrorPresenter.present(String(localized: "Untitled can't use the microphone."), recovery: String(localized: "Allow it in System Settings › Privacy & Security › Microphone, or turn off microphone audio in Settings › Recording."))
+            ErrorPresenter.present(String(localized: "retrace can't use the microphone."), recovery: String(localized: "Allow it in System Settings › Privacy & Security › Microphone, or turn off microphone audio in Settings › Recording."))
             return
         }
 

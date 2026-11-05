@@ -17,7 +17,7 @@ struct PermissionBanner: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Screen Recording Access Needed")
                         .font(.headline)
-                    Text("Turn on Untitled in Privacy & Security › Screen & System Audio Recording.")
+                    Text("Turn on retrace in Privacy & Security › Screen & System Audio Recording.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -48,7 +48,7 @@ struct PermissionBanner: View {
                 HStack(spacing: 6) {
                     Text("Already turned it on? Some Macs only apply it after a restart.")
                         .foregroundStyle(.secondary)
-                    Button("Restart Untitled") { model.restart() }
+                    Button("Restart retrace") { model.restart() }
                         .buttonStyle(.link)
                 }
                 .font(.callout)
@@ -60,7 +60,7 @@ struct PermissionBanner: View {
 
     private var details: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("If macOS offers to quit and reopen, Later is fine: Untitled notices on its own.")
+            Text("If macOS offers to quit and reopen, Later is fine: retrace notices on its own.")
             if !CodeSigningInfo.hasTeamIdentifier {
                 Text("This build is signed only to run locally, so macOS forgets the permission each time it's rebuilt. In Xcode, choose a Team under Signing & Capabilities.")
                     .foregroundStyle(.secondary)

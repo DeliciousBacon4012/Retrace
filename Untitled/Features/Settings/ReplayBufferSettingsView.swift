@@ -17,7 +17,7 @@ struct ReplayBufferSettingsView: View {
                     set: { dependencies.replay.setEnabled($0) }
                 ))
             } footer: {
-                Text("Untitled quietly records your screen at standard resolution and keeps only the last stretch, in a temporary folder that's cleared when it stops. Save it from the menu bar, the Capture page, or its shortcut.")
+                Text("retrace quietly records your screen at standard resolution and keeps only the last stretch, in a temporary folder that's cleared when it stops. Save it from the menu bar, the Capture page, or its shortcut.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

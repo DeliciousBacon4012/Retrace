@@ -46,7 +46,7 @@ struct AppCommands: Commands {
                 openWindow(id: WindowID.roadmap)
             }
             if let url = URL(string: "https://github.com/DeliciousBacon4012/untitled-mac") {
-                Link("Untitled on GitHub", destination: url)
+                Link("retrace on GitHub", destination: url)
             }
         }
     }

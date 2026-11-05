@@ -59,6 +59,6 @@ nonisolated enum FileNameTemplate {
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return filled.isEmpty ? "Untitled" : filled
+        return filled.isEmpty ? "retrace" : filled
     }
 }

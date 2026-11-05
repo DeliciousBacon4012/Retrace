@@ -11,7 +11,7 @@ nonisolated enum CaptureError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .permissionDenied:
-            String(localized: "Untitled doesn't have Screen Recording access yet.")
+            String(localized: "retrace doesn't have Screen Recording access yet.")
         case .displayNotFound:
             String(localized: "That display is no longer connected.")
         case .windowNotFound:
