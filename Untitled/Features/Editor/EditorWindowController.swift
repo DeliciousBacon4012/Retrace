@@ -257,11 +257,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
 
     private func renderOrWarn() -> CGImage? {
         editorDocument.finishTextEditing()
-        guard let image = AnnotationRenderer.export(editorDocument) else {
-            ErrorPresenter.present(String(localized: "The edited image couldn't be created."), recovery: String(localized: "Try again, or undo the last change."))
+        do {
+            return try AnnotationRenderer.export(editorDocument)
+        } catch {
+            let localized = error as? LocalizedError
+            let message = localized?.errorDescription ?? String(localized: "The edited image couldn't be created.")
+            let recovery = localized?.recoverySuggestion ?? String(localized: "Try again, or undo the last change.")
+            Log.capture.error("Edited image rendering failed: \(error.localizedDescription, privacy: .public)")
+            ErrorPresenter.present(message, recovery: recovery)
             return nil
         }
-        return image
     }
 
     // MARK: NSWindowDelegate

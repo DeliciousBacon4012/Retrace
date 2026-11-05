@@ -6,6 +6,34 @@ enum AnnotationRenderer {
     /// Supplies the blurred or pixelated copy of the screenshot for a redaction at a strength.
     typealias Redactor = (Redaction, Double) -> CGImage?
 
+    enum ExportFailure: LocalizedError, Equatable {
+        case redactionUnavailable(Redaction)
+        case imageRenderingFailed
+        case cropFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .redactionUnavailable(let redaction):
+                String(localized: "The \(redaction.title) redaction couldn't be rendered.")
+            case .imageRenderingFailed:
+                String(localized: "The edited image couldn't be created.")
+            case .cropFailed:
+                String(localized: "The crop couldn't be applied.")
+            }
+        }
+
+        var recoverySuggestion: String? {
+            switch self {
+            case .redactionUnavailable:
+                String(localized: "Nothing was copied or saved. Try again, or use Solid redaction.")
+            case .imageRenderingFailed:
+                String(localized: "Try again, or undo the last change.")
+            case .cropFailed:
+                String(localized: "Adjust the crop and try again.")
+            }
+        }
+    }
+
     static func draw(image: CGImage, annotations: [Annotation], redacted: Redactor, in context: inout GraphicsContext) {
         let canvas = CGRect(x: 0, y: 0, width: image.width, height: image.height)
         context.draw(Image(decorative: image, scale: 1), in: canvas)
@@ -338,7 +366,13 @@ enum AnnotationRenderer {
             opaque.opacity = 1
             layer.fill(path, with: .color(opaque.swiftUIColor))
         case .blur, .pixelate:
-            guard let image = redacted(style.redaction, style.strength) else { return }
+            guard let image = redacted(style.redaction, style.strength) else {
+                // Keep private pixels covered while the background filter is pending or failed.
+                var opaque = style.color
+                opaque.opacity = 1
+                layer.fill(path, with: .color(opaque.swiftUIColor))
+                return
+            }
             var clipped = layer
             clipped.clip(to: path)
             clipped.draw(Image(decorative: image, scale: 1), in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
@@ -392,23 +426,37 @@ enum AnnotationRenderer {
     // MARK: Export
 
     /// Renders the finished image at full resolution, cropped if a crop is set.
-    static func export(_ document: EditorDocument) -> CGImage? {
+    static func export(_ document: EditorDocument) throws -> CGImage {
+        try export(document, redacted: { document.redactedImageNow($0, strength: $1) })
+    }
+
+    /// The redaction provider is injectable so a failed image filter can be verified without
+    /// depending on a particular machine's Core Image or GPU state.
+    static func export(_ document: EditorDocument, redacted: Redactor) throws -> CGImage {
         let size = document.imageSize
         let annotations = document.annotations
         let image = document.image
 
-        // Make every redaction layer up front, so rendering only reads values.
+        // Every blur or mosaic mark must have an image layer before rendering can continue.
         var layers: [String: CGImage] = [:]
-        var needed: [(Redaction, Double)] = annotations
+        let neededRedactions = annotations
             .filter { $0.tool == .redact && $0.style.redaction != .solid }
             .map { ($0.style.redaction, $0.style.strength) }
-        // Only the topmost spotlight's blur is drawn; see `Spotlight`.
-        if let lead = annotations.last(where: { $0.tool == .spotlight }), lead.style.blur > 0.01 {
-            needed.append((.blur, lead.style.blur))
-        }
-        for (redaction, strength) in needed {
+        for (redaction, strength) in neededRedactions {
             let key = "\(redaction.rawValue)-\(strength)"
-            if layers[key] == nil, let layer = document.redactedImageNow(redaction, strength: strength) {
+            if layers[key] == nil {
+                guard let layer = redacted(redaction, strength) else {
+                    throw ExportFailure.redactionUnavailable(redaction)
+                }
+                layers[key] = layer
+            }
+        }
+
+        // A spotlight is a visual treatment rather than a privacy redaction. Keep its existing
+        // best-effort blur behavior if that optional layer isn't available.
+        if let lead = annotations.last(where: { $0.tool == .spotlight }), lead.style.blur > 0.01 {
+            let key = "blur-\(lead.style.blur)"
+            if layers[key] == nil, let layer = redacted(.blur, lead.style.blur) {
                 layers[key] = layer
             }
         }
@@ -421,9 +469,10 @@ enum AnnotationRenderer {
         )
         renderer.scale = 1
         renderer.isOpaque = false
-        guard let rendered = renderer.cgImage else { return nil }
+        guard let rendered = renderer.cgImage else { throw ExportFailure.imageRenderingFailed }
         guard let crop = document.cropRect?.integral, crop.width >= 1, crop.height >= 1 else { return rendered }
-        return rendered.cropping(to: crop) ?? rendered
+        guard let cropped = rendered.cropping(to: crop) else { throw ExportFailure.cropFailed }
+        return cropped
     }
 }
 
