@@ -6,11 +6,13 @@ struct EditorSettingsView: View {
     @Environment(AppDependencies.self) private var dependencies
 
     @AppStorage(EditorPalette.storageKey) private var palette: EditorPalette = .pastel
+    @AppStorage(EditorPalette.customColorsStorageKey) private var customPaletteData = EditorPalette.defaultCustomColorsData
     @AppStorage(EditorDocument.highlighterSnapsKey) private var snapsToText = true
     @AppStorage("editorShowsInspector") private var showsInspector = true
     @AppStorage(InspectorPlacement.storageKey) private var inspectorPlacement: InspectorPlacement = .right
     @AppStorage(EditorToolbarPosition.storageKey) private var toolbarPosition: EditorToolbarPosition = .top
     @State private var confirmsReset = false
+    @State private var editsCustomPalette = false
 
     var body: some View {
         @Bindable var settings = settings
@@ -37,11 +39,16 @@ struct EditorSettingsView: View {
                     ForEach(EditorPalette.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                PaletteStrip(palette: palette)
+                PaletteStrip(palette: palette, customColors: EditorPalette.customColors(from: customPaletteData))
+                if palette == .custom {
+                    Button("Edit Custom Palette…", systemImage: "slider.horizontal.3") {
+                        editsCustomPalette = true
+                    }
+                }
             } header: {
                 Text("Colors")
             } footer: {
-                Text("Number keys 1 to 9 and 0 pick the first ten colors. The custom color picker is always there too.")
+                Text("Number keys 1 to 9 and 0 pick the first ten colors. A custom color picker is always available; choose Custom to edit a saved palette.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -72,16 +79,23 @@ struct EditorSettingsView: View {
         } message: {
             Text("Marks you've already drawn keep their look.")
         }
+        .sheet(isPresented: $editsCustomPalette) {
+            EditorPaletteEditor(encodedColors: $customPaletteData)
+        }
     }
 }
 
 /// The palette's swatches in a row, so the choice is visible before opening the editor.
 private struct PaletteStrip: View {
     let palette: EditorPalette
+    let customColors: [RGBAColor]
+
+    private var colors: [RGBAColor] { palette.colors(custom: customColors) }
+    private var names: [String] { palette.names }
 
     var body: some View {
         HStack(spacing: 6) {
-            ForEach(Array(zip(palette.colors, palette.names).enumerated()), id: \.offset) { _, swatch in
+            ForEach(Array(zip(colors, names).enumerated()), id: \.offset) { _, swatch in
                 Circle()
                     .fill(swatch.0.swiftUIColor)
                     .overlay { Circle().strokeBorder(.separator, lineWidth: 1) }
@@ -91,7 +105,7 @@ private struct PaletteStrip: View {
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(palette.names.formatted(.list(type: .and)))
+        .accessibilityLabel(names.formatted(.list(type: .and)))
     }
 }
 

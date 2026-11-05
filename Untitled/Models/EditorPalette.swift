@@ -5,9 +5,17 @@ import Foundation
 nonisolated enum EditorPalette: String, CaseIterable, Identifiable, Sendable {
     case pastel
     case vivid
+    case custom
 
     /// The preference that stores the choice.
     static let storageKey = "editorPalette"
+    static let customColorsStorageKey = "editorCustomPaletteColors"
+    static let customColorCount = 12
+
+    static var defaultCustomColors: [RGBAColor] { pastel.colors }
+    static let defaultCustomColorsData: Data = {
+        (try? JSONEncoder().encode(defaultCustomColors)) ?? Data()
+    }()
 
     var id: Self { self }
 
@@ -15,6 +23,7 @@ nonisolated enum EditorPalette: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .pastel: String(localized: "Pastel")
         case .vivid: String(localized: "Vivid")
+        case .custom: String(localized: "Custom")
         }
     }
 
@@ -26,7 +35,13 @@ nonisolated enum EditorPalette: String, CaseIterable, Identifiable, Sendable {
         case .vivid:
             [.vividRed, .vividOrange, .vividYellow, .vividGreen, .vividMint, .vividCyan,
              .vividBlue, .vividIndigo, .vividPurple, .vividPink, .white, .black]
+        case .custom:
+            Self.defaultCustomColors
         }
+    }
+
+    func colors(custom: [RGBAColor]) -> [RGBAColor] {
+        self == .custom ? Self.validatedCustomColors(custom) : colors
     }
 
     /// Names for help tags and VoiceOver, in the same order as `colors`.
@@ -42,6 +57,8 @@ nonisolated enum EditorPalette: String, CaseIterable, Identifiable, Sendable {
              String(localized: "Green"), String(localized: "Mint"), String(localized: "Cyan"),
              String(localized: "Blue"), String(localized: "Indigo"), String(localized: "Purple"),
              String(localized: "Pink"), String(localized: "White"), String(localized: "Black")]
+        case .custom:
+            (1...Self.customColorCount).map { String(localized: "Color \($0)") }
         }
     }
 
@@ -50,6 +67,30 @@ nonisolated enum EditorPalette: String, CaseIterable, Identifiable, Sendable {
         guard (0...9).contains(digit) else { return nil }
         let index = digit == 0 ? 9 : digit - 1
         return colors[index]
+    }
+
+    func color(forDigit digit: Int, customColors: [RGBAColor]) -> RGBAColor? {
+        guard (0...9).contains(digit) else { return nil }
+        let index = digit == 0 ? 9 : digit - 1
+        return colors(custom: customColors)[index]
+    }
+
+    static func customColors(from data: Data?) -> [RGBAColor] {
+        guard let data,
+              let colors = try? JSONDecoder().decode([RGBAColor].self, from: data) else {
+            return defaultCustomColors
+        }
+        return validatedCustomColors(colors)
+    }
+
+    private static func validatedCustomColors(_ colors: [RGBAColor]) -> [RGBAColor] {
+        guard colors.count == customColorCount,
+              colors.allSatisfy({ color in
+                  [color.red, color.green, color.blue, color.opacity].allSatisfy { $0.isFinite && (0...1).contains($0) }
+              }) else {
+            return defaultCustomColors
+        }
+        return colors
     }
 
     /// The key that picks the swatch at `index`, if it has one.

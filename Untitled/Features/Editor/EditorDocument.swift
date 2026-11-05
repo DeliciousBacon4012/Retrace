@@ -13,6 +13,8 @@ final class EditorDocument {
     /// Pixels per point of the original capture, used to size new marks sensibly.
     let scale: CGFloat
     private(set) var fileURL: URL?
+    /// Preferred destination inherited from an unsaved capture, if the person chose one.
+    let preferredSaveFolderURL: URL?
 
     private(set) var annotations: [Annotation] = []
 
@@ -30,6 +32,7 @@ final class EditorDocument {
     /// More highlights drawn by the same Shift-drag, one per extra line of text.
     private(set) var extraDrafts: [Annotation] = []
     private(set) var hasUnsavedChanges = false
+    private(set) var isSaving = false
 
     var tool: EditorTool = .arrow {
         didSet {
@@ -240,9 +243,17 @@ final class EditorDocument {
     @ObservationIgnored private var pendingRedactions: Set<String> = []
     /// Bumped when a background redaction layer is ready, so the canvas redraws with it.
     private var redactionVersion = 0
+    /// NotificationCenter retains block observers until they are explicitly removed.
+    @ObservationIgnored private var undoObservers: [NSObjectProtocol] = []
     /// Saves tool styles shortly after the last change, not on every slider tick.
     @ObservationIgnored private var styleSaveTask: Task<Void, Never>?
     @ObservationIgnored private let styleStore: EditorStyleStore
+
+    isolated deinit {
+        for observer in undoObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
 
     private struct Snapshot: Equatable {
         let annotations: [Annotation]
@@ -251,18 +262,19 @@ final class EditorDocument {
 
     private enum Gesture {
         case drawing
-        case moving(last: CGPoint)
+        case moving(last: CGPoint, indexes: [Int])
         case marquee(origin: CGPoint, base: Set<Annotation.ID>)
-        case handle(MarkHandle)
+        case handle(MarkHandle, index: Int, id: Annotation.ID)
         case cropping(origin: CGPoint)
         case movingCrop(last: CGPoint)
         case cropHandle(MarkHandle)
     }
 
-    init(image: CGImage, scale: CGFloat, fileURL: URL?, annotations: [Annotation] = [], styleStore: EditorStyleStore = EditorStyleStore()) {
+    init(image: CGImage, scale: CGFloat, fileURL: URL?, preferredSaveFolderURL: URL? = nil, annotations: [Annotation] = [], styleStore: EditorStyleStore = EditorStyleStore()) {
         self.image = image
         self.scale = max(scale, 1)
         self.fileURL = fileURL
+        self.preferredSaveFolderURL = preferredSaveFolderURL
         self.annotations = annotations
         self.styleStore = styleStore
         toolStyles = styleStore.load(scale: max(scale, 1))
@@ -274,9 +286,10 @@ final class EditorDocument {
     private func observeUndoManager() {
         let names: [Notification.Name] = [.NSUndoManagerDidUndoChange, .NSUndoManagerDidRedoChange, .NSUndoManagerDidCloseUndoGroup]
         for name in names {
-            NotificationCenter.default.addObserver(forName: name, object: undoManager, queue: .main) { [weak self] _ in
+            let observer = NotificationCenter.default.addObserver(forName: name, object: undoManager, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.historyVersion += 1 }
             }
+            undoObservers.append(observer)
         }
     }
 
@@ -348,15 +361,18 @@ final class EditorDocument {
         }
 
         // A handle on the selected mark wins over everything else.
-        if let mark = selected, let handle = MarkHandle.hit(at: point, on: mark, tolerance: tolerance * 1.5) {
-            gesture = .handle(handle)
+        if selectedIDs.count == 1,
+           let id = selectedIDs.first,
+           let index = annotations.firstIndex(where: { $0.id == id }),
+           let handle = MarkHandle.hit(at: point, on: annotations[index], tolerance: tolerance * 1.5) {
+            gesture = .handle(handle, index: index, id: id)
             return
         }
 
         if let hit = annotations.last(where: { $0.contains(point, tolerance: tolerance) }) {
             if extending {
                 setSelection(selectedIDs.symmetricDifference([hit.id]))
-                gesture = selectedIDs.contains(hit.id) ? .moving(last: point) : nil
+                gesture = selectedIDs.contains(hit.id) ? movingGesture(at: point) : nil
                 return
             }
             if hit.tool == .text, clickCount >= 2 || tool == .text {
@@ -368,14 +384,14 @@ final class EditorDocument {
                 select(hit.id)
             }
             pressedMark = hit.id
-            gesture = .moving(last: point)
+            gesture = movingGesture(at: point)
             return
         }
 
         // Several marks move together from anywhere inside their outlines.
         if selectedIDs.count > 1, !extending,
            selectedMarks.contains(where: { $0.bounds.insetBy(dx: -tolerance, dy: -tolerance).contains(point) }) {
-            gesture = .moving(last: point)
+            gesture = movingGesture(at: point)
             return
         }
 
@@ -405,7 +421,7 @@ final class EditorDocument {
             pushUndo(gestureSnapshot, named: String(localized: "Add Number"))
             withAnimation(.pop) { annotations.append(mark) }
             select(mark.id)
-            gesture = .moving(last: point)
+            gesture = movingGesture(at: point)
             gestureSnapshot = nil
         default:
             if tool == .highlighter {
@@ -476,9 +492,9 @@ final class EditorDocument {
             }
             draft = mark
 
-        case .moving(let last):
-            moveSelection(by: CGSize(width: point.x - last.x, height: point.y - last.y))
-            gesture = .moving(last: point)
+        case .moving(let last, let indexes):
+            moveSelection(by: CGSize(width: point.x - last.x, height: point.y - last.y), at: indexes)
+            gesture = .moving(last: point, indexes: indexes)
             hasUnsavedChanges = true
 
         case .marquee(let origin, let base):
@@ -486,8 +502,11 @@ final class EditorDocument {
             marquee = area
             selectedIDs = base.union(annotations.filter { $0.bounds.intersects(area) }.map(\.id))
 
-        case .handle(let handle):
-            guard let index = selectedIndex else { return }
+        case .handle(let handle, let index, let id):
+            guard annotations.indices.contains(index), annotations[index].id == id else {
+                gesture = nil
+                return
+            }
             handle.drag(&annotations[index], to: point, constrained: constrained)
             hasUnsavedChanges = true
 
@@ -751,6 +770,16 @@ final class EditorDocument {
         historyVersion += 1
     }
 
+    func beginSaving() -> Bool {
+        guard !isSaving else { return false }
+        isSaving = true
+        return true
+    }
+
+    func finishSaving() {
+        isSaving = false
+    }
+
     func markSaved(to url: URL) {
         fileURL = url
         hasUnsavedChanges = false
@@ -895,10 +924,22 @@ final class EditorDocument {
     /// A crop around the whole image is saved as no crop, so undo never brings back a
     /// do-nothing crop outside the crop tool.
     private var snapshot: Snapshot { Snapshot(annotations: annotations, cropRect: normalizedCrop(cropRect)) }
-    private var selectedIndex: Int? { selected.flatMap { mark in annotations.firstIndex { $0.id == mark.id } } }
+    private var selectedAnnotationIndexes: [Int] {
+        annotations.indices.filter { selectedIDs.contains(annotations[$0].id) }
+    }
+
+    private func movingGesture(at point: CGPoint) -> Gesture {
+        .moving(last: point, indexes: selectedAnnotationIndexes)
+    }
 
     private func moveSelection(by offset: CGSize) {
         for index in annotations.indices where selectedIDs.contains(annotations[index].id) {
+            annotations[index].move(by: offset)
+        }
+    }
+
+    private func moveSelection(by offset: CGSize, at indexes: [Int]) {
+        for index in indexes where annotations.indices.contains(index) && selectedIDs.contains(annotations[index].id) {
             annotations[index].move(by: offset)
         }
     }

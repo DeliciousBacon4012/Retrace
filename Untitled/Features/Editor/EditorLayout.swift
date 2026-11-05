@@ -145,7 +145,7 @@ nonisolated enum EditorLayout {
 }
 
 /// The inspector in a window of its own: a standard utility panel that floats above the
-/// editor while Untitled is in front. Closing it docks the inspector again.
+/// editor while retrace is in front. Closing it docks the inspector again.
 final class InspectorWindowController: NSObject, NSWindowDelegate {
     private var panel: NSPanel?
     /// Called when the person closes the panel.

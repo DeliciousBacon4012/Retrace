@@ -19,6 +19,7 @@ struct EditorView: View {
     @State private var contentSize: CGSize = .zero
     @State private var inspectorWindow = InspectorWindowController()
     @AppStorage(EditorPalette.storageKey) private var palette: EditorPalette = .pastel
+    @AppStorage(EditorPalette.customColorsStorageKey) private var customPaletteData = EditorPalette.defaultCustomColorsData
     @State private var exportItem: ExportItem?
     @State private var notice: EditorNotice?
     @State private var isReadingText = false
@@ -63,6 +64,18 @@ struct EditorView: View {
         .coordinateSpace(.named(EditorLayout.space))
         .onGeometryChange(for: CGSize.self) { $0.size } action: { contentSize = $0 }
         .background(Color(nsColor: .underPageBackgroundColor))
+        .disabled(document.isSaving)
+        .overlay(alignment: .topTrailing) {
+            if document.isSaving {
+                ProgressView("Saving…")
+                    .controlSize(.small)
+                    .padding(.horizontal, Design.spacingM)
+                    .padding(.vertical, Design.spacingS)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(Design.spacingL)
+                    .accessibilityLabel("Saving screenshot")
+            }
+        }
         .animation(.panel, value: showsInspector)
         .animation(.panel, value: inspectorPlacement)
         .animation(.panel, value: toolbarPosition)
@@ -486,7 +499,8 @@ struct EditorView: View {
             document.tool = tool
             return .handled
         }
-        if let digit = Int(press.characters), let color = palette.color(forDigit: digit) {
+        if let digit = Int(press.characters),
+           let color = palette.color(forDigit: digit, customColors: EditorPalette.customColors(from: customPaletteData)) {
             document.style.color = color
             return .handled
         }
@@ -533,30 +547,16 @@ private struct EditorNoticeView: View {
     }
 }
 
-/// Zoom controls and the image size, floating on glass at the bottom of the canvas.
+/// Native zoom controls and image dimensions, grouped on a single glass surface.
 private struct EditorStatusBar: View {
     let document: EditorDocument
 
     var body: some View {
-        let fitFactor = document.fitFactor
-        let zoom = document.currentZoom(fitFactor: fitFactor)
         let size = document.cropRect?.size ?? document.imageSize
 
         GlassEffectContainer(spacing: Design.spacingS) {
             HStack(spacing: Design.spacingS) {
-                HStack(spacing: 2) {
-                    Button("Zoom Out", systemImage: "minus") { document.zoomOut(fitFactor: fitFactor) }
-                        .help("Zoom out (⌘−)")
-                    ZoomScrubber(document: document)
-                    Button("Zoom In", systemImage: "plus") { document.zoomIn(fitFactor: fitFactor) }
-                        .help("Zoom in (⌘+)")
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .font(.system(.callout, design: .monospaced).weight(.medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .glassEffect(.regular.interactive(), in: .capsule)
+                ZoomControl(document: document)
 
                 Text(verbatim: "\(Int(size.width)) × \(Int(size.height)) px")
                     .font(.system(.caption, design: .monospaced).weight(.medium))
@@ -583,49 +583,88 @@ private struct EditorStatusBar: View {
         }
         .animation(.response, value: document.tool == .crop)
         .animation(.response, value: document.cropRect == nil)
-        .animation(.response, value: zoom)
     }
 }
 
-/// The zoom percentage, which is also a control: press and drag right or up to zoom in,
-/// left or down to zoom out, holding ⌥ for finer steps. It catches gently at Fit, 50 %,
-/// 100 % and 200 % with a haptic tick. Click to fit, double-click for 100 %, or scroll
-/// over it to zoom.
-private struct ZoomScrubber: View {
+/// Maps a drag to one signed zoom axis. Horizontal movement wins ties, so diagonal gestures
+/// never cancel out and the compact readout stays predictable to scrub.
+enum ZoomScrub {
+    static func distance(for translation: CGSize) -> CGFloat {
+        let vertical = -translation.height
+        return abs(translation.width) >= abs(vertical) ? translation.width : vertical
+    }
+}
+
+/// A compact zoom readout you can scrub directly. Click it to reveal a native slider.
+private struct ZoomControl: View {
     let document: EditorDocument
 
-    private var fitFactor: CGFloat { document.fitFactor }
-
-    /// Where the current drag is measured from. It moves when ⌥ is pressed or released
-    /// mid-drag, so changing speed never makes the zoom jump.
-    @State private var anchor: (zoom: CGFloat, distance: CGFloat, isFine: Bool)?
-    /// The stop the zoom is resting on, so the haptic tick plays once per stop.
+    @State private var anchor: ZoomAnchor?
     @State private var restingStop: CGFloat?
+    @State private var showsSlider = false
+    @State private var dismissalTask: Task<Void, Never>?
 
-    /// Points of drag that double or halve the zoom.
+    private static let maximumZoom: CGFloat = 8
     private static let pointsPerDoubling: CGFloat = 140
     private static let fineSlowdown: CGFloat = 4
-    /// How close, as a power of two, counts as on a stop. About 3 %.
     private static let catchRange: CGFloat = 0.04
 
-    var body: some View {
-        let zoom = document.currentZoom(fitFactor: fitFactor)
+    private struct ZoomAnchor {
+        let zoom: CGFloat
+        let distance: CGFloat
+        let isFine: Bool
+    }
 
-        Text(zoom, format: .percent.precision(.fractionLength(0)))
-            .monospacedDigit()
-            .frame(minWidth: 46)
-            .contentTransition(.numericText(value: zoom))
-            .padding(.vertical, 4)
-            .contentShape(.rect)
+    private var fitFactor: CGFloat { document.fitFactor }
+    private var fitZoom: CGFloat { fitFactor * document.scale }
+    private var zoom: CGFloat { document.currentZoom(fitFactor: fitFactor) }
+    private var percentage: Int { Int((zoom * 100).rounded()) }
+
+    /// Log spacing gives each doubling equal track distance without making low zoom unusable.
+    private var sliderRange: ClosedRange<Double> {
+        let minimum = max(0.001, min(0.1, Double(fitZoom)))
+        return log(minimum)...log(Double(Self.maximumZoom))
+    }
+
+    private var sliderValue: Binding<Double> {
+        Binding {
+            log(min(max(Double(zoom), exp(sliderRange.lowerBound)), Double(Self.maximumZoom)))
+        } set: { value in
+            set(CGFloat(exp(value)))
+        }
+    }
+
+    var body: some View {
+        let zoom = zoom
+        let percentage = percentage
+
+        Button(action: revealSlider) {
+            Text(Double(zoom), format: .percent.precision(.fractionLength(0)))
+                .font(.system(.callout, design: .monospaced).weight(.medium))
+                .monospacedDigit()
+                .frame(minWidth: 48)
+                .contentTransition(.numericText(value: Double(percentage)))
+                .animation(.snappy(duration: 0.12), value: percentage)
+                .contentShape(.capsule)
+        }
+            .buttonStyle(.glass)
             .pointerStyle(.columnResize)
             .onHover { document.isPointerOverZoomControl = $0 }
-            .onDisappear { document.isPointerOverZoomControl = false }
-            .gesture(drag.exclusively(before: taps))
+            .onDisappear {
+                document.isPointerOverZoomControl = false
+                dismissalTask?.cancel()
+            }
+            .simultaneousGesture(drag)
             .background { ScrollWheelCatcher { scroll($0) } }
-            .help("Drag to zoom. Click to fit (⌘9), double-click for 100 % (⌘0).")
-            .accessibilityElement()
+            // Let AppKit/SwiftUI choose the available edge so the control stays onscreen
+            // when the editor window is short or positioned near a display edge.
+            .popover(isPresented: $showsSlider) {
+                sliderPopover
+            }
+            .help("Drag to zoom. Click for the slider; hold Option while dragging for finer control.")
             .accessibilityLabel("Zoom")
-            .accessibilityValue(Text(zoom, format: .percent.precision(.fractionLength(0))))
+            .accessibilityValue(Text(Double(zoom), format: .percent.precision(.fractionLength(0))))
+            .accessibilityHint("Drag to adjust. Click to show the slider and presets.")
             .accessibilityAdjustableAction { direction in
                 switch direction {
                 case .increment: document.zoomIn(fitFactor: fitFactor)
@@ -635,23 +674,65 @@ private struct ZoomScrubber: View {
             }
     }
 
-    private var taps: some Gesture {
-        TapGesture(count: 2)
-            .onEnded { document.zoomToActualSize() }
-            .exclusively(before: TapGesture().onEnded { document.zoomToFit() })
+    private var sliderPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Zoom")
+                    .font(.headline)
+                Spacer()
+                Text(Double(zoom), format: .percent.precision(.fractionLength(0)))
+                    .font(.system(.callout, design: .monospaced).weight(.medium))
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(percentage)))
+                    .animation(.snappy(duration: 0.12), value: percentage)
+                    .accessibilityLabel("Zoom")
+            }
+
+            Slider(
+                value: sliderValue,
+                in: sliderRange,
+                onEditingChanged: { isEditing in
+                    if isEditing {
+                        dismissalTask?.cancel()
+                    } else {
+                        scheduleDismissal()
+                    }
+                }
+            ) {
+                Text("Zoom")
+            }
+            .labelsHidden()
+            .accessibilityLabel("Zoom")
+            .accessibilityValue(Text(Double(zoom), format: .percent.precision(.fractionLength(0))))
+
+            HStack {
+                Button("Fit") {
+                    document.zoomToFit()
+                    scheduleDismissal()
+                }
+                Button("100%") {
+                    document.zoomToActualSize()
+                    scheduleDismissal()
+                }
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(14)
+        .frame(width: 220)
     }
 
     private var drag: some Gesture {
         DragGesture(minimumDistance: 3)
             .onChanged { value in
-                // Right and up zoom in; SwiftUI measures down as positive.
-                let distance = value.translation.width - value.translation.height
+                let distance = ZoomScrub.distance(for: value.translation)
                 let isFine = NSEvent.modifierFlags.contains(.option)
                 let current = document.currentZoom(fitFactor: fitFactor)
                 if anchor == nil {
-                    anchor = (current, distance, isFine)
+                    // Gesture updates can begin after the pointer has already moved. Measure
+                    // from the press origin so the first update contributes to the scrub.
+                    anchor = ZoomAnchor(zoom: current, distance: 0, isFine: isFine)
                 } else if anchor?.isFine != isFine {
-                    anchor = (current, distance, isFine)
+                    anchor = ZoomAnchor(zoom: current, distance: distance, isFine: isFine)
                 }
                 guard let anchor else { return }
                 let perDoubling = Self.pointsPerDoubling * (isFine ? Self.fineSlowdown : 1)
@@ -660,41 +741,66 @@ private struct ZoomScrubber: View {
             .onEnded { _ in
                 anchor = nil
                 restingStop = nil
+                revealSlider()
             }
     }
 
-    /// Scrolling over the number zooms, like dragging does. Trackpads send many small
-    /// steps and mouse wheels a few large ones, so each is scaled to feel the same.
     private func scroll(_ event: NSEvent) {
         let step = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 120 : event.scrollingDeltaY / 8
         let direction: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
         set(document.currentZoom(fitFactor: fitFactor) * pow(2, step * direction))
         restingStop = nil
+        revealSlider()
     }
 
-    /// Sets the zoom straight away, catching on a nearby stop. Fit stays "fit", so it keeps
-    /// fitting when the window is resized.
+    /// Snaps gently to Fit, 50%, 100%, and 200%; the haptic plays once per stop.
     private func set(_ proposed: CGFloat) {
-        let fit = fitFactor * document.scale
-        let clamped = min(max(proposed, 0.1), 8)
-        let stops = [fit, 0.5, 1, 2]
+        if fitZoom < 0.1, proposed <= fitZoom * 1.001 {
+            if restingStop != fitZoom {
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                restingStop = fitZoom
+            }
+            document.zoom = nil
+            document.pan = .zero
+            return
+        }
+
+        let clamped = min(max(proposed, 0.1), Self.maximumZoom)
+        let stops = [fitZoom, 0.5, 1, 2].filter { $0 >= 0.1 && $0 <= Self.maximumZoom }
         let stop = stops.min { abs(log2($0 / clamped)) < abs(log2($1 / clamped)) }
         if let stop, abs(log2(stop / clamped)) < Self.catchRange {
             if restingStop != stop {
                 NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
                 restingStop = stop
             }
-            document.zoom = stop == fit ? nil : stop
-            if stop == fit { document.pan = .zero }
+            document.zoom = stop == fitZoom ? nil : stop
+            if stop == fitZoom { document.pan = .zero }
         } else {
             restingStop = nil
             document.zoom = clamped
         }
     }
+
+    private func revealSlider() {
+        withAnimation(.snappy(duration: 0.18)) {
+            showsSlider = true
+        }
+        scheduleDismissal()
+    }
+
+    private func scheduleDismissal() {
+        dismissalTask?.cancel()
+        dismissalTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.8))
+            guard !Task.isCancelled else { return }
+            withAnimation(.snappy(duration: 0.18)) {
+                showsSlider = false
+            }
+        }
+    }
 }
 
-/// Passes scroll-wheel events over its area to `onScroll`, and lets every other event
-/// through to the views underneath, so clicks and drags still reach them.
+/// Passes scroll-wheel events over its area to onScroll, and lets other events through.
 private struct ScrollWheelCatcher: NSViewRepresentable {
     let onScroll: (NSEvent) -> Void
 

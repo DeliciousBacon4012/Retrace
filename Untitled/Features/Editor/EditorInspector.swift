@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Every setting for the selected mark, or for the next mark the current tool draws, in a
-/// grouped form of standard controls on a floating panel of system Liquid Glass.
+/// grouped set of standard controls on a floating panel of system Liquid Glass.
 /// Changes apply live and become the tool's style for next time.
 struct EditorInspector: View {
     /// How the inspector is framed.
@@ -17,9 +17,6 @@ struct EditorInspector: View {
     @Bindable var document: EditorDocument
     let chrome: Chrome
 
-    /// The height of the form's content, once measured.
-    @State private var contentHeight: CGFloat?
-
     nonisolated static let width: CGFloat = 280
     private static let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
     private static let gripHeight: CGFloat = 22
@@ -29,43 +26,49 @@ struct EditorInspector: View {
         case .panel(let grip, let maxHeight):
             VStack(spacing: 0) {
                 grip
-                form
-                    .frame(height: formHeight(fitting: maxHeight - Self.gripHeight))
+                InspectorPanelLayout(maxHeight: max(maxHeight - Self.gripHeight, 120)) {
+                    ViewThatFits(in: .vertical) {
+                        content
+                            .fixedSize(horizontal: false, vertical: true)
+                        ScrollView {
+                            content
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .scrollEdgeEffectStyle(.soft, for: .vertical)
+                        .contentMargins(.vertical, 12, for: .scrollIndicators)
+                    }
+                }
             }
             .frame(width: Self.width)
             .clipShape(Self.shape)
             .glassEffect(.regular, in: Self.shape)
-            .animation(.smooth(duration: 0.22), value: contentHeight)
+            .animation(.smooth(duration: 0.16), value: document.inspectedTool)
         case .window:
-            form
-                .frame(minWidth: Self.width, maxWidth: Self.width, maxHeight: .infinity)
+            ScrollView {
+                content
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(minWidth: Self.width, maxWidth: Self.width, maxHeight: .infinity)
+            .scrollEdgeEffectStyle(.soft, for: .vertical)
         }
     }
 
-    /// As tall as the content, so the panel never ends in empty glass, and scrolling only
-    /// when the content is taller than the room.
-    private func formHeight(fitting room: CGFloat) -> CGFloat {
-        let room = max(room, 120)
-        guard let contentHeight else { return room }
-        return min(contentHeight, room)
-    }
-
-    private var form: some View {
+    private var content: some View {
         let tool = document.inspectedTool
 
-        return Form {
-            Section {
+        return VStack(alignment: .leading, spacing: 14) {
+            InspectorGroup {
                 InspectorHeader(tool: tool, selectionCount: document.selectedIDs.count, isMixed: document.selectionIsMixed)
             }
 
             switch tool {
             case _ where document.selectionIsMixed:
-                Section {
+                InspectorGroup {
                     Text("These marks are different kinds. Select marks of one kind to change their style.")
                         .foregroundStyle(.secondary)
                 }
             case .select:
-                Section {
+                InspectorGroup {
                     Text("Click a mark to change it. Drag its handles to reshape it, or drag the mark to move it. Drag across marks, Shift-click, or press ⌘A to select several.")
                         .foregroundStyle(.secondary)
                 }
@@ -88,7 +91,7 @@ struct EditorInspector: View {
             }
 
             if tool.draws, !document.selectionIsMixed {
-                Section {
+                InspectorGroup {
                     Button("Reset to Default Style", systemImage: "arrow.counterclockwise") {
                         withAnimation(.response) { document.resetStyle() }
                     }
@@ -96,18 +99,79 @@ struct EditorInspector: View {
                 }
             }
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-        .scrollEdgeEffectStyle(.soft, for: .vertical)
-        // Keeps the scroller clear of the panel's rounded corners.
-        .contentMargins(.vertical, 12, for: .scrollIndicators)
-        .onScrollGeometryChange(for: CGFloat.self) { geometry in
-            geometry.contentSize.height + geometry.contentInsets.top + geometry.contentInsets.bottom
-        } action: { _, height in
-            contentHeight = height
-        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .controlSize(.small)
         .animation(.smooth(duration: 0.22), value: tool)
+    }
+}
+
+/// Measures the chosen content at its natural height first. Only if it exceeds the available
+/// room does the layout propose a height limit, letting ViewThatFits choose its scroll fallback.
+private struct InspectorPanelLayout: Layout {
+    let maxHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let subview = subviews.first else { return .zero }
+        let width = proposal.width ?? EditorInspector.width
+        let naturalSize = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+        guard naturalSize.height > maxHeight else {
+            return CGSize(width: width, height: naturalSize.height)
+        }
+
+        let scrollSize = subview.sizeThatFits(ProposedViewSize(width: width, height: maxHeight))
+        return CGSize(width: width, height: min(scrollSize.height, maxHeight))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let subview = subviews.first else { return }
+        let naturalSize = subview.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+        let height = min(naturalSize.height, maxHeight)
+        subview.place(
+            at: bounds.origin,
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: bounds.width, height: height)
+        )
+    }
+}
+
+/// A compact native control group sized to its contents inside the floating inspector.
+private struct InspectorGroup<Content: View, Footer: View>: View {
+    let title: LocalizedStringKey?
+    let content: Content
+    let footer: Footer
+
+    init(_ title: LocalizedStringKey? = nil, @ViewBuilder content: () -> Content) where Footer == EmptyView {
+        self.title = title
+        self.content = content()
+        footer = EmptyView()
+    }
+
+    init(
+        _ title: LocalizedStringKey? = nil,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder footer: () -> Footer
+    ) {
+        self.title = title
+        self.content = content()
+        self.footer = footer()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let title {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            content
+
+            footer
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -158,7 +222,7 @@ private struct VariantSection: View {
     var body: some View {
         switch tool {
         case .arrow:
-            Section {
+            InspectorGroup {
                 GlassSegmentedPicker("Type", selection: $document.style.route, options: ArrowRoute.allCases, name: \.title) { Image(systemName: $0.symbolName) }
                 Picker("Start", selection: $document.style.startHead) {
                     ForEach(ArrowHead.allCases) { Text($0.title).tag($0) }
@@ -174,21 +238,21 @@ private struct VariantSection: View {
                 .buttonStyle(.glass)
             }
         case .shape:
-            Section {
+            InspectorGroup {
                 GlassSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
                 GlassSegmentedPicker("Fill", selection: $document.style.fill, options: ShapeFill.allCases, name: \.title) { Text($0.title) }
             }
         case .redact:
-            Section {
+            InspectorGroup {
                 GlassSegmentedPicker("Type", selection: $document.style.redaction, options: Redaction.allCases, name: \.title) { Text($0.title) }
                 GlassSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
             }
         case .spotlight:
-            Section {
+            InspectorGroup {
                 GlassSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
             }
         case .text:
-            Section {
+            InspectorGroup {
                 GlassSegmentedPicker("Style", selection: $document.style.textStyle, options: TextStyle.allCases, name: \.title) { Text($0.title) }
                 Picker("Font", selection: $document.style.font) {
                     ForEach(TextFont.allCases) { Text($0.title).tag($0) }
@@ -198,7 +262,7 @@ private struct VariantSection: View {
                 }
             }
         case .counter:
-            Section {
+            InspectorGroup {
                 GlassSegmentedPicker("Style", selection: $document.style.counterStyle, options: CounterStyle.allCases, name: \.title) { Text($0.title) }
             }
         default:
@@ -212,27 +276,40 @@ private struct ColorSection: View {
     @Bindable var document: EditorDocument
     let tool: EditorTool
     @AppStorage(EditorPalette.storageKey) private var palette: EditorPalette = .pastel
+    @AppStorage(EditorPalette.customColorsStorageKey) private var customPaletteData = EditorPalette.defaultCustomColorsData
+    @State private var editsCustomPalette = false
 
     var body: some View {
-        if tool != .spotlight, tool != .redact || document.style.redaction == .solid {
-            Section("Color") {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 8) {
-                    ForEach(Array(zip(palette.colors, palette.names).enumerated()), id: \.offset) { index, swatch in
-                        Swatch(color: swatch.0, name: swatch.1, isSelected: swatch.0.sameHue(as: document.style.color)) {
-                            withAnimation(.response) { document.style.color = swatch.0 }
+        Group {
+            if tool != .spotlight, tool != .redact || document.style.redaction == .solid {
+                InspectorGroup("Color") {
+                    let customColors = EditorPalette.customColors(from: customPaletteData)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 8) {
+                        ForEach(Array(zip(palette.colors(custom: customColors), palette.names).enumerated()), id: \.offset) { index, swatch in
+                            Swatch(color: swatch.0, name: swatch.1, isSelected: swatch.0.sameHue(as: document.style.color)) {
+                                withAnimation(.response) { document.style.color = swatch.0 }
+                            }
+                            .help(helpText(name: swatch.1, index: index))
                         }
-                        .help(helpText(name: swatch.1, index: index))
+                    }
+                    .padding(.vertical, 2)
+                    ColorPicker("Custom", selection: customColor, supportsOpacity: false)
+                    Picker("Palette", selection: $palette) {
+                        ForEach(EditorPalette.allCases) { Text($0.title).tag($0) }
+                    }
+                    if palette == .custom {
+                        Button("Edit Custom Palette…", systemImage: "slider.horizontal.3") {
+                            editsCustomPalette = true
+                        }
+                    }
+                    if tool != .redact {
+                        ValueSlider("Opacity", value: $document.style.opacity, in: 0.1...1, format: .percent)
                     }
                 }
-                .padding(.vertical, 2)
-                ColorPicker("Custom", selection: customColor, supportsOpacity: false)
-                Picker("Palette", selection: $palette) {
-                    ForEach(EditorPalette.allCases) { Text($0.title).tag($0) }
-                }
-                if tool != .redact {
-                    ValueSlider("Opacity", value: $document.style.opacity, in: 0.1...1, format: .percent)
-                }
             }
+        }
+        .sheet(isPresented: $editsCustomPalette) {
+            EditorPaletteEditor(encodedColors: $customPaletteData)
         }
     }
 
@@ -291,14 +368,14 @@ private struct ToolSection: View {
     var body: some View {
         switch tool {
         case .arrow:
-            Section("Line") {
+            InspectorGroup("Line") {
                 ValueSlider("Thickness", value: points(\.lineWidth), in: 1...30, unit: "pt")
                 ValueSlider("Head Size", value: $document.style.headScale, in: 0.5...2.5, format: .percent)
                 Toggle("Tapered", isOn: $document.style.tapered)
                 Toggle("Dashed", isOn: $document.style.dashed)
             }
         case .shape:
-            Section("Border") {
+            InspectorGroup("Border") {
                 ValueSlider("Thickness", value: points(\.lineWidth), in: 0...30, unit: "pt")
                 if document.style.shape == .rectangle {
                     ValueSlider("Roundness", value: points(\.cornerRadius), in: 0...80, unit: "pt")
@@ -306,16 +383,14 @@ private struct ToolSection: View {
                 Toggle("Dashed", isOn: $document.style.dashed)
             }
         case .pen:
-            Section("Stroke") {
+            InspectorGroup("Stroke") {
                 ValueSlider("Thickness", value: points(\.lineWidth), in: 1...30, unit: "pt")
                 Toggle("Dashed", isOn: $document.style.dashed)
             }
         case .highlighter:
-            Section {
+            InspectorGroup("Stroke") {
                 ValueSlider("Thickness", value: points(\.lineWidth), in: 4...60, unit: "pt")
                 Toggle("Snap to text", isOn: $snapsToText)
-            } header: {
-                Text("Stroke")
             } footer: {
                 if snapsToText {
                     Text("Drag along a line of text to cover its words neatly. Hold Shift and drag a box to highlight every line inside it. Hold Option to draw freely.")
@@ -327,37 +402,33 @@ private struct ToolSection: View {
                 if snapsToText { document.prepareTextLines() }
             }
         case .text:
-            Section("Size") {
+            InspectorGroup("Size") {
                 ValueSlider("Size", value: points(\.fontSize), in: 8...120, unit: "pt")
             }
         case .counter:
-            Section("Size") {
+            InspectorGroup("Size") {
                 ValueSlider("Size", value: points(\.fontSize), in: 10...64, unit: "pt")
             }
         case .spotlight:
-            Section {
+            InspectorGroup("Everything Else") {
                 ValueSlider("Dim", value: $document.style.dim, in: 0...1, format: .percent)
                 ValueSlider("Fade", value: $document.style.fade, in: 0...1, format: .percent)
                 ValueSlider("Blur", value: $document.style.blur, in: 0...1, format: .percent)
                 if document.style.shape == .rectangle {
                     ValueSlider("Roundness", value: points(\.cornerRadius), in: 0...80, unit: "pt")
                 }
-            } header: {
-                Text("Everything Else")
             } footer: {
                 Text("Draw several spotlights to light up more than one area. The newest one sets how the rest of the image looks.")
             }
         case .redact:
             if document.style.redaction != .solid || document.style.shape == .rectangle {
-                Section {
+                InspectorGroup("Amount") {
                     if document.style.redaction != .solid {
                         ValueSlider("Strength", value: $document.style.strength, in: 0...1, format: .percent)
                     }
                     if document.style.shape == .rectangle {
                         ValueSlider("Roundness", value: points(\.cornerRadius), in: 0...80, unit: "pt")
                     }
-                } header: {
-                    Text("Amount")
                 } footer: {
                     if document.style.redaction != .solid {
                         Text("Blur and pixelate can sometimes be partly undone. Use Solid for passwords, numbers and anything private.")
@@ -380,7 +451,7 @@ private struct EffectsSection: View {
     @Bindable var document: EditorDocument
 
     var body: some View {
-        Section("Shadow") {
+        InspectorGroup("Shadow") {
             Toggle("Shadow", isOn: $document.style.shadow.animation(.response))
             if document.style.shadow {
                 ValueSlider("Softness", value: document.pointBinding(\.shadowRadius), in: 0...30, unit: "pt")
@@ -395,7 +466,7 @@ private struct CropSection: View {
     let document: EditorDocument
 
     var body: some View {
-        Section {
+        InspectorGroup("Crop") {
             Picker("Aspect Ratio", selection: Binding(get: { document.cropAspect }, set: { document.setCropAspect($0) })) {
                 Text(CropAspect.free.title).tag(CropAspect.free)
                 Text(CropAspect.original.title).tag(CropAspect.original)
@@ -410,8 +481,6 @@ private struct CropSection: View {
                 Button("Crop", systemImage: "checkmark") { document.commitCrop() }
                     .buttonStyle(.glassProminent)
             }
-        } header: {
-            Text("Crop")
         } footer: {
             Text("Drag the handles, move the box, or drag across the image to start over. A chosen ratio stays locked; in Free, hold Shift for a square. Press Return to crop, or Esc to cancel.")
         }
@@ -423,7 +492,7 @@ private struct ArrangeSection: View {
     let document: EditorDocument
 
     var body: some View {
-        Section("Arrange") {
+        InspectorGroup("Arrange") {
             GlassEffectContainer(spacing: 6) {
                 HStack(spacing: 6) {
                     Button("Duplicate", systemImage: "plus.square.on.square") { document.duplicateSelection() }
@@ -500,7 +569,7 @@ private struct AutoRedactSection: View {
     @State private var result: String?
 
     var body: some View {
-        Section {
+        InspectorGroup("Hide Automatically") {
             ForEach(SensitiveKind.allCases) { kind in
                 LabeledContent {
                     if running == kind {
@@ -514,8 +583,6 @@ private struct AutoRedactSection: View {
                     Label(kind.title, systemImage: kind.symbolName)
                 }
             }
-        } header: {
-            Text("Hide Automatically")
         } footer: {
             Text(result ?? String(localized: "Found on this Mac with Vision. Each area gets its own mark you can adjust or delete."))
                 .contentTransition(.opacity)
@@ -537,6 +604,55 @@ private struct AutoRedactSection: View {
             }
         } catch {
             result = error.localizedDescription
+        }
+    }
+}
+
+#Preview("Inspector fits content") {
+    EditorInspectorPreview.make(tool: .select, maxHeight: 620)
+        .frame(width: 340, height: 700)
+}
+
+#Preview("Inspector scrolls when needed") {
+    EditorInspectorPreview.make(tool: .arrow, maxHeight: 240)
+        .frame(width: 340, height: 320)
+}
+
+#Preview("Arrow inspector fits content") {
+    EditorInspectorPreview.make(tool: .arrow, maxHeight: 620)
+        .frame(width: 340, height: 700)
+}
+
+#Preview("Spotlight inspector fits content") {
+    EditorInspectorPreview.make(tool: .spotlight, maxHeight: 620)
+        .frame(width: 340, height: 700)
+}
+
+@MainActor
+private enum EditorInspectorPreview {
+    static func make(tool: EditorTool, maxHeight: CGFloat) -> some View {
+        let context = CGContext(
+            data: nil,
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        let document = EditorDocument(image: context.makeImage()!, scale: 1, fileURL: nil)
+        document.tool = tool
+
+        return ZStack(alignment: .top) {
+            Color(nsColor: .underPageBackgroundColor)
+            EditorInspector(
+                document: document,
+                chrome: .panel(
+                    grip: InspectorGrip(placement: .constant(.right), onDrag: { _ in }, onDrop: { _ in }),
+                    maxHeight: maxHeight
+                )
+            )
+            .padding(.top, 12)
         }
     }
 }

@@ -46,7 +46,12 @@ final class EditorPresenter {
     }
 
     func open(_ capture: CapturedImage) {
-        present(EditorDocument(image: capture.image, scale: capture.scale, fileURL: capture.fileURL))
+        present(EditorDocument(
+            image: capture.image,
+            scale: capture.scale,
+            fileURL: capture.fileURL,
+            preferredSaveFolderURL: capture.preferredSaveFolderURL
+        ))
     }
 
     /// Opens a saved image. Shows an alert if the file isn't a readable image.
@@ -134,7 +139,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
                 self?.clipboard.copy(text: text)
                 self?.textHistory?.add(text)
             },
-            exportFolder: settings.saveFolderURL,
+            exportFolder: document.preferredSaveFolderURL ?? settings.saveFolderURL,
             exportOptions: settings.exportOptions(for: document.scale),
             suggestedName: document.fileURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Screenshot")
         )
@@ -191,32 +196,42 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     // MARK: Actions
 
     func copyImage() {
-        guard let image = renderOrWarn() else { return }
+        guard !editorDocument.isSaving, let image = renderOrWarn() else { return }
         let size = NSSize(width: CGFloat(image.width) / editorDocument.scale, height: CGFloat(image.height) / editorDocument.scale)
         clipboard.copy(NSImage(cgImage: image, size: size))
     }
 
     /// Saves over the original file, or asks where to save if there isn't one.
-    @discardableResult
-    func save() -> Bool {
-        guard let url = editorDocument.fileURL ?? askForSaveLocation() else { return false }
-        return write(to: url)
+    func save() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            _ = await saveDocument()
+        }
     }
 
     func finish() {
-        guard editorDocument.hasUnsavedChanges || editorDocument.fileURL == nil else {
+        Task { @MainActor [weak self] in
+            guard let self, !editorDocument.isSaving else { return }
+            guard editorDocument.hasUnsavedChanges || editorDocument.fileURL == nil else {
+                copyImage()
+                close()
+                return
+            }
             copyImage()
-            close()
-            return
-        }
-        copyImage()
-        if save() {
-            close()
+            if await saveDocument() { close() }
         }
     }
 
-    private func write(to url: URL) -> Bool {
-        guard let image = renderOrWarn() else { return false }
+    private func saveDocument() async -> Bool {
+        guard !editorDocument.isSaving,
+              let url = editorDocument.fileURL ?? askForSaveLocation()
+        else { return false }
+        return await write(to: url)
+    }
+
+    private func write(to url: URL) async -> Bool {
+        guard !editorDocument.isSaving, let image = renderOrWarn(), editorDocument.beginSaving() else { return false }
+        defer { editorDocument.finishSaving() }
         let type = UTType(filenameExtension: url.pathExtension)
         var options = settings.exportOptions(for: editorDocument.scale)
         options.format = ImageFormat.allCases.first { type?.conforms(to: $0.utType) == true } ?? .png
@@ -224,12 +239,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         let redacts = editorDocument.hasRedactions
         if redacts { options.stripsMetadata = true }
         do {
-            let data = try ImageEncoder.data(for: image, options: options, pointScale: editorDocument.scale)
+            let data = try await ImageEncoder.encodeInBackground(image, options: options, pointScale: editorDocument.scale)
             // Saving over the capture it came from keeps the untouched original for Recents.
             if url.standardizedFileURL == editorDocument.fileURL?.standardizedFileURL {
-                versions?.preserveOriginal(of: url)
+                try await versions?.preserveOriginal(of: url)
             }
-            try data.write(to: url, options: .atomic)
+            try await ImageEncoder.writeInBackground(data, to: url)
             editorDocument.markSaved(to: url)
             // The original capture may still be on the clipboard. Swap in the covered version.
             if redacts, clipboard.holdsOurImage {
@@ -249,13 +264,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     private func askForSaveLocation() -> URL? {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [settings.imageFormat.utType]
-        panel.directoryURL = settings.saveFolderURL
+        panel.directoryURL = editorDocument.preferredSaveFolderURL ?? settings.saveFolderURL
         panel.nameFieldStringValue = String(localized: "Screenshot") + "." + settings.imageFormat.fileExtension
         panel.canCreateDirectories = true
         return panel.runModal() == .OK ? panel.url : nil
     }
 
     private func renderOrWarn() -> CGImage? {
+        guard !editorDocument.isSaving else { return nil }
         editorDocument.finishTextEditing()
         do {
             return try AnnotationRenderer.export(editorDocument)
@@ -272,6 +288,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     // MARK: NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard !editorDocument.isSaving else { return false }
         guard editorDocument.hasUnsavedChanges else { return true }
         let alert = NSAlert()
         alert.messageText = String(localized: "Save changes to this screenshot?")
@@ -280,7 +297,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         alert.addButton(withTitle: String(localized: "Cancel"))
         alert.addButton(withTitle: String(localized: "Don't Save")).hasDestructiveAction = true
         switch alert.runModal() {
-        case .alertFirstButtonReturn: return save()
+        case .alertFirstButtonReturn:
+            Task { @MainActor [weak self] in
+                guard let self, await saveDocument() else { return }
+                close()
+            }
+            return false
         case .alertThirdButtonReturn: return true
         default: return false
         }

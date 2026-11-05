@@ -30,19 +30,32 @@ struct AnnotationCanvas: View {
                     .offset(x: layout.visibleFrame.minX, y: layout.visibleFrame.minY)
 
                 ZStack(alignment: .topLeading) {
-                    Image(decorative: document.image, scale: 1)
+                    Image(document.image, scale: 1, label: Text("Screenshot canvas"))
                         .resizable()
                         .interpolation(layout.factor * document.scale >= 2 ? .none : .high)
                         .frame(width: layout.imageFrame.width, height: layout.imageFrame.height)
                         .offset(x: layout.imageFrame.minX, y: layout.imageFrame.minY)
-                        .accessibilityLabel("Screenshot")
+                        .accessibilityValue(Text("\(document.image.width) by \(document.image.height) pixels"))
 
                     // Each layer covers only its mark, so resizing the window or zooming redraws
                     // small layers instead of one window-sized layer per mark. The offset sits
                     // outside the transition, so a new mark springs from its own center.
                     ForEach(document.annotations) { mark in
                         let frame = MarkLayer.frame(for: mark, in: layout)
-                        MarkLayer(mark: mark, holes: AnnotationRenderer.Spotlight.holes(for: mark, among: spotlights), layout: layout, frame: frame, redactor: redactor)
+                        MarkLayer(
+                            mark: mark,
+                            holes: AnnotationRenderer.Spotlight.holes(for: mark, among: spotlights),
+                            layout: layout,
+                            frame: frame,
+                            redactor: redactor,
+                            isAccessible: true,
+                            isSelected: document.selectedIDs.contains(mark.id),
+                            onAccessibilitySelect: { document.select(mark.id) },
+                            onAccessibilityDelete: {
+                                document.select(mark.id)
+                                document.deleteSelection()
+                            }
+                        )
                             .equatable()
                             .transition(mark.tool == .spotlight
                                 ? .opacity
@@ -61,6 +74,7 @@ struct AnnotationCanvas: View {
                             .offset(x: frame.minX, y: frame.minY)
                     }
                 }
+                .accessibilityElement(children: .contain)
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
                 .mask(alignment: .topLeading) {
                     RoundedRectangle(cornerRadius: 4)
@@ -343,9 +357,14 @@ private struct MarkLayer: View, Equatable {
     /// Where the layer sits in the canvas, from `frame(for:in:)`.
     let frame: CGRect
     let redactor: AnnotationRenderer.Redactor
+    var isAccessible = false
+    var isSelected = false
+    var onAccessibilitySelect: () -> Void = {}
+    var onAccessibilityDelete: () -> Void = {}
 
     nonisolated static func == (lhs: MarkLayer, rhs: MarkLayer) -> Bool {
         lhs.mark == rhs.mark && lhs.holes == rhs.holes && lhs.layout == rhs.layout && lhs.frame == rhs.frame
+            && lhs.isAccessible == rhs.isAccessible && lhs.isSelected == rhs.isSelected
     }
 
     /// The part of the canvas a mark can paint: its area with room for its line, arrowheads,
@@ -378,7 +397,14 @@ private struct MarkLayer: View, Equatable {
         }
         .frame(width: frame.width, height: frame.height)
         .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .accessibilityRepresentation {
+            Button(mark.tool.title, action: onAccessibilitySelect)
+                .accessibilityValue(isSelected ? Text("Selected") : Text("Not selected"))
+                .accessibilityHint(Text("Annotation. Use the arrow keys to move a selected mark; Delete removes it."))
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .accessibilityAction(named: Text("Delete"), onAccessibilityDelete)
+        }
+        .accessibilityHidden(!isAccessible)
     }
 }
 
@@ -517,7 +543,7 @@ private struct HandleDot: View {
             }
             .frame(width: 11, height: 11)
             .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
-            .transition(.scale.combined(with: .opacity))
+            .transition(.opacity)
     }
 }
 
