@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Floating controls shown while recording, plus an outline around the recorded area.
-/// Untitled's own windows are left out of recordings, so neither shows up in the movie.
+/// retrace's own windows are left out of recordings, so neither shows up in the movie.
 final class RecordingHUDController {
     var onStop: (() -> Void)?
 

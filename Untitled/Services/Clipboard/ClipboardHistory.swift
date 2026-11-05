@@ -61,7 +61,7 @@ nonisolated enum ClipboardImageBounds {
 /// macOS has no notification for clipboard changes, so the clipboard's change count is checked
 /// twice a second, which costs next to nothing. The contents are read only when it changes.
 /// Copies that apps mark as private or temporary (password managers do), copies made while
-/// an excluded app is in front, and Untitled's own copies are never kept. Everything stays
+/// an excluded app is in front, and retrace's own copies are never kept. Everything stays
 /// on this Mac, in Application Support.
 @Observable
 final class ClipboardHistory {

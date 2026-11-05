@@ -12,7 +12,7 @@ protocol ClipboardWriting: AnyObject {
     /// True while the clipboard still holds an image this app put there, untouched since.
     var holdsOurImage: Bool { get }
     /// The clipboard's change count right after this app last wrote to it, so clipboard
-    /// history can leave out what Untitled copied itself.
+    /// history can leave out what retrace copied itself.
     var lastWriteChangeCount: Int? { get }
 }
 

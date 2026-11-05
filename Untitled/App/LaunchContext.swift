@@ -3,7 +3,7 @@ import CoreServices
 import Observation
 import SwiftUI
 
-/// Decides once per launch whether the main window opens. Untitled opens it when you start
+/// Decides once per launch whether the main window opens. retrace opens it when you start
 /// the app yourself, if that's turned on, and stays in the menu bar when it starts at login.
 @Observable
 final class LaunchContext {

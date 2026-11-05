@@ -81,7 +81,7 @@ final class SelectionOverlay {
 }
 
 /// A borderless, transparent panel that covers one screen. It takes keyboard focus
-/// without activating the app, so Untitled's other windows stay where they are.
+/// without activating the app, so retrace's other windows stay where they are.
 private final class OverlayWindow: NSPanel {
     init(screen: NSScreen, contentView: NSView) {
         super.init(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)

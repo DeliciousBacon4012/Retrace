@@ -35,7 +35,7 @@ final class MainWindowRouter {
     }
 
     /// Opens Settings, on `pane` if one is given, otherwise on the tab last used.
-    /// Activating first brings the window in front even while Untitled has no Dock icon.
+    /// Activating first brings the window in front even while retrace has no Dock icon.
     func showSettings(_ pane: SettingsPane? = nil, using openSettings: OpenSettingsAction) {
         if let pane {
             UserDefaults.standard.set(pane.rawValue, forKey: SettingsPane.storageKey)

@@ -70,7 +70,7 @@ nonisolated enum TextRecognizer {
         }
     }
 
-    private static let queue = DispatchQueue(label: "io.github.deliciousbacon4012.Untitled.vision", qos: .userInitiated)
+    private static let queue = DispatchQueue(label: "io.github.deliciousbacon4012.retrace.vision", qos: .userInitiated)
     private static let log = Logger(subsystem: Log.subsystem, category: "text")
     /// Seconds a call may wait, counting any work ahead of it. The first read by a new build of
     /// the app, or after an OS update, makes Vision set up its models: about 45 seconds when measured.

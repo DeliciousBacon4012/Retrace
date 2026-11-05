@@ -26,7 +26,7 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
         let end: CMTime
     }
 
-    let sampleQueue = DispatchQueue(label: "io.github.deliciousbacon4012.Untitled.replay", qos: .userInitiated)
+    let sampleQueue = DispatchQueue(label: "io.github.deliciousbacon4012.retrace.replay", qos: .userInitiated)
 
     private let configuration: Configuration
     private let directory: URL

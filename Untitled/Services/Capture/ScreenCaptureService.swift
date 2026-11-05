@@ -25,7 +25,7 @@ nonisolated struct CaptureOptions: Sendable {
     var showsCursor: Bool
     /// Saves Retina captures at standard size: one pixel per point.
     var standardSize: Bool
-    /// Untitled's own floating windows to leave out (overlays, thumbnails, toasts), by window number.
+    /// retrace's own floating windows to leave out (overlays, thumbnails, toasts), by window number.
     /// Its regular windows, like the editor, can be captured like any other app's.
     var excludedWindows: Set<CGWindowID> = []
 }

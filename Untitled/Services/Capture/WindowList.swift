@@ -7,7 +7,7 @@ nonisolated struct WindowCandidate: Sendable {
     let frame: CGRect
 }
 
-/// Reads the on-screen windows, front to back, Untitled's own included (its overlays and
+/// Reads the on-screen windows, front to back, retrace's own included (its overlays and
 /// panels sit above the normal window layer, so they are never offered).
 enum WindowList {
     static func onScreenWindows() -> [WindowCandidate] {
