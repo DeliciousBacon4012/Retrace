@@ -5,7 +5,7 @@ import SwiftUI
 /// Shared presentation metrics keep image and text previews aligned in Library and Clipboard.
 enum CapturePreviewLayout {
     static let aspectRatio: CGFloat = 3.0 / 2.0
-    static let cornerRadius: CGFloat = 8
+    static let cornerRadius: CGFloat = Design.radiusS
     static let thumbnailSize = CGSize(width: 320, height: 214)
 }
 

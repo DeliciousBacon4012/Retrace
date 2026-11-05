@@ -9,9 +9,24 @@ enum Design {
     static let spacingL: CGFloat = 16
     static let spacingXL: CGFloat = 24
 
-    static let radiusS: CGFloat = 8
-    static let radiusM: CGFloat = 14
-    static let radiusL: CGFloat = 20
+    /// Controls are capsules. These are for what can't be one: images and multi-line panels,
+    /// kept round enough to sit comfortably beside them.
+    static let radiusS: CGFloat = 12
+    static let radiusM: CGFloat = 18
+    static let radiusL: CGFloat = 28
+}
+
+extension View {
+    /// Native capsule shapes for every button and text field in this view and those inside it.
+    @ViewBuilder
+    func capsuleControls() -> some View {
+        if #available(macOS 27, *) {
+            buttonBorderShape(.capsule)
+                .textInputBorderShape(.capsule)
+        } else {
+            buttonBorderShape(.capsule)
+        }
+    }
 }
 
 extension Animation {

@@ -8,25 +8,28 @@ struct SettingsView: View {
         PagedTabs(selection: $pane, pages: SettingsPane.allCases) { pane in
             SettingsPageContent(pane: pane)
         }
-        // Icons with the current category's name in the title bar, as System Settings names its
-        // panes. Each icon's tooltip and VoiceOver label give its name.
-        .safeAreaBar(edge: .top) {
-            Picker("Settings Category", selection: $pane) {
-                ForEach(SettingsPane.allCases) { pane in
-                    Label(pane.title, systemImage: pane.symbolName)
-                        .help(pane.title)
-                        .tag(pane)
-                }
-            }
-            .tabPickerStyle()
-            .labelStyle(.iconOnly)
-            .labelsHidden()
-            .fixedSize()
-            .padding(.vertical, Design.spacingS)
-            .frame(maxWidth: .infinity)
-        }
         .frame(width: 680, height: 600)
+        .capsuleControls()
         .navigationTitle(pane.title)
+        .toolbar {
+            // Icons in the toolbar, where the system draws them as one glass capsule. The title
+            // bar names the current category; each icon's tooltip and VoiceOver label give its name.
+            ToolbarItem(placement: .principal) {
+                Picker("Settings Category", selection: $pane) {
+                    ForEach(SettingsPane.allCases) { pane in
+                        Label(pane.title, systemImage: pane.symbolName)
+                            .help(pane.title)
+                            .tag(pane)
+                    }
+                }
+                .tabPickerStyle()
+                .labelStyle(.iconOnly)
+                .labelsHidden()
+                // At this size the selected icon's highlight is a capsule too.
+                .controlSize(.large)
+                .fixedSize()
+            }
+        }
     }
 }
 

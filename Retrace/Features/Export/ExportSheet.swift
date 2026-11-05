@@ -118,6 +118,7 @@ struct ExportSheet: View {
             }
             .padding(Design.spacingL)
         }
+        .capsuleControls()
         .frame(minWidth: 720)
         .disabled(isExporting)
         .task(id: effectiveOptions) {

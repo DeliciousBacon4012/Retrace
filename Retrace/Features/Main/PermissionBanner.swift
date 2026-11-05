@@ -54,8 +54,9 @@ struct PermissionBanner: View {
                 .font(.callout)
             }
         }
-        .padding(12)
-        .background(.fill.quaternary, in: .rect(cornerRadius: 12))
+        .padding(.vertical, 10)
+        .padding(.horizontal, 20)
+        .background(.fill.quaternary, in: model.checkFoundNoAccess ? AnyShape(.rect(cornerRadius: Design.radiusL)) : AnyShape(.capsule))
     }
 
     private var details: some View {

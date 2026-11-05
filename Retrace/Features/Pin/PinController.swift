@@ -126,9 +126,9 @@ private struct PinnedImageView: View {
         Image(nsImage: capture.nsImage)
             .resizable()
             .interpolation(.high)
-            .clipShape(.rect(cornerRadius: 10))
+            .clipShape(.rect(cornerRadius: Design.radiusM, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: Design.radiusM, style: .continuous)
                     .strokeBorder(.white.opacity(isHovering ? 0.35 : 0.12), lineWidth: 1)
             }
             .overlay(alignment: .topLeading) {

@@ -228,7 +228,7 @@ private struct CaptureToastView: View {
 
     /// A capsule for one line, a rounded rectangle once a text preview wraps.
     private var shape: AnyShape {
-        previewLines > 1 && toast.detail != nil ? AnyShape(RoundedRectangle(cornerRadius: 18)) : AnyShape(Capsule())
+        previewLines > 1 && toast.detail != nil ? AnyShape(RoundedRectangle(cornerRadius: Design.radiusL, style: .continuous)) : AnyShape(Capsule())
     }
 
     /// Flow out of the notice while the pointer is over the toast. Their room is always laid

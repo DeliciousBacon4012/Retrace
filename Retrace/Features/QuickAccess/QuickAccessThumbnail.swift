@@ -181,18 +181,18 @@ private struct QuickAccessCard: View {
             .resizable()
             .aspectRatio(contentMode: .fill)
             .frame(width: size.width, height: size.height, alignment: cropAlignment)
-            .clipShape(.rect(cornerRadius: 12, style: .continuous))
-            .contentShape(.rect(cornerRadius: 12, style: .continuous))
+            .clipShape(.rect(cornerRadius: Design.radiusM, style: .continuous))
+            .contentShape(.rect(cornerRadius: Design.radiusM, style: .continuous))
             .onTapGesture { actions.open(id) }
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: Design.radiusM, style: .continuous)
                     .strokeBorder(.separator, lineWidth: 0.5)
             }
             .overlay { hoverOverlay }
             .overlay(alignment: .topTrailing) { badgeOverlay }
             // On a shape behind the card, so hover changes don't redraw the shadow.
             .background {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: Design.radiusM, style: .continuous)
                     .fill(.background)
                     .shadow(color: .black.opacity(0.22), radius: 8, y: 3)
             }
@@ -225,7 +225,7 @@ private struct QuickAccessCard: View {
     private var hoverActions: some View {
         ZStack {
             Color.black.opacity(0.35)
-                .clipShape(.rect(cornerRadius: 12, style: .continuous))
+                .clipShape(.rect(cornerRadius: Design.radiusM, style: .continuous))
                 .onTapGesture { actions.open(id) }
 
             GlassEffectContainer(spacing: 8) {

@@ -24,7 +24,7 @@ struct EditorInspector: View {
     let isLiftingSubject: Bool
 
     nonisolated static let width: CGFloat = 280
-    private static let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+    private static let shape = RoundedRectangle(cornerRadius: Design.radiusL, style: .continuous)
     private static let gripHeight: CGFloat = 22
 
     var body: some View {
@@ -141,6 +141,7 @@ struct EditorInspector: View {
         .padding(.vertical, 12)
         .controlSize(.small)
         .labeledContentStyle(InspectorRowStyle())
+        .capsuleControls()
         .animation(.smooth(duration: 0.22), value: tool)
     }
 }

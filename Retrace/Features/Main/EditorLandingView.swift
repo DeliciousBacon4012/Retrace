@@ -30,7 +30,6 @@ struct EditorLandingView: View {
                 Button("New Canvas", systemImage: "rectangle.dashed") { createCanvas() }
             }
             .buttonStyle(.bordered)
-            .buttonBorderShape(.capsule)
             .controlSize(.large)
 
             Label("You can also drop an image anywhere here", systemImage: "arrow.down.doc")

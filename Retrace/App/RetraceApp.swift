@@ -28,6 +28,7 @@ struct RetraceApp: App {
                 .environment(dependencies)
                 .environment(dependencies.settings)
         }
+        .windowToolbarStyle(.unified(showsTitle: false))
 
         MenuBarExtra {
             MenuBarContent()

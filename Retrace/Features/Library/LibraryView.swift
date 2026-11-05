@@ -246,7 +246,6 @@ struct LibraryView: View {
                     withAnimation(.panel) { viewModel.similarResults = nil }
                 }
                 .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
                 .controlSize(.small)
             }
             .padding(.horizontal, Self.gridInset)
@@ -265,7 +264,7 @@ struct LibraryView: View {
     @ViewBuilder
     private var marqueeOverlay: some View {
         if let marquee {
-            RoundedRectangle(cornerRadius: 3)
+            RoundedRectangle(cornerRadius: Design.radiusS)
                 .fill(Color.accentColor.opacity(0.14))
                 .strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 1)
                 .frame(width: marquee.width, height: marquee.height)
@@ -710,7 +709,6 @@ private struct LibraryCell: View {
                         }
                         .buttonStyle(.bordered)
                         .background(.regularMaterial, in: .capsule)
-                        .buttonBorderShape(.capsule)
                         .controlSize(.small)
                         .padding(6)
                         .help("Show the edited and original versions")
@@ -800,7 +798,7 @@ private struct VersionsView: View {
             FileThumbnail(url: url, version: version)
                 .padding(6)
                 .frame(height: 130)
-                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: Design.radiusS))
                 .contentShape(.rect)
                 .onTapGesture {
                     if (NSApp.currentEvent?.clickCount ?? 1) >= 2 {

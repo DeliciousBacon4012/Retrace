@@ -96,6 +96,7 @@ struct EditorView: View {
         .onChange(of: extractedText) { syncInspectorWindow(near: nil) }
         .onDisappear { inspectorWindow.close() }
         .background { shortcutButtons }
+        .capsuleControls()
         .frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height)
         .toolbar { toolbar }
         .sheet(item: $exportItem) { item in
@@ -697,7 +698,6 @@ private struct ZoomControl: View {
                 .contentShape(.capsule)
         }
             .buttonStyle(.glass)
-            .buttonBorderShape(.capsule)
             .pointerStyle(.columnResize)
             .onHover { document.isPointerOverZoomControl = $0 }
             .onDisappear {

@@ -18,6 +18,7 @@
 - Look and feel: native Apple Liquid Glass everywhere, never faked. No old-style controls.
 - Only Apple's newest native APIs for glass and materials. No imitation glass of any kind.
 - Input: think through everything a person can do in each screen: two-finger swipes, scrolling, click and drag to select.
+- Shape: capsules everywhere, not rectangles.
 - Motion: real physics-based Apple animations, never linear or keyframe-looking.
 - Speed: snappy like CleanShot X. Lightweight, no lag, no crashes.
 - Settings: if it can be a preference, make it customizable, and keep it through restarts and macOS updates.

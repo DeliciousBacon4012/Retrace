@@ -80,6 +80,7 @@ private struct MainContent: View {
                 RecordControl()
             }
         }
+        .capsuleControls()
         .frame(minWidth: 800, minHeight: 520)
         .animation(.panel, value: access.screenRecording)
         .task {
