@@ -20,7 +20,7 @@ struct EditorInspector: View {
     /// The height of the form's content, once measured.
     @State private var contentHeight: CGFloat?
 
-    static let width: CGFloat = 280
+    nonisolated static let width: CGFloat = 280
     private static let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
     private static let gripHeight: CGFloat = 22
 
