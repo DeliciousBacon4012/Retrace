@@ -11,6 +11,7 @@ final class RecordingCoordinator {
 
     @ObservationIgnored private let settings: SettingsStore
     @ObservationIgnored private let permissions: any PermissionProviding
+    @ObservationIgnored private let replay: ReplayCoordinator
     @ObservationIgnored private let storage: any CaptureStoring
     @ObservationIgnored private let clipboard: any ClipboardWriting
     @ObservationIgnored private let quickAccess: QuickAccessController
@@ -19,6 +20,13 @@ final class RecordingCoordinator {
     @ObservationIgnored private let hud = RecordingHUDController()
     @ObservationIgnored private let statusItem = RecordingStatusItem()
     @ObservationIgnored private var countdownTask: Task<Bool, Never>?
+    @ObservationIgnored private var statusItemAction: StatusItemAction?
+
+    private enum StatusItemAction {
+        case cancelCountdown
+        case stopRecording
+        case stopReplayBuffer
+    }
 
     /// Seconds left before a recording starts, while its countdown runs.
     private(set) var countdown: Int?
@@ -26,6 +34,7 @@ final class RecordingCoordinator {
     init(
         settings: SettingsStore,
         permissions: any PermissionProviding,
+        replay: ReplayCoordinator,
         storage: any CaptureStoring,
         clipboard: any ClipboardWriting,
         quickAccess: QuickAccessController,
@@ -33,6 +42,7 @@ final class RecordingCoordinator {
     ) {
         self.settings = settings
         self.permissions = permissions
+        self.replay = replay
         self.storage = storage
         self.clipboard = clipboard
         self.quickAccess = quickAccess
@@ -45,30 +55,60 @@ final class RecordingCoordinator {
         }
         statusItem.onClick = { [weak self] in
             guard let self else { return }
-            if countdown != nil {
+            switch statusItemAction {
+            case .cancelCountdown:
                 cancelCountdown()
-            } else {
+            case .stopRecording:
                 recorder.stop()
+            case .stopReplayBuffer:
+                replay.setEnabled(false)
+            case nil:
+                break
             }
         }
         followRecorderState()
     }
 
-    /// Shows the countdown, then the elapsed time if that's turned on, in the menu bar,
-    /// and removes it the moment recording stops, however it was stopped.
+    /// Shows the active countdown or recording source in the menu bar, then removes it when idle.
     private func followRecorderState() {
-        let (state, remaining, showsTime) = withObservationTracking {
-            (recorder.state, countdown, settings.showsRecordingTimeInMenuBar)
+        let (state, remaining, showsTime, replayStartedAt, replayLimit) = withObservationTracking {
+            (
+                recorder.state,
+                countdown,
+                settings.showsRecordingTimeInMenuBar,
+                replay.buffer.startedAt,
+                settings.replayBufferSeconds
+            )
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.followRecorderState()
             }
         }
         if let remaining {
+            statusItemAction = .cancelCountdown
             statusItem.showCountdown(remaining)
-        } else if case .recording(let since) = state, showsTime {
-            statusItem.showElapsed(since: since)
+        } else if case .recording(let since) = state {
+            if showsTime {
+                statusItemAction = .stopRecording
+                statusItem.showElapsed(
+                    since: since,
+                    toolTip: String(localized: "Stop Recording"),
+                    accessibilityLabel: String(localized: "Stop Recording")
+                )
+            } else {
+                statusItemAction = nil
+                statusItem.hide()
+            }
+        } else if let replayStartedAt {
+            statusItemAction = .stopReplayBuffer
+            statusItem.showElapsed(
+                since: replayStartedAt,
+                maximumDuration: replayLimit,
+                toolTip: String(localized: "Turn Off Replay Buffer"),
+                accessibilityLabel: String(localized: "Replay Buffer")
+            )
         } else {
+            statusItemAction = nil
             statusItem.hide()
         }
     }

@@ -1,34 +1,67 @@
 import AppKit
 
-/// A second menu bar item shown while recording: a red dot and the elapsed time, like 0:42.
-/// Clicking it stops the recording. Before that, it counts down 3, 2, 1, and clicking cancels.
+/// The elapsed time to show in the menu bar, capped for a rolling replay buffer.
+nonisolated struct RecordingTimerReading: Equatable {
+    let displayedSeconds: Int
+    let reachedLimit: Bool
+    let pulseIsBright: Bool
+}
+
+nonisolated enum RecordingTimerLogic {
+    static func reading(since: Date, now: Date, maximumDuration: Int? = nil) -> RecordingTimerReading {
+        let elapsed = max(0, now.timeIntervalSince(since))
+        let limit = maximumDuration.flatMap { $0 > 0 ? Double($0) : nil }
+        let displayed = Int(min(elapsed, limit ?? .greatestFiniteMagnitude).rounded(.down))
+        let reachedLimit = limit.map { elapsed >= $0 } ?? false
+        let halfSecondPhase = reachedLimit ? Int(((elapsed - (limit ?? 0)) * 2).rounded(.down)) : 0
+
+        return RecordingTimerReading(
+            displayedSeconds: displayed,
+            reachedLimit: reachedLimit,
+            pulseIsBright: !reachedLimit || halfSecondPhase.isMultiple(of: 2)
+        )
+    }
+}
+
+/// Shows a red dot and elapsed time beside retrace's menu bar icon.
+/// Clicking stops a regular recording, cancels its countdown, or turns off the replay buffer.
 final class RecordingStatusItem: NSObject {
     var onClick: (() -> Void)?
 
     private var item: NSStatusItem?
     private var timer: Timer?
 
-    /// Shows the item counting up from `since`. Calling it again just restarts the count.
-    func showElapsed(since: Date) {
+    /// Shows elapsed time. When capped, the text stays at the buffer length and the dot pulses.
+    func showElapsed(
+        since: Date,
+        maximumDuration: Int? = nil,
+        toolTip: String,
+        accessibilityLabel: String
+    ) {
         let button = makeItem()
-        button.image = Self.dot
-        button.toolTip = String(localized: "Stop Recording")
-        button.setAccessibilityLabel(String(localized: "Stop Recording"))
-        setTitle(Self.elapsed(since: since))
+        button.toolTip = toolTip
+        button.setAccessibilityLabel(accessibilityLabel)
 
-        // Tick on each whole second of the recording, also while a menu is open.
-        timer?.invalidate()
-        let wait = 1 - Date.now.timeIntervalSince(since).truncatingRemainder(dividingBy: 1)
-        let timer = Timer(fire: .now.addingTimeInterval(wait), interval: 1, repeats: true) { [weak self] _ in
+        let interval: TimeInterval = maximumDuration == nil ? 1 : 0.5
+        let elapsed = max(0, Date.now.timeIntervalSince(since))
+        let remainder = elapsed.truncatingRemainder(dividingBy: interval)
+        let wait = interval - remainder
+        let timer = Timer(fire: .now.addingTimeInterval(wait), interval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.setTitle(Self.elapsed(since: since))
+                self?.updateElapsed(
+                    since: since,
+                    maximumDuration: maximumDuration,
+                    accessibilityLabel: accessibilityLabel
+                )
             }
         }
         RunLoop.main.add(timer, forMode: .common)
+        self.timer?.invalidate()
         self.timer = timer
+        updateElapsed(since: since, maximumDuration: maximumDuration, accessibilityLabel: accessibilityLabel)
     }
 
-    /// Shows the seconds left before recording starts. Clicking cancels.
+    /// Shows the seconds left before a recording starts. Clicking cancels.
     func showCountdown(_ remaining: Int) {
         timer?.invalidate()
         timer = nil
@@ -59,6 +92,15 @@ final class RecordingStatusItem: NSObject {
         return button
     }
 
+    private func updateElapsed(since: Date, maximumDuration: Int?, accessibilityLabel: String) {
+        guard let button = item?.button else { return }
+        let reading = RecordingTimerLogic.reading(since: since, now: .now, maximumDuration: maximumDuration)
+        let title = Self.formatted(seconds: reading.displayedSeconds)
+        button.image = reading.pulseIsBright ? Self.dot : Self.dimDot
+        button.setAccessibilityLabel("\(accessibilityLabel), \(title)")
+        setTitle(title)
+    }
+
     private func setTitle(_ title: String) {
         guard let button = item?.button else { return }
         // Fixed-width digits, so the item doesn't jiggle as the seconds change.
@@ -70,18 +112,20 @@ final class RecordingStatusItem: NSObject {
         onClick?()
     }
 
-    private static func elapsed(since: Date) -> String {
-        Duration.seconds(max(0, Date.now.timeIntervalSince(since).rounded(.down)))
-            .formatted(.time(pattern: .minuteSecond))
+    private static func formatted(seconds: Int) -> String {
+        Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
     }
 
-    /// A small red dot, drawn in color rather than as a template so it stays red.
-    private static let dot: NSImage? = {
+    private static func makeDot(alpha: CGFloat) -> NSImage? {
+        let color = NSColor.systemRed.withAlphaComponent(alpha)
         let configuration = NSImage.SymbolConfiguration(pointSize: 8, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [.systemRed]))
+            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
         let image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)?
             .withSymbolConfiguration(configuration)
         image?.isTemplate = false
         return image
-    }()
+    }
+
+    private static let dot = makeDot(alpha: 1)
+    private static let dimDot = makeDot(alpha: 0.55)
 }

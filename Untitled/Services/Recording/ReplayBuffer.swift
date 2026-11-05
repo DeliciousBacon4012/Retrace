@@ -34,6 +34,8 @@ final class ReplayBuffer: NSObject {
     }
 
     private(set) var state: State = .off
+    /// When the active rolling capture began; remains set while a replay is being saved.
+    private(set) var startedAt: Date?
 
     @ObservationIgnored private var stream: SCStream?
     @ObservationIgnored private var writer: ReplayWriter?
@@ -96,7 +98,9 @@ final class ReplayBuffer: NSObject {
             self.writer = writer
             try await stream.startCapture()
             try checkStartIsCurrent(token)
-            state = .running(since: .now)
+            let startedAt = Date.now
+            self.startedAt = startedAt
+            state = .running(since: startedAt)
             Log.capture.info("Replay buffer started")
         } catch {
             if generation.accepts(token) {
@@ -106,6 +110,7 @@ final class ReplayBuffer: NSObject {
                     self.writer = nil
                 }
                 state = .off
+                startedAt = nil
             }
             if let pendingStream {
                 try? await pendingStream.stopCapture()
@@ -121,6 +126,7 @@ final class ReplayBuffer: NSObject {
         let writer = self.writer
         self.stream = nil
         self.writer = nil
+        startedAt = nil
         state = .off
         guard let stream else {
             writer?.shutDown()

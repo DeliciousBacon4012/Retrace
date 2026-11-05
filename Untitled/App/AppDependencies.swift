@@ -76,17 +76,18 @@ final class AppDependencies {
         )
         self.capture = capture
         quickAccess.onSave = { [weak capture] image in await capture?.save(image) }
+        let replay = ReplayCoordinator(settings: settings, permissions: permissions, storage: FileCaptureStorage(), clipboard: clipboard, quickAccess: quickAccess, toasts: toasts)
+        self.replay = replay
         let recording = RecordingCoordinator(
             settings: settings,
             permissions: permissions,
+            replay: replay,
             storage: FileCaptureStorage(),
             clipboard: clipboard,
             quickAccess: quickAccess,
             toasts: toasts
         )
         self.recording = recording
-        let replay = ReplayCoordinator(settings: settings, permissions: permissions, storage: FileCaptureStorage(), clipboard: clipboard, quickAccess: quickAccess, toasts: toasts)
-        self.replay = replay
         shortcuts = GlobalShortcuts(settings: settings) { [weak settings, weak capture, weak recording, weak replay] actionID in
             guard let settings, let action = QuickAction.withID(actionID, saveLastDurations: settings.saveLastDurations) else { return }
             Self.perform(action, capture: capture, recording: recording, replay: replay)
