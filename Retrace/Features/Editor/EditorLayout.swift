@@ -77,8 +77,9 @@ struct InspectorGrip: View {
     }
 }
 
-/// The tools along the bottom of the editor, for when they aren't in the window's toolbar:
-/// the same native segmented picker as the toolbar, floating on a glass capsule.
+/// The tools along the bottom of the editor, for when they aren't in the window's toolbar.
+/// macOS has no bottom toolbar, so this is the toolbar's picker style outside it: the native
+/// tab-style segmented picker on the same glass capsule the toolbar gives its items.
 struct EditorToolPalette: View {
     @Bindable var document: EditorDocument
     let symbol: (EditorTool) -> String
@@ -94,7 +95,7 @@ struct EditorToolPalette: View {
                     .tag(tool)
             }
         }
-        .pickerStyle(.segmented)
+        .tabPickerStyle()
         .labelStyle(.iconOnly)
         .labelsHidden()
         .controlSize(.large)
