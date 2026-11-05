@@ -4,7 +4,7 @@
 **Repository:** /Users/har/Documents/Developer/untitled-mac
 **Branch:** feature/stability-and-performance
 **Base:** origin/main at d902835
-**Source checkpoint:** 82b1978
+**Source checkpoint:** 0bdd32b
 
 ## Objective and working rules
 
@@ -12,7 +12,7 @@ Polish the existing macOS app into retrace while preserving its repository, proj
 
 ## Git and Xcode setup
 
-- At source checkpoint 82b1978, the feature branch is 37 commits ahead of origin/main. This documentation refresh is a separate docs-only commit, taking it to 38. The remote remains https://github.com/DeliciousBacon4012/untitled-mac.git. No push or merge occurred.
+- At source checkpoint 0bdd32b, the feature branch is 39 commits ahead of origin/main. This documentation refresh is a separate docs-only commit, taking it to 40. The remote remains https://github.com/DeliciousBacon4012/untitled-mac.git. No push or merge occurred.
 - Xcode uses the original Untitled.xcodeproj and My Mac. The active shared scheme is retrace. The shared Untitled scheme remains for compatibility. The app target is internally named Untitled and the hosted test target UntitledTests.
 - The app product, executable, display name, icon, and active scheme use retrace. App version is 0.1.0 (build 1), category Productivity, minimum macOS 26.0, and Swift 6.0.
 - Identity inventory: the project path, internal target/module names, test host, bundle identifier io.github.deliciousbacon4012.Untitled, Application Support domain, Pictures/Untitled folder, and Originals storage path remain unchanged. Those names participate in existing preferences, permissions, and user data. Existing Library filenames also remain untouched. The default filename template is retrace, but the user's saved Untitled template is preserved and currently appears in Settings; no user preference was reset.
@@ -59,6 +59,7 @@ Polish the existing macOS app into retrace while preserving its repository, proj
 32. c0671d1 — Add native editor drag exports
 33. f8c523d — Add OCR text formatting preference
 34. 82b1978 — Unify navigation around native glass toolbars
+35. 0bdd32b — Unify Library, Editor, and Settings workspaces
 
 ## Verified findings and completed work
 
@@ -77,10 +78,10 @@ Polish the existing macOS app into retrace while preserving its repository, proj
 ### App structure and UI
 
 - Added multiple configured Library folders, per-session capture destination selection, a default destination, path normalization, and non-destructive removal. Existing files are never moved or deleted when a location is removed.
-- Library and Clipboard cards share aligned 3:2 previews. The Library supports combined folder results, search/filtering, Finder-style selection, keyboard navigation, Quick Look, and accessibility actions.
-- The main window is the Library. A native segmented toolbar picker switches between Library and Clipboard; capture and recording remain direct toolbar actions. The extra Capture/Library/Settings workspace picker and the hand-drawn material background were removed. The app's standard Settings command opens the separate macOS Settings scene.
-- Settings categories now use a centered native segmented picker in the Settings toolbar rather than a left dashboard/sidebar. Preference content uses centered, scrollable macOS Forms without grouped glass-card backgrounds. System switches and buttons retain their native styles.
-- Opening a Library item launches the existing document editor. The main Library view's image drop handler routes dropped images to that editor; external image dropping was not exercised live. The empty Editor landing page was removed with the redundant Editor tab; no editor canvas or capture workflow was replaced.
+- The main window has exactly three workspaces: Library, Editor, and Settings. A centered, 280-point native segmented picker keeps all three labels visible with even spacing. Filter, Capture, and Record are separate toolbar controls; Capture and Record each open one menu with their available modes, avoiding split buttons and extra arrows.
+- Library combines saved captures, clipboard history, and captured-text history. Its single filter menu supports multi-select categories and Newest/Oldest Added sorting. Categories include Clipboard, Images, Area Screenshots, Window Screenshots, Full Screen, Recordings, and Captured Text. Older files without capture-source metadata remain accessible under Images.
+- Settings is part of the same main window and uses a centered segmented category picker instead of a left dashboard/sidebar. Preference content uses centered, scrollable macOS Forms without grouped glass-card backgrounds. The standard Settings command and menu-bar route open this Settings tab.
+- Editor is a workspace in the main window. It offers the most recently modified image for Continue Editing, Open Image, a drag-and-drop target, and New Canvas (1920×1080). Selecting a Library image opens the existing document editor. The recent-image landing view was inspected live; file import, external Finder drop, and canvas creation are wired but still need live interaction checks.
 - The Editor's custom tool palette uses `.glassEffect(.regular.interactive(), in: .capsule)`. Standard toolbar pickers rely on the operating system's Liquid Glass treatment, without custom material backplates. This follows Apple's guidance to use standard toolbars and controls and reserve custom Liquid Glass for purposeful custom controls.
 - Replay-buffer menu status keeps the retrace logo visible with a separate red dot and timer. The display counts up and caps at the configured duration; after the cap, the dot pulses while recording continues and old footage rotates out. Three deterministic tests cover capping/pulse behavior and normal recording time.
 - The editor can detect faces, people, personal text, or all text on device; results become individual editable redaction marks. The Crop inspector also offers an attention-saliency Smart Crop suggestion with progress/error feedback. Suggestions remain adjustable before the person applies them.
@@ -89,7 +90,7 @@ Polish the existing macOS app into retrace while preserving its repository, proj
 - OCR copy now uses one shared formatter for area Text Capture and Editor OCR. A persisted Editor setting keeps Vision's line breaks by default or joins recognized lines into one paragraph; blank lines are removed, whitespace-only results are treated as empty, and detected codes remain a fallback if no usable text line exists. OCR remains on-device and automatic clipboard copying is disclosed in Settings. The Settings control and accessibility label were inspected live; pasteboard contents and both formatting choices still need an end-to-end capture check.
 - The editor has a responsive inspector, saved custom color palette, multi-selection movement and undo safety, annotation accessibility actions, and background encoding/file writes. Save-in-progress state prevents editing or closing a document before its render is consistent.
 - Quick Access thumbnails downsample off the UI path. Cancellable tasks discard stale results after a card closes or its size changes.
-- Library, Settings, and the Editor were visually reviewed in the Xcode-launched app on 2026-11-05. The Library showed only its Library/Clipboard segmented toolbar control plus capture and record actions; Settings showed its toolbar category picker and centered form without a sidebar; the Editor's existing image document showed its editing tool row. Existing Library-to-Editor opening was exercised. Capture/record actions were exercised separately as listed above.
+- Library, Editor, and Settings were visually reviewed in the Xcode-launched app on 2026-11-05. The main segmented picker displays and evenly spaces all three labels. Library shows the single filter icon and separate Capture and Record menu buttons. Editor shows the recent-image continuation and the Open Image/New Canvas/drop entry points. Settings shows the category picker and centered form without a sidebar. Existing Library-to-Editor opening was exercised. Importing a new file, external Finder drop, new-canvas creation, and Settings command routing still need live interaction checks.
 - The custom inspector has one native glass surface; standard controls use system styling. No imitation glass layers were added. Performance gains are not claimed without Instruments data.
 
 ### Runtime diagnostics
@@ -97,12 +98,12 @@ Polish the existing macOS app into retrace while preserving its repository, proj
 - A negative-frame-size breakpoint was traced to AppKit's NSThemeFrame window-sharing session recipient indicator. Its stack stayed within AppKit and did not enter app code. No speculative size clamp was added.
 - A standalone xcodebuild Analyze attempt still fails in actool while opening the Icon Composer document. This is not a compiler warning; static analysis remains unverified.
 
-## Verification at source checkpoint 82b1978
+## Verification at source checkpoint 0bdd32b
 
-- Xcode MCP built the existing project and ran all tests using the retrace scheme on My Mac. The app launched successfully after the navigation/UI changes. Live inspection confirmed the Library and Settings segmented toolbar controls, the absence of the Settings sidebar and extra workspace tabs, and the Editor's existing image tool row. Live inspection of the Select tool showed `Copy or Drag Image`; the text action appears only after OCR succeeds. Live Settings inspection showed `Keep line breaks in copied text` enabled with its on-device/clipboard disclosure.
+- Xcode MCP built and launched the existing project with the retrace scheme on My Mac. Live inspection confirmed the centered three-way Library/Editor/Settings picker, its corrected spacing, and the Library filter/Capture/Record controls. Editor showed the recent-image continuation and Open Image, New Canvas, and drop affordances. Settings showed its segmented category selector and centered form. Existing Library-to-Editor opening was exercised; Open Image, external drop, New Canvas, and the ⌘, / menu-bar Settings routing were not exercised live. Live inspection of the Editor Select tool showed `Copy or Drag Image`; the text action appears only after OCR succeeds. Live Settings inspection showed `Keep line breaks in copied text` enabled with its on-device/clipboard disclosure.
 - All 59 XCTest tests passed on 2026-11-05: 0 failures, 0 skips, 0 expected failures, and 0 not run. New transfer tests confirm that an image encodes as a readable PNG with the source dimensions and that an unavailable image produces a recoverable error. OCR formatting tests cover line preservation, paragraph joining, codes, whitespace-only output, and the codes fallback; malformed persisted values fall back to the enabled default. Cross-app drag delivery, text dragging after live OCR, and live OCR clipboard output under both Settings choices were not exercised. A generated high-contrast sample confirms Vision returns readable OCR text despite the system E5 log messages. Coverage also includes Smart Crop bounds/undo, blank-image Vision behavior, and alpha composition for a generated subject mask; it does not verify detector accuracy or mask edge quality on real photographs.
 - The latest Xcode build succeeded and the warning query returned zero warnings or Swift compiler errors. A prior build logged a benign App Intents metadata-extraction warning because the app does not declare `AppIntents.framework`; it did not recur in the latest warning query.
-- All 59 existing tests passed after the UI changes; no new test was added for view composition. `git diff --check` passed. The UI change did not alter the existing Xcode project settings or target/scheme structure.
+- All 59 existing tests passed on the retrace scheme after the workspace changes; no UI-composition test was added. `git diff --check` passed. The changes did not replace the existing Xcode project or target structure.
 - Build settings report PRODUCT_NAME and CFBundleDisplayName as retrace, MARKETING_VERSION 0.1.0, CURRENT_PROJECT_VERSION 1, MACOSX_DEPLOYMENT_TARGET 26.0, Swift 6.0, automatic signing, and hardened runtime enabled.
 - The local app bundle reports team identifier ZX34GARNUS, but strict signature verification returns `CSSMERR_TP_NOT_TRUSTED` and security reports zero valid identities. Local Xcode launch succeeds; distribution signing is not established.
 - The built product contains retrace_app icon renditions and retrace_app.icns.
