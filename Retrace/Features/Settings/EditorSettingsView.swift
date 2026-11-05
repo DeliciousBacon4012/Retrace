@@ -3,6 +3,7 @@ import SwiftUI
 /// How the annotation editor looks and behaves.
 struct EditorSettingsView: View {
     @AppStorage(EditorBlurQuality.storageKey) private var blurQuality: EditorBlurQuality = .quality
+    @AppStorage(EditorOpenPlacement.storageKey) private var openPlacement: EditorOpenPlacement = .tab
     @Environment(SettingsStore.self) private var settings
     @Environment(AppDependencies.self) private var dependencies
 
@@ -50,6 +51,17 @@ struct EditorSettingsView: View {
                 Text("Colors")
             } footer: {
                 Text("Number keys 1 to 9 and 0 pick the first ten colors. A custom color picker is always available; choose Custom to edit a saved palette.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker("Open images in", selection: $openPlacement) {
+                    ForEach(EditorOpenPlacement.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text("If the Editor tab has unsaved changes, the next image opens in a new window, so your work is never replaced. You can also right-click a Library item and choose Open in New Window.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

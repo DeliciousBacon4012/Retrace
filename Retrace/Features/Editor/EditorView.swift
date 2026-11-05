@@ -6,6 +6,15 @@ import SwiftUI
 struct EditorView: View {
     @Bindable var document: EditorDocument
     let actions: EditorActions
+    /// Set when the editor sits in the main window's Editor tab rather than a window of its own.
+    /// That window's toolbar belongs to the app, so the tools get a bar of their own.
+    var tabControls: TabControls?
+
+    struct TabControls {
+        var isInFront: Bool
+        var close: () -> Void
+        var moveToWindow: () -> Void
+    }
 
     @AppStorage("editorShowsInspector") private var showsInspector = true
     @AppStorage(InspectorPlacement.storageKey) private var inspectorPlacement: InspectorPlacement = .right
@@ -34,13 +43,15 @@ struct EditorView: View {
     private var showsPanelInspector: Bool { showsInspector && inspectorPlacement != .window }
     private var paletteRoom: CGFloat { EditorToolPalette.thickness + Design.spacingL }
     private var dockedInspectorRoom: CGFloat { EditorInspector.width + Design.spacingL }
+    /// Room above the image for the bar shown in the Editor tab.
+    private var tabBarRoom: CGFloat { tabControls == nil ? 0 : 56 }
 
     /// Room kept clear on each side for docked panels, so they never cover the image. The
     /// image keeps its own margin inside, so it sits as far from a panel as from the edge.
     private var canvasInsets: EdgeInsets {
         let docked = showsPanelInspector && dragOrigin == nil
         return EdgeInsets(
-            top: 0,
+            top: tabBarRoom,
             leading: (toolbarPosition == .left ? paletteRoom : 0) + (docked && inspectorPlacement == .left ? dockedInspectorRoom : 0),
             bottom: toolbarPosition == .bottom ? paletteRoom : 0,
             trailing: (toolbarPosition == .right ? paletteRoom : 0) + (docked && inspectorPlacement == .right ? dockedInspectorRoom : 0)
@@ -54,6 +65,10 @@ struct EditorView: View {
 
             if toolbarPosition != .top {
                 toolPalette
+            }
+
+            if tabControls != nil {
+                tabBar
             }
 
             if showsPanelInspector {
@@ -97,7 +112,7 @@ struct EditorView: View {
         .onDisappear { inspectorWindow.close() }
         .background { shortcutButtons }
         .capsuleControls()
-        .frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height)
+        .frame(minWidth: tabControls == nil ? Self.minimumSize.width : 0, minHeight: tabControls == nil ? Self.minimumSize.height : 0)
         .toolbar { toolbar }
         .sheet(item: $exportItem) { item in
             ExportSheet(item: item, folder: actions.exportFolder, options: actions.exportOptions) { url in
@@ -122,6 +137,9 @@ struct EditorView: View {
             guard let request else { return }
             document.clearCommandRequest()
             perform(request.command)
+        }
+        .onChange(of: tabControls?.isInFront) { _, isInFront in
+            if isInFront == true { isCanvasFocused = true }
         }
         .onExitCommand {
             if document.isPickingTextArea {
@@ -158,24 +176,104 @@ struct EditorView: View {
         // along the bottom, they center between the docked panels.
         .padding(.leading, Design.spacingL + (toolbarPosition == .bottom ? leftInspector : 0))
         .padding(.trailing, Design.spacingL + (toolbarPosition == .bottom ? rightInspector : 0))
-        .padding(.vertical, Design.spacingL)
+        .padding(.top, Design.spacingL + tabBarRoom)
+        .padding(.bottom, Design.spacingL)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
         .transition(.opacity.combined(with: .scale(0.9)))
+    }
+
+    /// The editor's window toolbar, as floating glass controls for when it's in the Editor tab.
+    private var tabBar: some View {
+        GlassEffectContainer(spacing: Design.spacingS) {
+            HStack(spacing: Design.spacingS) {
+                glassGroup {
+                    barButton("Undo", symbol: "arrow.uturn.backward", help: "Undo (⌘Z)") { document.undo() }
+                        .keyboardShortcut("z", modifiers: .command)
+                        .disabled(!document.canUndo)
+                    barButton("Redo", symbol: "arrow.uturn.forward", help: "Redo (⇧⌘Z)") { document.redo() }
+                        .keyboardShortcut("z", modifiers: [.command, .shift])
+                        .disabled(!document.canRedo)
+                }
+
+                Spacer(minLength: 0)
+
+                if toolbarPosition == .top {
+                    EditorToolPalette(
+                        document: document,
+                        axis: .horizontal,
+                        symbol: symbol(for:),
+                        position: $toolbarPosition
+                    )
+                }
+
+                Spacer(minLength: 0)
+
+                glassGroup {
+                    barButton("Copy Text", symbol: "text.viewfinder", help: "Copy text: drag over an area, or press Return for all of it (⇧⌘T)") {
+                        textAreaBinding.wrappedValue.toggle()
+                    }
+                    .disabled(isReadingText)
+                    .symbolEffect(.pulse, isActive: isReadingText)
+                    .foregroundStyle(document.isPickingTextArea ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                    barButton("Copy", symbol: "doc.on.doc", help: "Copy the edited image (⇧⌘C)") { actions.copy() }
+                        .keyboardShortcut("c", modifiers: [.command, .shift])
+                    barButton("Save", symbol: "square.and.arrow.down", help: "Save (⌘S)") { actions.save() }
+                        .keyboardShortcut("s", modifiers: .command)
+                    barButton("Export", symbol: "square.and.arrow.up", help: "Export with a different format, size, or quality (⌘E)") { startExport() }
+                        .keyboardShortcut("e", modifiers: .command)
+                    barButton("Inspector", symbol: "sidebar.right", help: "Show or hide the inspector (⌥⌘I)") { showsInspector.toggle() }
+                        .keyboardShortcut("i", modifiers: [.command, .option])
+                    barButton("Open in New Window", symbol: "macwindow.badge.plus", help: "Open in New Window") { tabControls?.moveToWindow() }
+                    barButton("Close", symbol: "xmark", help: "Close this image (⇧⌘W)") { tabControls?.close() }
+                        .keyboardShortcut("w", modifiers: [.command, .shift])
+                }
+
+                Button("Done") { actions.done() }
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.large)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .help("Save, copy, and close (⌘↩)")
+            }
+        }
+        .padding(.horizontal, Design.spacingL)
+        .padding(.top, Design.spacingS)
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    /// Related buttons sharing one glass capsule, the same height as the tools.
+    private func glassGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 2) { content() }
+            .padding(4)
+            .glassEffect(.regular.interactive(), in: .capsule)
+    }
+
+    /// One icon the same size as a tool's, with a name for VoiceOver and a tooltip.
+    private func barButton(_ title: LocalizedStringKey, symbol: String, help: LocalizedStringKey, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: EditorToolPalette.thickness - 8, height: EditorToolPalette.thickness - 8)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(title)
     }
 
     /// The inspector's top left corner when it isn't being dragged.
     private var inspectorOrigin: CGPoint {
         let margin = Design.spacingL
+        let top = margin + tabBarRoom
         switch inspectorPlacement {
         case .left:
-            return CGPoint(x: margin + (toolbarPosition == .left ? paletteRoom : 0), y: margin)
+            return CGPoint(x: margin + (toolbarPosition == .left ? paletteRoom : 0), y: top)
         case .floating:
             let roomX = max(contentSize.width - EditorInspector.width - margin * 2, 0)
             let roomY = max(contentSize.height - 200 - margin * 2, 0)
             return CGPoint(x: margin + roomX * min(max(floatX, 0), 1), y: margin + roomY * min(max(floatY, 0), 1))
         case .right, .window:
             let palette = toolbarPosition == .right ? paletteRoom : 0
-            return CGPoint(x: contentSize.width - EditorInspector.width - margin - palette, y: margin)
+            return CGPoint(x: contentSize.width - EditorInspector.width - margin - palette, y: top)
         }
     }
 
@@ -310,6 +408,13 @@ struct EditorView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        if tabControls == nil {
+            windowToolbar
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var windowToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
             Button("Undo", systemImage: "arrow.uturn.backward") { document.undo() }
                 .keyboardShortcut("z", modifiers: .command)

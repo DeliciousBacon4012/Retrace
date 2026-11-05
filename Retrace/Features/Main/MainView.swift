@@ -44,7 +44,7 @@ private struct MainContent: View {
             PagedTabs(selection: $tab, pages: MainTab.allCases) { page in
                 switch page {
                 case .library: LibraryView(viewModel: library)
-                case .editor: EditorLandingView()
+                case .editor: EditorTabPage(isInFront: tab == .editor)
                 }
             }
         }
@@ -81,7 +81,11 @@ private struct MainContent: View {
             }
         }
         .capsuleControls()
-        .frame(minWidth: 800, minHeight: 520)
+        // Wide enough for the editor's bar while an image is open there.
+        .frame(minWidth: dependencies.editor.tabSession == nil ? 800 : EditorView.minimumSize.width + 120, minHeight: 520)
+        .onChange(of: tab, initial: true) { _, tab in
+            dependencies.editor.isEditorTabInFront = tab == .editor
+        }
         .animation(.panel, value: access.screenRecording)
         .task {
             await access.watchScreenRecording()

@@ -2,8 +2,32 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The Editor tab: pick up a recent image, open another, or start a blank canvas.
-/// Each image opens in its own editor window.
+/// The Editor tab: the image being edited, or a place to choose one.
+struct EditorTabPage: View {
+    let isInFront: Bool
+
+    @Environment(AppDependencies.self) private var dependencies
+
+    var body: some View {
+        let editor = dependencies.editor
+        if let session = editor.tabSession {
+            EditorView(
+                document: session.document,
+                actions: session.actions,
+                tabControls: .init(
+                    isInFront: isInFront,
+                    close: { editor.closeTabSession() },
+                    moveToWindow: { editor.moveTabSessionToWindow() }
+                )
+            )
+            .id(ObjectIdentifier(session))
+        } else {
+            EditorLandingView()
+        }
+    }
+}
+
+/// Pick up a recent image, open another, or start a blank canvas.
 struct EditorLandingView: View {
     @Environment(AppDependencies.self) private var dependencies
     @State private var isImporting = false

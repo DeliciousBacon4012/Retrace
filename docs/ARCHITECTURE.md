@@ -18,7 +18,7 @@ Views lay things out, view models hold state, and services do the work behind pr
 
 - **Main window:** Library and Editor tabs (`Features/Main`).
 - **Settings:** the ⌘, scene, with categories in a segmented picker (`Features/Settings`).
-- **Editor documents:** `Features/Editor/EditorWindowController` opens one window per image.
+- **Editor:** `EditorSession` is one open image. `EditorPresenter` shows it in the Editor tab or in a window of its own (`EditorWindowController`), and can move it from tab to window.
 - **Floating panels:** the capture overlay, Quick Access thumbnails, toasts, recording HUD, and pins are nonactivating `NSPanel`s hosting SwiftUI. They're excluded from captures.
 - **Menu bar extra:** the app's main entry point; it can run with no window open.
 

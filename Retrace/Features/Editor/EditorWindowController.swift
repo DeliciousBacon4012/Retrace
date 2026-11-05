@@ -12,13 +12,19 @@ final class EditorPresenter {
     @ObservationIgnored private let textHistory: TextHistory?
     @ObservationIgnored private let versions: CaptureVersions?
     @ObservationIgnored private var controllers: [EditorWindowController] = []
+    /// The image open in the main window's Editor tab, if any.
+    private(set) var tabSession: EditorSession?
+    /// Set by the main window, so the menu bar's commands follow the tab in front.
+    @ObservationIgnored var isEditorTabInFront = false {
+        didSet { followKeyWindow(NSApp?.keyWindow) }
+    }
     /// Files being decoded, so a double-click can't open one twice.
     @ObservationIgnored private var opening: Set<URL> = []
     @ObservationIgnored private var keyWindowObserver: (any NSObjectProtocol)?
 
     /// The editor whose window is key, for the menu bar's editor commands. `nil` while any
     /// other window, or one of the editor's own sheets, has focus.
-    private(set) var active: EditorWindowController?
+    private(set) var active: EditorSession?
 
     init(settings: SettingsStore, clipboard: any ClipboardWriting, textHistory: TextHistory? = nil, versions: CaptureVersions? = nil) {
         self.settings = settings
@@ -34,21 +40,26 @@ final class EditorPresenter {
     /// Lets go of blur and pixelation layers that open editors aren't showing.
     func dropSpareCaches() {
         controllers.forEach { $0.editorDocument.dropSpareRedactionLayers() }
+        tabSession?.document.dropSpareRedactionLayers()
     }
 
     /// Puts every tool back to its original look, here and in editors already open.
     func resetToolStyles() {
         controllers.forEach { $0.editorDocument.forgetToolStyles() }
+        tabSession?.document.forgetToolStyles()
         EditorStyleStore().reset()
     }
 
     private func followKeyWindow(_ window: NSWindow?) {
-        let editor = controllers.first { $0.window === window }
+        var editor = controllers.first { $0.window === window }?.session
+        if editor == nil, isEditorTabInFront, window?.identifier?.rawValue.hasPrefix(WindowID.main) == true {
+            editor = tabSession
+        }
         if active !== editor { active = editor }
     }
 
     func open(_ capture: CapturedImage) {
-        present(EditorDocument(
+        place(EditorDocument(
             image: capture.image,
             scale: capture.scale,
             fileURL: capture.fileURL,
@@ -58,8 +69,12 @@ final class EditorPresenter {
 
     /// Opens a saved image, decoding it in the background so the app keeps moving. Shows an
     /// alert if the file isn't a readable image.
-    func open(fileAt url: URL) {
+    func open(fileAt url: URL, inNewWindow: Bool = false) {
         let path = url.standardizedFileURL
+        if tabSession?.document.fileURL?.standardizedFileURL == path {
+            MainWindowRouter.shared.requestTab(.editor)
+            return
+        }
         if let existing = controllers.first(where: { $0.editorDocument.fileURL?.standardizedFileURL == path }) {
             existing.window?.makeKeyAndOrderFront(nil)
             NSApp.activate()
@@ -73,7 +88,7 @@ final class EditorPresenter {
                 Self.presentUnreadable()
                 return
             }
-            present(EditorDocument(image: image, scale: scale, fileURL: url))
+            place(EditorDocument(image: image, scale: scale, fileURL: url), inNewWindow: inNewWindow)
         }
     }
 
@@ -84,7 +99,7 @@ final class EditorPresenter {
                 Self.presentUnreadable()
                 return
             }
-            present(EditorDocument(image: image, scale: scale, fileURL: nil))
+            place(EditorDocument(image: image, scale: scale, fileURL: nil))
         }
     }
 
@@ -104,37 +119,70 @@ final class EditorPresenter {
         }.value
     }
 
-    private func present(_ document: EditorDocument) {
-        let controller = EditorWindowController(document: document, settings: settings, clipboard: clipboard, textHistory: textHistory, versions: versions) { [weak self] closed in
+    /// Puts an image where Settings says, unless the Editor tab has unsaved work. That's never
+    /// replaced, so the new image gets a window of its own instead.
+    private func place(_ document: EditorDocument, inNewWindow: Bool = false) {
+        let wantsTab = !inNewWindow && EditorOpenPlacement.current == .tab
+        guard wantsTab, tabSession?.document.hasUnsavedChanges != true else {
+            presentWindow(makeSession(document))
+            return
+        }
+        tabSession?.document.saveStylesNow()
+        let session = makeSession(document)
+        session.onClose = { [weak self] in self?.endTabSession() }
+        tabSession = session
+        followKeyWindow(NSApp.keyWindow)
+        MainWindowRouter.shared.requestTab(.editor)
+    }
+
+    private func makeSession(_ document: EditorDocument) -> EditorSession {
+        EditorSession(document: document, settings: settings, clipboard: clipboard, textHistory: textHistory, versions: versions)
+    }
+
+    private func presentWindow(_ session: EditorSession) {
+        let controller = EditorWindowController(session: session) { [weak self] closed in
             self?.controllers.removeAll { $0 === closed }
-            if self?.active === closed { self?.active = nil }
+            if self?.active === closed.session { self?.active = nil }
         }
         controllers.append(controller)
         controller.showWindow(nil)
         followKeyWindow(NSApp.keyWindow)
         NSApp.activate()
     }
+
+    /// Closes the Editor tab's image, asking first if it has unsaved changes.
+    func closeTabSession() {
+        guard let tabSession, tabSession.confirmClose() else { return }
+        endTabSession()
+    }
+
+    /// Moves the Editor tab's image into a window of its own, with its marks and history.
+    func moveTabSessionToWindow() {
+        guard let session = tabSession else { return }
+        tabSession = nil
+        if active === session { active = nil }
+        presentWindow(session)
+    }
+
+    private func endTabSession() {
+        tabSession?.document.saveStylesNow()
+        if active === tabSession { active = nil }
+        tabSession = nil
+    }
 }
 
 /// One editor window.
 final class EditorWindowController: NSWindowController, NSWindowDelegate {
-    let editorDocument: EditorDocument
-    private let settings: SettingsStore
-    private let clipboard: any ClipboardWriting
-    private let textHistory: TextHistory?
-    private let versions: CaptureVersions?
+    let session: EditorSession
+    var editorDocument: EditorDocument { session.document }
     private let onClose: (EditorWindowController) -> Void
 
-    init(document: EditorDocument, settings: SettingsStore, clipboard: any ClipboardWriting, textHistory: TextHistory?, versions: CaptureVersions? = nil, onClose: @escaping (EditorWindowController) -> Void) {
-        self.editorDocument = document
-        self.settings = settings
-        self.clipboard = clipboard
-        self.textHistory = textHistory
-        self.versions = versions
+    init(session: EditorSession, onClose: @escaping (EditorWindowController) -> Void) {
+        self.session = session
         self.onClose = onClose
 
         let screen = NSScreen.underPointer ?? NSScreen.main ?? NSScreen.screens.first
-        let size = Self.initialSize(for: document, on: screen)
+        let size = Self.initialSize(for: session.document, on: screen)
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -149,33 +197,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         window.setFrameAutosaveName("")
         super.init(window: window)
         window.delegate = self
+        session.onClose = { [weak self] in self?.close() }
+        session.onSaved = { [weak self] in self?.updateTitle() }
         updateTitle()
 
-        let actions = EditorActions(
-            copy: { [weak self] in self?.copyImage() },
-            copyImage: { [weak self] image in
-                guard let self else { return }
-                let size = NSSize(
-                    width: CGFloat(image.width) / self.editorDocument.scale,
-                    height: CGFloat(image.height) / self.editorDocument.scale
-                )
-                self.clipboard.copy(NSImage(cgImage: image, size: size))
-            },
-            save: { [weak self] in self?.save() },
-            done: { [weak self] in self?.finish() },
-            render: { [weak self] in self?.renderOrWarn() },
-            copyText: { [weak self] text in
-                self?.clipboard.copy(text: text)
-                self?.textHistory?.add(text)
-            },
-            formatText: { [settings] content in
-                content.copiedText(preservingLineBreaks: settings.keepsOCRLineBreaks)
-            },
-            exportFolder: document.preferredSaveFolderURL ?? settings.saveFolderURL,
-            exportOptions: settings.exportOptions(for: document.scale),
-            suggestedName: document.fileURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Screenshot")
-        )
-        let hosting = NSHostingController(rootView: EditorView(document: document, actions: actions))
+        let hosting = NSHostingController(rootView: EditorView(document: session.document, actions: session.actions))
         hosting.sceneBridgingOptions = [.toolbars, .title]
         window.contentViewController = hosting
         // The hosting controller may have resized the window to its content; put it back,
@@ -225,119 +251,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         window?.representedURL = editorDocument.fileURL
     }
 
-    // MARK: Actions
-
-    func copyImage() {
-        guard !editorDocument.isSaving, let image = renderOrWarn() else { return }
-        let size = NSSize(width: CGFloat(image.width) / editorDocument.scale, height: CGFloat(image.height) / editorDocument.scale)
-        clipboard.copy(NSImage(cgImage: image, size: size))
-    }
-
-    /// Saves over the original file, or asks where to save if there isn't one.
-    func save() {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            _ = await saveDocument()
-        }
-    }
-
-    func finish() {
-        Task { @MainActor [weak self] in
-            guard let self, !editorDocument.isSaving else { return }
-            guard editorDocument.hasUnsavedChanges || editorDocument.fileURL == nil else {
-                copyImage()
-                close()
-                return
-            }
-            copyImage()
-            if await saveDocument() { close() }
-        }
-    }
-
-    private func saveDocument() async -> Bool {
-        guard !editorDocument.isSaving,
-              let url = editorDocument.fileURL ?? askForSaveLocation()
-        else { return false }
-        return await write(to: url)
-    }
-
-    private func write(to url: URL) async -> Bool {
-        guard !editorDocument.isSaving, let image = renderOrWarn(), editorDocument.beginSaving() else { return false }
-        defer { editorDocument.finishSaving() }
-        let type = UTType(filenameExtension: url.pathExtension)
-        var options = settings.exportOptions(for: editorDocument.scale)
-        options.format = ImageFormat.allCases.first { type?.conforms(to: $0.utType) == true } ?? .png
-        options.scalePercent = 100
-        let redacts = editorDocument.hasRedactions
-        if redacts { options.stripsMetadata = true }
-        do {
-            let data = try await ImageEncoder.encodeInBackground(image, options: options, pointScale: editorDocument.scale)
-            // Saving over the capture it came from keeps the untouched original for Recents.
-            if url.standardizedFileURL == editorDocument.fileURL?.standardizedFileURL {
-                try await versions?.preserveOriginal(of: url)
-            }
-            try await ImageEncoder.writeInBackground(data, to: url)
-            editorDocument.markSaved(to: url)
-            // The original capture may still be on the clipboard. Swap in the covered version.
-            if redacts, clipboard.holdsOurImage {
-                let size = NSSize(width: CGFloat(image.width) / editorDocument.scale, height: CGFloat(image.height) / editorDocument.scale)
-                clipboard.copy(NSImage(cgImage: image, size: size))
-            }
-            updateTitle()
-            Log.capture.info("Saved edited image")
-            return true
-        } catch {
-            Log.capture.error("Saving the edited image failed: \(error.localizedDescription, privacy: .public)")
-            ErrorPresenter.present(error)
-            return false
-        }
-    }
-
-    private func askForSaveLocation() -> URL? {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [settings.imageFormat.utType]
-        panel.directoryURL = editorDocument.preferredSaveFolderURL ?? settings.saveFolderURL
-        panel.nameFieldStringValue = String(localized: "Screenshot") + "." + settings.imageFormat.fileExtension
-        panel.canCreateDirectories = true
-        return panel.runModal() == .OK ? panel.url : nil
-    }
-
-    private func renderOrWarn() -> CGImage? {
-        guard !editorDocument.isSaving else { return nil }
-        editorDocument.finishTextEditing()
-        do {
-            return try AnnotationRenderer.export(editorDocument)
-        } catch {
-            let localized = error as? LocalizedError
-            let message = localized?.errorDescription ?? String(localized: "The edited image couldn't be created.")
-            let recovery = localized?.recoverySuggestion ?? String(localized: "Try again, or undo the last change.")
-            Log.capture.error("Edited image rendering failed: \(error.localizedDescription, privacy: .public)")
-            ErrorPresenter.present(message, recovery: recovery)
-            return nil
-        }
-    }
-
     // MARK: NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard !editorDocument.isSaving else { return false }
-        guard editorDocument.hasUnsavedChanges else { return true }
-        let alert = NSAlert()
-        alert.messageText = String(localized: "Save changes to this screenshot?")
-        alert.informativeText = String(localized: "Your marks will be lost if you don't save them.")
-        alert.addButton(withTitle: String(localized: "Save"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-        alert.addButton(withTitle: String(localized: "Don't Save")).hasDestructiveAction = true
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            Task { @MainActor [weak self] in
-                guard let self, await saveDocument() else { return }
-                close()
-            }
-            return false
-        case .alertThirdButtonReturn: return true
-        default: return false
-        }
+        session.confirmClose()
     }
 
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {

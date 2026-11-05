@@ -1,5 +1,6 @@
 import AppKit
 import QuickLook
+import Translation
 import SwiftUI
 
 /// Every screenshot and recording in the save folder, and the text Capture Text copied,
@@ -25,6 +26,8 @@ struct LibraryView: View {
     /// The rectangle being dragged out on empty space, and what was selected before it began.
     @State private var marquee: CGRect?
     @State private var marqueeBase: Set<RecentItem.ID> = []
+    /// Text showing in Apple's translation popover.
+    @State private var textToTranslate: String?
     /// Where the marquee's moving corner is, for scrolling when it nears an edge.
     @State private var marqueeEnd: CGPoint = .zero
     @State private var scrollPosition = ScrollPosition()
@@ -86,6 +89,10 @@ struct LibraryView: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
                     .safeAreaBar(edge: .top) { similarBar }
                     .simultaneousGesture(pinchGesture)
+                    .translationPresentation(
+                        isPresented: Binding(get: { textToTranslate != nil }, set: { if !$0 { textToTranslate = nil } }),
+                        text: textToTranslate ?? ""
+                    )
                     .contentShape(.rect)
                     .onTapGesture {
                         viewModel.clearSelection()
@@ -384,6 +391,7 @@ struct LibraryView: View {
             let files = targets.compactMap(\.file)
             if file.kind == .image {
                 Button("Open in Editor") { files.forEach { dependencies.editor.open(fileAt: $0.url) } }
+                Button("Open in New Window") { files.forEach { dependencies.editor.open(fileAt: $0.url, inNewWindow: true) } }
             }
             Button(file.kind == .image ? "Open in Default App" : "Open") { files.forEach { NSWorkspace.shared.open($0.url) } }
             Button("Quick Look") { viewModel.previewURL = file.url }
@@ -418,6 +426,8 @@ struct LibraryView: View {
                 .disabled(targets.count > 1)
             Button("Copy") { copy(snippet) }
                 .disabled(targets.count > 1)
+            Button("Translate") { textToTranslate = snippet.text }
+                .disabled(targets.count > 1)
             Divider()
             Button("Select All") { viewModel.selectAll(items) }
             Divider()
@@ -435,6 +445,10 @@ struct LibraryView: View {
             }
             Button("Copy") { dependencies.clipboardHistory.copy(entry) }
                 .disabled(entries.count != 1)
+            if let text = entry.text {
+                Button("Translate") { textToTranslate = text }
+                    .disabled(entries.count != 1)
+            }
             Divider()
             Button("Delete", role: .destructive) {
                 dependencies.clipboardHistory.remove(Set(entries.map(\.id)))

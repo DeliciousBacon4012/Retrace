@@ -1,16 +1,15 @@
 import SwiftUI
 
-/// Menu bar commands for the editor window in front. They're greyed out while any other
-/// window has focus. Undo and Redo need nothing here: the editor window hands the standard
-/// Edit menu its own undo history.
+/// Menu bar commands for the editor in front, in its own window or the Editor tab. They're
+/// greyed out otherwise. An editor window hands the standard Edit menu its own undo history.
 struct EditorCommands: Commands {
     let editors: EditorPresenter
 
     @AppStorage("editorShowsInspector") private var showsInspector = true
     @AppStorage(EditorPalette.storageKey) private var palette: EditorPalette = .pastel
 
-    private var editor: EditorWindowController? { editors.active }
-    private var document: EditorDocument? { editor?.editorDocument }
+    private var editor: EditorSession? { editors.active }
+    private var document: EditorDocument? { editor?.document }
 
     var body: some Commands {
         CommandGroup(after: .saveItem) {

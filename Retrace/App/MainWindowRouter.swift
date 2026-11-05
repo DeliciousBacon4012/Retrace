@@ -40,6 +40,12 @@ final class MainWindowRouter {
         openWindow(id: WindowID.main)
     }
 
+    /// Like `show(_:using:)`, for code with no `openWindow` at hand.
+    func requestTab(_ tab: MainTab) {
+        UserDefaults.standard.set(tab.rawValue, forKey: MainTab.storageKey)
+        openRequests += 1
+    }
+
     /// Opens Settings on `pane`, or the category last used when none is given. The app is
     /// activated first, since a menu bar app is often in the background.
     func showSettings(_ pane: SettingsPane? = nil, using openSettings: OpenSettingsAction) {

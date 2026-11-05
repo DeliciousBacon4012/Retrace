@@ -34,7 +34,7 @@ To update later, quit Retrace, pull the latest code, and run the same commands a
 - **Main window:** Library and Editor tabs. Swipe with two fingers to move between them, or press ⌘1 and ⌘2.
 - **Library:** drag on empty space to select, pinch to resize thumbnails, press Space to preview.
 - **Settings:** ⌘, with categories along the top. Swipe with two fingers between them.
-- **Editor:** pinch to zoom, scroll with two fingers to pan.
+- **Editor:** images open in the Editor tab, or in their own window if you prefer. Pinch to zoom, scroll with two fingers to pan.
 
 ## More
 

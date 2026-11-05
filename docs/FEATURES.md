@@ -103,6 +103,8 @@
 - [~] Identify Image in the editor
 - [~] Smart Crop: Attention, Objects, or Document
 - [~] Text recognition: Accurate or Fast
+- [~] Translate captured text and clipboard items with Apple's translation
+- [~] Editor inside the Editor tab, or in its own window
 
 ## Notifications
 
@@ -156,4 +158,3 @@
 - [ ] Draw on screen live
 - [ ] HDR recording
 - [ ] Summarize or rename captures with Apple Intelligence
-- [ ] Translate captured text on this Mac

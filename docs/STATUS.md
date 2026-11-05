@@ -9,12 +9,13 @@ Run on macOS 27 with an unsigned development build, which has no Screen Recordin
 - Library and Editor tabs, the tab picker, and search appearing only on the Library tab
 - Drag on empty space to select several thumbnails
 - Settings window with category icons along the top and their pages
-- Opening an image in an editor window, with the whole toolbar visible at the minimum width
+- Opening an image in the Editor tab, keeping marks across tab switches, and moving it to a window
+- The editor window's whole toolbar visible at the minimum width
 - Inspector rows lining up
 
 All unit tests pass, including the move from the old Untitled data locations using temporary folders.
 
-Main-thread stalls, measured with the debug hang detector on 2026-11-05: none over 100 ms while switching tabs, scrolling, drag-selecting, indexing the Library in the background, or drawing marks on, blurring, and copying a 5120 × 2880 image. Launch had one stall of about 250 ms. Window resizing, real captures, and recordings weren't measured.
+Main-thread stalls, measured with the debug hang detector on 2026-11-05: none over 100 ms while switching tabs, scrolling, drag-selecting, indexing the Library in the background, or drawing marks on, blurring, and copying a 5120 × 2880 image. Launch had one stall of about 250 ms. Debug builds logged 130 to 300 ms when switching to a full Library or opening a new editor window; these are unoptimized builds, and Release should be faster, but that hasn't been measured. Window resizing, real captures, and recordings weren't measured.
 
 ## Needs a person with a trackpad and a signed build
 
@@ -26,13 +27,14 @@ Main-thread stalls, measured with the debug hang detector on 2026-11-05: none ov
 - Cursor motion blur and the quality re-encode in a real recording. Their rendering is tested on generated movies only, and how closely the cursor lines up with the video needs a real look
 - Encoder, ProRes, color, 120 fps, and replay settings in a real recording
 - Search inside images and Find Similar on your own captures
+- Translate in the Library's right-click menu
+- Done, Close, and unsaved-changes handling for an image in the Editor tab
 - Space-drag and middle-button panning, and drag selection scrolling at the window's edge
 - Capture and recording modes beyond one area screenshot and one short area movie
 - VoiceOver and keyboard-only use
 
 ## Known gaps
 
-- The Editor tab is a starting point; each image still opens in its own window.
 - Signing: `security find-identity` showed no valid identities on 2026-11-05 and strict `codesign` verification fails, so the build is local only. Distribution isn't set up, and App Sandbox is off.
 - `xcodebuild analyze` fails in actool on the Icon Composer file.
 - Rendering performance has not been measured with Instruments.
