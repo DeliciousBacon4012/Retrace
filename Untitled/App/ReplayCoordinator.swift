@@ -118,6 +118,9 @@ final class ReplayCoordinator {
                     codec: wanted.codec,
                     includesAudio: wanted.audio
                 )
+            } catch is CancellationError {
+                // A setting change or stop invalidated this startup; the newer state owns recovery.
+                return
             } catch {
                 Log.capture.error("Replay buffer couldn't start: \(error.localizedDescription, privacy: .public)")
                 settings.replayBufferEnabled = false

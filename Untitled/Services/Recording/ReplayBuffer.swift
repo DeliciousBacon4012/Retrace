@@ -4,6 +4,24 @@ import Observation
 import OSLog
 import ScreenCaptureKit
 
+/// Prevents a startup task from publishing a stream after the buffer was stopped or restarted.
+nonisolated struct ReplayBufferGeneration: Sendable {
+    private(set) var value = 0
+
+    mutating func begin() -> Int {
+        value &+= 1
+        return value
+    }
+
+    mutating func invalidate() {
+        value &+= 1
+    }
+
+    func accepts(_ token: Int) -> Bool {
+        token == value
+    }
+}
+
 /// Keeps the last stretch of screen activity ready to save, like a game console's replay.
 /// Runs at the display's point resolution to stay light on CPU, memory, and disk.
 @Observable
@@ -19,6 +37,7 @@ final class ReplayBuffer: NSObject {
 
     @ObservationIgnored private var stream: SCStream?
     @ObservationIgnored private var writer: ReplayWriter?
+    @ObservationIgnored private var generation = ReplayBufferGeneration()
 
     var isOn: Bool {
         switch state {
@@ -29,10 +48,14 @@ final class ReplayBuffer: NSObject {
 
     func start(seconds: Int, sizeLimitGB: Int, framesPerSecond: Int, codec: VideoCodec, includesAudio: Bool) async throws {
         guard state == .off else { return }
+        let token = generation.begin()
         guard CGPreflightScreenCaptureAccess() else { throw CaptureError.permissionDenied }
         state = .starting
+        var pendingStream: SCStream?
+        var pendingWriter: ReplayWriter?
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            try checkStartIsCurrent(token)
             let displayID = NSScreen.underPointer?.displayID
             guard let display = content.displays.first(where: { $0.displayID == displayID }) ?? content.displays.first else {
                 throw CaptureError.displayNotFound
@@ -61,36 +84,59 @@ final class ReplayBuffer: NSObject {
                 maximumSeconds: Double(seconds),
                 maximumBytes: sizeLimitGB * 1_000_000_000
             ))
+            pendingWriter = writer
             let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
+            pendingStream = stream
             try stream.addStreamOutput(writer, type: .screen, sampleHandlerQueue: writer.sampleQueue)
             if includesAudio {
                 try stream.addStreamOutput(writer, type: .audio, sampleHandlerQueue: writer.sampleQueue)
             }
-            try await stream.startCapture()
+            try checkStartIsCurrent(token)
             self.stream = stream
             self.writer = writer
+            try await stream.startCapture()
+            try checkStartIsCurrent(token)
             state = .running(since: .now)
             Log.capture.info("Replay buffer started")
         } catch {
-            state = .off
+            if generation.accepts(token) {
+                generation.invalidate()
+                if let pendingStream, self.stream === pendingStream {
+                    self.stream = nil
+                    self.writer = nil
+                }
+                state = .off
+            }
+            if let pendingStream {
+                try? await pendingStream.stopCapture()
+            }
+            pendingWriter?.shutDown()
             throw error
         }
     }
 
     func stop() {
-        guard let stream else {
-            state = .off
-            return
-        }
-        let writer = writer
+        generation.invalidate()
+        let stream = self.stream
+        let writer = self.writer
         self.stream = nil
         self.writer = nil
         state = .off
+        guard let stream else {
+            writer?.shutDown()
+            return
+        }
         Task {
             try? await stream.stopCapture()
             writer?.shutDown()
         }
         Log.capture.info("Replay buffer stopped")
+    }
+
+    private func checkStartIsCurrent(_ token: Int) throws {
+        guard generation.accepts(token), state == .starting else {
+            throw CancellationError()
+        }
     }
 
     /// Saves what's buffered to `url` as a normal movie that starts at zero: everything, or
@@ -154,7 +200,9 @@ final class ReplayBuffer: NSObject {
 
 extension ReplayBuffer: SCStreamDelegate {
     nonisolated func stream(_ stream: SCStream, didStopWithError error: any Error) {
-        Task { @MainActor in
+        let stoppedID = ObjectIdentifier(stream)
+        Task { @MainActor [weak self] in
+            guard let self, self.stream.map(ObjectIdentifier.init) == stoppedID else { return }
             Log.capture.info("Replay stream stopped by the system: \(error.localizedDescription, privacy: .public)")
             self.stop()
         }
