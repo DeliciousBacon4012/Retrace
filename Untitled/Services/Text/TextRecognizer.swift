@@ -36,6 +36,7 @@ nonisolated struct TextLine: Sendable {
 nonisolated enum SensitiveKind: String, CaseIterable, Identifiable, Sendable {
     case personal
     case faces
+    case people
     case allText
 
     var id: Self { self }
@@ -44,6 +45,7 @@ nonisolated enum SensitiveKind: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .personal: String(localized: "Emails, Phone Numbers, and Cards")
         case .faces: String(localized: "Faces")
+        case .people: String(localized: "People")
         case .allText: String(localized: "All Text")
         }
     }
@@ -52,12 +54,13 @@ nonisolated enum SensitiveKind: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .personal: "person.text.rectangle"
         case .faces: "face.dashed"
+        case .people: "person.crop.rectangle"
         case .allText: "text.viewfinder"
         }
     }
 }
 
-/// On-device text, code, and face recognition with Vision. Nothing leaves the Mac.
+/// On-device text, code, face, person, and saliency recognition with Vision. Nothing leaves the Mac.
 ///
 /// Requests run on a dedicated queue with Vision's synchronous request handler, and every
 /// call has a time limit, so a stuck model can never leave the app waiting forever.
@@ -153,6 +156,17 @@ nonisolated enum TextRecognizer {
                 }
             }
 
+            if kinds.contains(.people) {
+                let people = VNDetectHumanRectanglesRequest()
+                people.upperBodyOnly = false
+                try handler.perform([people])
+                areas += (people.results ?? []).map { person in
+                    let rect = pixelRect(person.boundingBox, in: size)
+                    // Leave room around body edges so the redaction covers the whole person.
+                    return rect.insetBy(dx: -rect.width * 0.08, dy: -rect.height * 0.06)
+                }
+            }
+
             if kinds.contains(.personal) || kinds.contains(.allText) {
                 let text = textRequest(correctsLanguage: false)
                 try handler.perform([text])
@@ -174,6 +188,32 @@ nonisolated enum TextRecognizer {
             return areas
                 .map { $0.insetBy(dx: -3, dy: -3).intersection(bounds).integral }
                 .filter { !$0.isNull && $0.width > 2 && $0.height > 2 }
+        }
+    }
+
+    /// Suggests a crop around the most visually salient region, in top-left image pixels.
+    /// Returns nil when Vision can't identify a useful region smaller than the full image.
+    static func attentionCrop(in image: CGImage) async throws -> CGRect? {
+        try await run {
+            let request = VNGenerateAttentionBasedSaliencyImageRequest()
+            try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+            guard let observation = request.results?.first,
+                  let objects = observation.salientObjects,
+                  !objects.isEmpty,
+                  let strongest = objects.max(by: { $0.confidence < $1.confidence })
+            else { return nil }
+
+            let bounds = CGRect(origin: .zero, size: CGSize(width: image.width, height: image.height))
+            let subject = pixelRect(strongest.boundingBox, in: bounds.size)
+            guard subject.width.isFinite, subject.height.isFinite, subject.width > 0, subject.height > 0 else { return nil }
+
+            let padded = subject.insetBy(dx: -subject.width * 0.18, dy: -subject.height * 0.18)
+                .intersection(bounds)
+                .integral
+            guard padded.width >= 8, padded.height >= 8,
+                  padded.width < bounds.width * 0.98 || padded.height < bounds.height * 0.98
+            else { return nil }
+            return padded
         }
     }
 

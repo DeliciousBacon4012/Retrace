@@ -464,6 +464,8 @@ private struct EffectsSection: View {
 /// Aspect presets for the crop tool.
 private struct CropSection: View {
     let document: EditorDocument
+    @State private var isFindingSubject = false
+    @State private var message: String?
 
     var body: some View {
         InspectorGroup("Crop") {
@@ -473,6 +475,22 @@ private struct CropSection: View {
                 Divider()
                 ForEach(CropAspect.allCases.filter { $0 != .free && $0 != .original }) { Text($0.title).tag($0) }
             }
+            Button {
+                Task { await suggestCrop() }
+            } label: {
+                if isFindingSubject {
+                    HStack(spacing: 7) {
+                        ProgressView().controlSize(.small)
+                        Text("Finding subject…")
+                    }
+                } else {
+                    Label("Smart Crop", systemImage: "viewfinder")
+                }
+            }
+            .buttonStyle(.glass)
+            .disabled(isFindingSubject)
+            .help("Suggest a crop around the main subject using on-device Vision.")
+
             HStack {
                 Button("Reset") { document.resetCrop() }
                     .buttonStyle(.glass)
@@ -482,7 +500,25 @@ private struct CropSection: View {
                     .buttonStyle(.glassProminent)
             }
         } footer: {
-            Text("Drag the handles, move the box, or drag across the image to start over. A chosen ratio stays locked; in Free, hold Shift for a square. Press Return to crop, or Esc to cancel.")
+            Text(message ?? String(localized: "Drag the handles or move the box. Smart Crop uses on-device Vision; review its suggestion before applying. Press Return to crop, or Esc to cancel."))
+        }
+    }
+
+    @MainActor
+    private func suggestCrop() async {
+        guard !isFindingSubject else { return }
+        isFindingSubject = true
+        defer { isFindingSubject = false }
+        do {
+            guard let suggestion = try await TextRecognizer.attentionCrop(in: document.image),
+                  document.applySuggestedCrop(suggestion)
+            else {
+                message = String(localized: "No clear subject was found. Adjust the crop manually.")
+                return
+            }
+            message = String(localized: "Crop suggested. Review the framing before applying.")
+        } catch {
+            message = error.localizedDescription
         }
     }
 }

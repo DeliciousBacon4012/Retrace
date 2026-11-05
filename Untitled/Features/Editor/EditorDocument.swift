@@ -743,6 +743,24 @@ final class EditorDocument {
         withAnimation(.response) { cropRect = tool == .crop ? fullImageRect : nil }
     }
 
+    /// Applies a Vision crop suggestion as a normal, editable crop operation.
+    @discardableResult
+    func applySuggestedCrop(_ suggestion: CGRect) -> Bool {
+        guard tool == .crop,
+              suggestion.minX.isFinite, suggestion.minY.isFinite,
+              suggestion.maxX.isFinite, suggestion.maxY.isFinite,
+              suggestion.width.isFinite, suggestion.height.isFinite,
+              suggestion.width > 0, suggestion.height > 0
+        else { return false }
+
+        let crop = suggestion.standardized.integral.intersection(fullImageRect)
+        guard crop.width >= 8, crop.height >= 8, crop != cropRect else { return false }
+        pushUndo(snapshot, named: String(localized: "Smart Crop"))
+        cropAspect = .free
+        withAnimation(.response) { cropRect = crop }
+        return true
+    }
+
     /// Locks the crop to a shape and makes it the largest of that shape around the current
     /// crop's center. Free keeps the crop as it is and unlocks it.
     func setCropAspect(_ aspect: CropAspect) {

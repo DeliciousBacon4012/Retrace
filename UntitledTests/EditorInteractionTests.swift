@@ -3,6 +3,31 @@ import XCTest
 @testable import Untitled
 
 final class EditorInteractionTests: XCTestCase {
+    @MainActor
+    func testSuggestedCropIsClampedToImageAndCanBeUndone() throws {
+        let context = try XCTUnwrap(CGContext(
+            data: nil,
+            width: 100,
+            height: 80,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        let image = try XCTUnwrap(context.makeImage())
+        let document = EditorDocument(image: image, scale: 1, fileURL: nil)
+        document.tool = .crop
+        let original = document.cropRect
+
+        XCTAssertFalse(document.applySuggestedCrop(CGRect(x: 10, y: 10, width: 4, height: 6)))
+        XCTAssertEqual(document.cropRect, original)
+        XCTAssertTrue(document.applySuggestedCrop(CGRect(x: -10, y: 10, width: 50, height: 40)))
+        XCTAssertEqual(document.cropRect, CGRect(x: 0, y: 10, width: 40, height: 40))
+
+        document.undo()
+        XCTAssertEqual(document.cropRect, original)
+    }
+
     func testHighlighterSnapsToTheNearestLineAndKeepsWholeTouchedWords() throws {
         let line = TextLine(
             rect: CGRect(x: 8, y: 20, width: 48, height: 10),
