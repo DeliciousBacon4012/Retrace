@@ -13,6 +13,7 @@ final class SettingsValidationTests: XCTestCase {
         defaults.set(Int.max, forKey: "overlayAutoCloseSeconds")
         defaults.set(0, forKey: "replayBufferSeconds")
         defaults.set(-1, forKey: "replayDiskLimitGB")
+        defaults.set("yes", forKey: "keepsOCRLineBreaks")
 
         let settings = SettingsStore(defaults: defaults)
 
@@ -22,6 +23,7 @@ final class SettingsValidationTests: XCTestCase {
         XCTAssertEqual(settings.overlayAutoCloseSeconds, 0)
         XCTAssertEqual(settings.replayBufferSeconds, 60)
         XCTAssertEqual(settings.replayDiskLimitGB, 4)
+        XCTAssertTrue(settings.keepsOCRLineBreaks)
         XCTAssertEqual(defaults.double(forKey: "imageQuality"), 0.85)
         XCTAssertEqual(defaults.integer(forKey: "framesPerSecond"), 60)
     }

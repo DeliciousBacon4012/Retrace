@@ -147,6 +147,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
                 self?.clipboard.copy(text: text)
                 self?.textHistory?.add(text)
             },
+            formatText: { [settings] content in
+                content.copiedText(preservingLineBreaks: settings.keepsOCRLineBreaks)
+            },
             exportFolder: document.preferredSaveFolderURL ?? settings.saveFolderURL,
             exportOptions: settings.exportOptions(for: document.scale),
             suggestedName: document.fileURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Screenshot")

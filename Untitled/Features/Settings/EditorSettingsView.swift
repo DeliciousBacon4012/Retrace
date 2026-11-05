@@ -62,6 +62,14 @@ struct EditorSettingsView: View {
             }
 
             Section {
+                Toggle("Keep line breaks in copied text", isOn: $settings.keepsOCRLineBreaks)
+            } footer: {
+                Text("Recognized text is read on this Mac and copied automatically. Turn this off to join the lines into one paragraph.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 LabeledContent("Tool styles") {
                     Button("Reset…") { confirmsReset = true }
                 }

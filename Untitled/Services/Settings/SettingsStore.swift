@@ -47,6 +47,8 @@ final class SettingsStore {
     /// Lines of captured text a toast shows.
     var toastPreviewLines = Defaults.toastPreviewLines { didSet { save(toastPreviewLines, .toastPreviewLines) } }
     var plainTextApp = Defaults.plainTextApp { didSet { save(plainTextApp.rawValue, .plainTextApp) } }
+    /// Whether recognized text is copied with one line break between Vision's text lines.
+    var keepsOCRLineBreaks = Defaults.keepsOCRLineBreaks { didSet { save(keepsOCRLineBreaks, .keepsOCRLineBreaks) } }
     /// How many captured text snippets to keep. Zero keeps none.
     var textHistoryLimit = Defaults.textHistoryLimit { didSet { save(textHistoryLimit, .textHistoryLimit) } }
     /// The choices offered in Settings › Advanced.
@@ -260,6 +262,7 @@ final class SettingsStore {
         toastPosition = ToastPosition(rawValue: value(.toastPosition, default: "")) ?? Defaults.toastPosition
         toastPreviewLines = min(max(value(.toastPreviewLines, default: Defaults.toastPreviewLines), 1), 5)
         plainTextApp = PlainTextApp(rawValue: value(.plainTextApp, default: "")) ?? Defaults.plainTextApp
+        keepsOCRLineBreaks = value(.keepsOCRLineBreaks, default: Defaults.keepsOCRLineBreaks)
         let limit = value(.textHistoryLimit, default: Defaults.textHistoryLimit)
         textHistoryLimit = Self.textHistoryLimits.contains(limit) ? limit : Defaults.textHistoryLimit
         keepsClipboardHistory = value(.keepsClipboardHistory, default: Defaults.keepsClipboardHistory)
@@ -384,6 +387,7 @@ private extension SettingsStore {
         case toastSeconds
         case toastPreviewLines
         case plainTextApp
+        case keepsOCRLineBreaks
         case textHistoryLimit
         case thumbnailMemoryMB
         case keepsClipboardHistory
@@ -434,6 +438,7 @@ private extension SettingsStore {
         static let toastPosition = ToastPosition.topCenter
         static let toastPreviewLines = 2
         static let plainTextApp = PlainTextApp.textEdit
+        static let keepsOCRLineBreaks = true
         static let textHistoryLimit = 50
         static let thumbnailMemoryMB = 64
         static let keepsClipboardHistory = true

@@ -205,7 +205,7 @@ final class CaptureCoordinator {
             if !shown { NSSound.beep() }
             return
         }
-        let copied = content.lines.isEmpty ? content.codes.joined(separator: "\n") : content.text
+        let copied = content.copiedText(preservingLineBreaks: settings.keepsOCRLineBreaks)
         clipboard.copy(text: copied)
         textHistory.add(copied)
 

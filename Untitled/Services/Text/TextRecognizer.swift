@@ -20,7 +20,19 @@ nonisolated struct RecognizedContent: Sendable {
     var codes: [String] = []
 
     var text: String { lines.map(\.text).joined(separator: "\n") }
-    var isEmpty: Bool { lines.isEmpty && codes.isEmpty }
+    var isEmpty: Bool { copiedText(preservingLineBreaks: true).isEmpty }
+
+    /// OCR text ready for the clipboard or a document. The default keeps Vision's line order;
+    /// disabling line breaks joins the same lines into a paragraph without changing their text.
+    func copiedText(preservingLineBreaks: Bool) -> String {
+        let lineParts = lines
+            .map(\.text)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let parts = lineParts.isEmpty ? codes : lineParts
+        let separator = preservingLineBreaks ? "\n" : " "
+        return parts.joined(separator: separator)
+    }
 
     /// The first code that is a web address, for an Open button.
     var link: URL? {

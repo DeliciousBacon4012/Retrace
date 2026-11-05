@@ -421,7 +421,7 @@ struct EditorView: View {
         defer { isReadingText = false }
         do {
             let content = try await TextRecognizer.recognize(image)
-            let text = content.lines.isEmpty ? content.codes.joined(separator: "\n") : content.text
+            let text = actions.formatText(content)
             guard !text.isEmpty else {
                 notice = EditorNotice(symbolName: "text.magnifyingglass", title: String(localized: "No text found"))
                 return
@@ -566,6 +566,7 @@ struct EditorActions {
     /// The finished image, for exporting.
     var render: () -> CGImage?
     var copyText: (String) -> Void
+    var formatText: (RecognizedContent) -> String
     var exportFolder: URL
     var exportOptions: ExportOptions
     var suggestedName: String
