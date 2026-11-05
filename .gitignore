@@ -24,3 +24,6 @@ Package.resolved
 *.p12
 *.mobileprovision
 *.provisionprofile
+
+# Claude Code worktrees
+.claude/worktrees/
