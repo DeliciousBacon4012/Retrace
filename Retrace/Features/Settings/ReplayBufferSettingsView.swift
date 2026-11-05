@@ -42,6 +42,12 @@ struct ReplayBufferSettingsView: View {
                     ForEach(VideoQuality.replayChoices) { Text($0.title).tag($0) }
                 }
                 Toggle("Full Retina resolution", isOn: $settings.replayUsesFullResolution)
+                Picker("Default save length", selection: $settings.defaultReplaySeconds) {
+                    Text("Entire buffer").tag(0)
+                    ForEach(settings.saveLastDurations, id: \.self) { seconds in
+                        Text(SaveLastMenu.title(for: seconds)).tag(seconds)
+                    }
+                }
             } footer: {
                 Text("The buffer shares the codec, color, encoder, and system audio settings above. ProRes uses HEVC here, since replays are written in short segments. Higher settings use more processor time and disk.")
                     .font(.footnote)

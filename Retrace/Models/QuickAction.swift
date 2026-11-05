@@ -17,13 +17,25 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
     /// Whether the action opens the clipboard's image in the editor.
     var opensClipboard = false
 
+    /// Whether the action turns the replay buffer on or off.
+    var togglesReplay = false
+    /// Whether the action starts a screen recording, or discards the one running.
+    var startsOrDiscardsRecording = false
+    /// Whether the action stops the running recording and saves it.
+    var savesRecording = false
+    /// Whether the action saves the buffer's default length from Settings.
+    var savesDefaultReplay = false
+
     /// Whether the action saves the replay buffer.
     var savesReplay = false
     /// For a Save Last action, how many seconds it saves. Nil saves the whole buffer.
     var saveLastSeconds: Int?
 
     /// Whether the action does anything yet.
-    var isAvailable: Bool { captureMode != nil || capturesText || repeatsArea || opensClipboard || recordingMode != nil || savesReplay }
+    var isAvailable: Bool {
+        captureMode != nil || capturesText || repeatsArea || opensClipboard || recordingMode != nil || savesReplay
+            || togglesReplay || startsOrDiscardsRecording || savesRecording || savesDefaultReplay
+    }
 
     /// Whether the action takes a screenshot of some kind.
     var isScreenshot: Bool { captureMode != nil || capturesText || repeatsArea }
@@ -41,6 +53,10 @@ nonisolated struct QuickAction: Identifiable, Hashable, Sendable {
         QuickAction(id: "recordArea", title: String(localized: "Record Area"), symbolName: "rectangle.dashed.badge.record", recordingMode: .area),
         QuickAction(id: "recordWindow", title: String(localized: "Record Window"), symbolName: "macwindow.badge.plus", recordingMode: .window),
         QuickAction(id: "recordScreen", title: String(localized: "Record Screen"), symbolName: "record.circle", recordingMode: .screen),
+        QuickAction(id: "recordScreenOrDiscard", title: String(localized: "Start or Discard Screen Recording"), symbolName: "record.circle", startsOrDiscardsRecording: true),
+        QuickAction(id: "saveRecording", title: String(localized: "Stop and Save Recording"), symbolName: "stop.circle", savesRecording: true),
+        QuickAction(id: "toggleReplay", title: String(localized: "Turn Replay Buffer On or Off"), symbolName: "arrow.trianglehead.counterclockwise", togglesReplay: true),
+        QuickAction(id: "saveReplayDefault", title: String(localized: "Save Replay (Default Length)"), symbolName: "gobackward", savesDefaultReplay: true),
         QuickAction(id: "saveReplay", title: String(localized: "Save Entire Buffer"), symbolName: "gobackward", savesReplay: true),
         QuickAction(id: "openClipboard", title: String(localized: "Open from Clipboard"), symbolName: "doc.on.clipboard", opensClipboard: true),
     ]

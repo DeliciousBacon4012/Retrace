@@ -127,6 +127,31 @@ final class RecordingCoordinator {
     @ObservationIgnored private var cursorTracker: CursorTracker?
     @ObservationIgnored private var finishCodec = VideoCodec.hevc
 
+    /// Set when the running recording should be thrown away instead of saved.
+    @ObservationIgnored private var discardsWhenStopped = false
+
+    /// The shortcut pair for full-screen recording: the first press starts one, a second press
+    /// throws it away. The movie goes to the Trash, so a mistaken press can still be undone.
+    func startOrDiscardScreenRecording() async {
+        if countdown != nil {
+            cancelCountdown()
+            return
+        }
+        if recorder.isActive {
+            discardsWhenStopped = true
+            recorder.stop()
+            return
+        }
+        await toggle(.screen)
+    }
+
+    /// Stops the running recording and saves it. Does nothing when nothing is recording.
+    func stopAndSave() {
+        guard recorder.isActive else { return }
+        discardsWhenStopped = false
+        recorder.stop()
+    }
+
     /// Starts a recording, or stops the one in progress. During the countdown, cancels it.
     func toggle(_ mode: CaptureMode, savingTo folder: URL? = nil) async {
         if countdown != nil {
@@ -172,13 +197,17 @@ final class RecordingCoordinator {
                 queueDepth: settings.captureQueueDepth,
                 showsClicks: settings.showsClicks
             )
+            // The buffer steps aside for the recording and starts over once it's saved.
+            replay.isSuspendedForRecording = true
             try await recorder.start(target, options: options, to: url)
             if settings.playsSounds { CaptureSound.play() }
             hud.show(recorder: recorder, on: screen, framing: area)
         } catch is CancellationError {
             // A stop request during recorder startup is an expected cancellation, not an error.
+            replay.isSuspendedForRecording = false
             return
         } catch {
+            replay.isSuspendedForRecording = false
             Log.capture.error("Recording couldn't start: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
         }
@@ -238,6 +267,13 @@ final class RecordingCoordinator {
     private func finish(_ result: Result<URL, any Error>) {
         let cursor = cursorTracker?.stop()
         cursorTracker = nil
+        replay.isSuspendedForRecording = false
+        if discardsWhenStopped {
+            discardsWhenStopped = false
+            hud.hide()
+            if case .success(let url) = result { discard(url) }
+            return
+        }
         switch result {
         case .success(let url):
             if settings.playsSounds { CaptureSound.play() }
@@ -297,6 +333,28 @@ final class RecordingCoordinator {
             hud.hide()
             ErrorPresenter.present(error)
         }
+    }
+
+    private func discard(_ url: URL) {
+        var inTrash: NSURL?
+        do {
+            try FileManager.default.trashItem(at: url, resultingItemURL: &inTrash)
+        } catch {
+            Log.capture.error("Couldn't move a discarded recording to the Trash: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        let trashed = inTrash as URL?
+        toasts.show(.init(
+            kind: .recordingSaved,
+            symbolName: "trash",
+            title: String(localized: "Recording discarded"),
+            detail: String(localized: "It's in the Trash if you need it."),
+            actions: trashed.map { url in
+                [.init(title: String(localized: "Show in Trash"), systemImage: "trash") {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }]
+            } ?? []
+        ))
     }
 
     private static func posterFrame(for url: URL) async -> CGImage? {

@@ -108,6 +108,14 @@ final class AppDependencies {
             capture?.openFromClipboard()
         } else if let mode = action.recordingMode {
             Task { await recording?.toggle(mode) }
+        } else if action.startsOrDiscardsRecording {
+            Task { await recording?.startOrDiscardScreenRecording() }
+        } else if action.savesRecording {
+            recording?.stopAndSave()
+        } else if action.togglesReplay {
+            replay?.toggle()
+        } else if action.savesDefaultReplay {
+            Task { await replay?.saveDefaultLength() }
         } else if action.savesReplay {
             Task { await replay?.saveClip(lastSeconds: action.saveLastSeconds) }
         }

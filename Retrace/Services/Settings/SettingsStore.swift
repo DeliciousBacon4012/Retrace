@@ -141,6 +141,8 @@ final class SettingsStore {
     var replayBufferSeconds = Defaults.replayBufferSeconds { didSet { save(replayBufferSeconds, .replayBufferSeconds) } }
     var replayDiskLimitGB = Defaults.replayDiskLimitGB { didSet { save(replayDiskLimitGB, .replayDiskLimitGB) } }
     /// The lengths offered under Save Last, in seconds, shortest first.
+    /// What "Save Replay (Default Length)" saves, in seconds. 0 saves the whole buffer.
+    var defaultReplaySeconds = Defaults.defaultReplaySeconds { didSet { save(defaultReplaySeconds, .defaultReplaySeconds) } }
     private(set) var saveLastDurations = Defaults.saveLastDurations { didSet { save(saveLastDurations, .saveLastDurations) } }
 
     // MARK: Shortcuts
@@ -340,6 +342,7 @@ final class SettingsStore {
         showsClicks = value(.showsClicks, default: Defaults.showsClicks)
         indexesLibraryContent = value(.indexesLibraryContent, default: Defaults.indexesLibraryContent)
         hidesNoticesWhileRecording = value(.hidesNoticesWhileRecording, default: Defaults.hidesNoticesWhileRecording)
+        defaultReplaySeconds = max(0, value(.defaultReplaySeconds, default: Defaults.defaultReplaySeconds))
         videoColor = VideoColor(rawValue: value(.videoColor, default: "")) ?? Defaults.videoColor
         videoQuality = VideoQuality(rawValue: value(.videoQuality, default: "")) ?? Defaults.videoQuality
         videoEncoder = VideoEncoderChoice(rawValue: value(.videoEncoder, default: "")) ?? Defaults.videoEncoder
@@ -468,6 +471,7 @@ private extension SettingsStore {
         case showsClicks
         case indexesLibraryContent
         case hidesNoticesWhileRecording
+        case defaultReplaySeconds
         case videoColor
         case videoQuality
         case videoEncoder
@@ -543,6 +547,7 @@ private extension SettingsStore {
         static let showsClicks = false
         static let indexesLibraryContent = true
         static let hidesNoticesWhileRecording = true
+        static let defaultReplaySeconds = 0
         static let videoColor = VideoColor.automatic
         static let videoQuality = VideoQuality.original
         static let videoEncoder = VideoEncoderChoice.automatic
@@ -561,13 +566,16 @@ private extension SettingsStore {
         static let saveLastDurations = [15, 20, 25, 30, 60]
 
         /// ⌥⇧⌘ plus the number macOS uses for the same kind of screenshot; recordings follow on 6 and 7.
+        /// macOS's own screenshot keys, so Retrace works the way people already expect. macOS
+        /// keeps ⇧⌘3, ⇧⌘4, and ⇧⌘5 for itself until they're turned off in Keyboard Shortcuts.
         static let shortcuts: [String: Shortcut] = [
-            "captureScreen": Shortcut(keyCode: UInt32(kVK_ANSI_3), modifiers: [.option, .shift, .command]),
-            "captureArea": Shortcut(keyCode: UInt32(kVK_ANSI_4), modifiers: [.option, .shift, .command]),
-            "captureWindow": Shortcut(keyCode: UInt32(kVK_ANSI_5), modifiers: [.option, .shift, .command]),
-            "recordArea": Shortcut(keyCode: UInt32(kVK_ANSI_6), modifiers: [.option, .shift, .command]),
-            "recordScreen": Shortcut(keyCode: UInt32(kVK_ANSI_7), modifiers: [.option, .shift, .command]),
-            "saveReplay": Shortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: [.option, .shift, .command]),
+            "captureWindow": Shortcut(keyCode: UInt32(kVK_ANSI_2), modifiers: [.shift, .command]),
+            "captureScreen": Shortcut(keyCode: UInt32(kVK_ANSI_3), modifiers: [.shift, .command]),
+            "captureArea": Shortcut(keyCode: UInt32(kVK_ANSI_4), modifiers: [.shift, .command]),
+            "toggleReplay": Shortcut(keyCode: UInt32(kVK_ANSI_5), modifiers: [.shift, .command]),
+            "recordScreenOrDiscard": Shortcut(keyCode: UInt32(kVK_ANSI_6), modifiers: [.shift, .command]),
+            "saveRecording": Shortcut(keyCode: UInt32(kVK_ANSI_7), modifiers: [.shift, .command]),
+            "saveReplayDefault": Shortcut(keyCode: UInt32(kVK_ANSI_0), modifiers: [.shift, .command]),
         ]
 
         static var saveFolderPath: String {

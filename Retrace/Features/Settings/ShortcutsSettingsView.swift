@@ -12,9 +12,10 @@ struct ShortcutsSettingsView: View {
             }
             Section("Recording") {
                 ForEach(QuickAction.recordings) { row(for: $0) }
+                ForEach(QuickAction.all.filter { $0.startsOrDiscardsRecording || $0.savesRecording }) { row(for: $0) }
             }
             Section {
-                ForEach(QuickAction.all.filter(\.savesReplay)) { row(for: $0) }
+                ForEach(QuickAction.all.filter { $0.togglesReplay || $0.savesDefaultReplay || $0.savesReplay }) { row(for: $0) }
                 ForEach(settings.saveLastDurations.map(QuickAction.saveLast)) { row(for: $0) }
             } header: {
                 Text("Replay")
@@ -34,9 +35,18 @@ struct ShortcutsSettingsView: View {
             }
 
             Section {
-                Button("Restore Default Shortcuts") {
+                Button("Use Recommended Shortcuts") {
                     settings.shortcuts = SettingsStore.defaultShortcuts
                 }
+                Button("Open Keyboard Shortcuts in System Settings…") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            } footer: {
+                Text("Recommended: ⇧⌘2 window, ⇧⌘3 screen, ⇧⌘4 area, ⇧⌘5 replay buffer on or off, ⇧⌘6 start a screen recording (press again to discard it), ⇧⌘7 stop and save, ⇧⌘0 save the replay buffer. macOS uses ⇧⌘3, ⇧⌘4, and ⇧⌘5 for its own screenshots until you turn those off under Keyboard Shortcuts › Screenshots.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }

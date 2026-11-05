@@ -43,6 +43,20 @@ final class ReplayCoordinator {
         }
     }
 
+    func toggle() {
+        setEnabled(!settings.replayBufferEnabled)
+    }
+
+    /// Saves the length chosen in Settings, or the whole buffer.
+    func saveDefaultLength() async {
+        let seconds = settings.defaultReplaySeconds
+        await saveClip(lastSeconds: seconds > 0 ? seconds : nil)
+    }
+
+    /// While a full recording runs, the buffer pauses, so the two don't both encode the screen.
+    /// It starts over afterward if it's still turned on.
+    var isSuspendedForRecording = false
+
     /// Saves the buffered clip to the save folder and shows it in Quick Access: all of it,
     /// or with `lastSeconds`, just that much from the end.
     func saveClip(lastSeconds: Int? = nil, to folder: URL? = nil) async {
@@ -103,6 +117,7 @@ final class ReplayCoordinator {
                 enabled: settings.replayBufferEnabled,
                 seconds: settings.replayBufferSeconds,
                 limit: settings.replayDiskLimitGB,
+                suspended: isSuspendedForRecording,
                 fps: settings.replayFramesPerSecond,
                 codec: settings.videoCodec,
                 audio: settings.recordsSystemAudio,
@@ -119,7 +134,7 @@ final class ReplayCoordinator {
         }
 
         buffer.stop()
-        guard wanted.enabled, permissions.screenRecordingStatus == .granted else { return }
+        guard wanted.enabled, !wanted.suspended, permissions.screenRecordingStatus == .granted else { return }
         Task {
             do {
                 try await buffer.start(

@@ -8,17 +8,19 @@ nonisolated struct RecordingTimerReading: Equatable {
 }
 
 nonisolated enum RecordingTimerLogic {
-    static func reading(since: Date, now: Date, maximumDuration: Int? = nil) -> RecordingTimerReading {
+    /// The dot blinks once a second while anything records: bright for the first half of each
+    /// second, dim for the second. With Reduce Motion it stays bright.
+    static func reading(since: Date, now: Date, maximumDuration: Int? = nil, blinks: Bool = true) -> RecordingTimerReading {
         let elapsed = max(0, now.timeIntervalSince(since))
         let limit = maximumDuration.flatMap { $0 > 0 ? Double($0) : nil }
         let displayed = Int(min(elapsed, limit ?? .greatestFiniteMagnitude).rounded(.down))
         let reachedLimit = limit.map { elapsed >= $0 } ?? false
-        let halfSecondPhase = reachedLimit ? Int(((elapsed - (limit ?? 0)) * 2).rounded(.down)) : 0
+        let halfSecondPhase = Int((elapsed * 2).rounded(.down))
 
         return RecordingTimerReading(
             displayedSeconds: displayed,
             reachedLimit: reachedLimit,
-            pulseIsBright: !reachedLimit || halfSecondPhase.isMultiple(of: 2)
+            pulseIsBright: !blinks || halfSecondPhase.isMultiple(of: 2)
         )
     }
 }
@@ -42,7 +44,7 @@ final class RecordingStatusItem: NSObject {
         button.toolTip = toolTip
         button.setAccessibilityLabel(accessibilityLabel)
 
-        let interval: TimeInterval = maximumDuration == nil ? 1 : 0.5
+        let interval: TimeInterval = 0.5
         let elapsed = max(0, Date.now.timeIntervalSince(since))
         let remainder = elapsed.truncatingRemainder(dividingBy: interval)
         let wait = interval - remainder
@@ -94,7 +96,12 @@ final class RecordingStatusItem: NSObject {
 
     private func updateElapsed(since: Date, maximumDuration: Int?, accessibilityLabel: String) {
         guard let button = item?.button else { return }
-        let reading = RecordingTimerLogic.reading(since: since, now: .now, maximumDuration: maximumDuration)
+        let reading = RecordingTimerLogic.reading(
+            since: since,
+            now: .now,
+            maximumDuration: maximumDuration,
+            blinks: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        )
         let title = Self.formatted(seconds: reading.displayedSeconds)
         button.image = reading.pulseIsBright ? Self.dot : Self.dimDot
         button.setAccessibilityLabel("\(accessibilityLabel), \(title)")
