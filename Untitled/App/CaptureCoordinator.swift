@@ -4,6 +4,17 @@ import OSLog
 
 /// Runs a screenshot from start to finish: permission check, selection, capture,
 /// then the after-capture actions chosen in Settings (save, copy, Quick Access).
+nonisolated enum CaptureWindowID {
+    /// AppKit can report sentinel or wider-than-32-bit numbers for windows such as menu bar items.
+    /// Core Graphics window IDs are UInt32, so convert exactly and ignore values it cannot represent.
+    static func fromAppKitWindowNumber(_ number: Int) -> CGWindowID? {
+        guard let windowID = CGWindowID(exactly: number), windowID != kCGNullWindowID else {
+            return nil
+        }
+        return windowID
+    }
+}
+
 @Observable
 final class CaptureCoordinator {
     private(set) var isCapturing = false
@@ -286,7 +297,7 @@ final class CaptureCoordinator {
     private func ownFloatingWindows() -> Set<CGWindowID> {
         Set(NSApplication.shared.windows.lazy
             .filter { $0.isVisible && $0.level != .normal }
-            .map { CGWindowID($0.windowNumber) })
+            .compactMap { CaptureWindowID.fromAppKitWindowNumber($0.windowNumber) })
     }
 
     // MARK: After capture
