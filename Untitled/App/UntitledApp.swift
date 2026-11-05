@@ -23,13 +23,6 @@ struct UntitledApp: App {
             EditorCommands(editors: dependencies.editor)
         }
 
-        Settings {
-            SettingsView()
-                .environment(dependencies)
-                .environment(dependencies.settings)
-        }
-        .windowResizability(.contentMinSize)
-
         Window("Feature Roadmap", id: WindowID.roadmap) {
             NavigationStack {
                 RoadmapView()

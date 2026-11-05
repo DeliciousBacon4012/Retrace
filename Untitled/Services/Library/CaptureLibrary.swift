@@ -15,14 +15,18 @@ final class CaptureLibrary {
     private(set) var loadError: String?
     private(set) var folders: [URL]
 
+    @ObservationIgnored private let sourceIndex: CaptureSourceIndex
+
     @ObservationIgnored private var watchers: [String: FolderWatcher] = [:]
     @ObservationIgnored private var loadTask: Task<Void, Never>?
 
-    init(folder: URL) {
+    init(folder: URL, sourceIndex: CaptureSourceIndex = .shared) {
+        self.sourceIndex = sourceIndex
         folders = [folder]
     }
 
-    init(folders: [URL]) {
+    init(folders: [URL], sourceIndex: CaptureSourceIndex = .shared) {
+        self.sourceIndex = sourceIndex
         self.folders = Self.normalized(folders)
     }
 
@@ -53,9 +57,10 @@ final class CaptureLibrary {
     func reload() {
         loadTask?.cancel()
         let folders = folders
+        let sources = sourceIndex.snapshot()
         isLoading = items.isEmpty
         loadTask = Task {
-            let result = await Self.scan(folders)
+            let result = await Self.scan(folders, sources: sources)
             guard !Task.isCancelled else { return }
             if watch() {
                 reload()
@@ -107,7 +112,10 @@ final class CaptureLibrary {
     /// Reads all configured folders off the main thread. A missing folder doesn't stop
     /// other locations from appearing; the first unreadable location is shown if none work.
     @concurrent
-    nonisolated private static func scan(_ folders: [URL]) async -> (items: [LibraryItem], errors: [String]) {
+    nonisolated private static func scan(
+        _ folders: [URL],
+        sources: [String: CaptureSource]
+    ) async -> (items: [LibraryItem], errors: [String]) {
         let keys: [URLResourceKey] = [.contentTypeKey, .creationDateKey, .contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
         var found: [LibraryItem] = []
         var errors: [String] = []
@@ -138,7 +146,8 @@ final class CaptureLibrary {
                         date: date,
                         modified: values.contentModificationDate ?? date,
                         kind: kind,
-                        byteCount: values.fileSize ?? 0
+                        byteCount: values.fileSize ?? 0,
+                        captureSource: sources[CaptureSourceIndex.key(for: url)]
                     )
                 }
                 found.append(contentsOf: items)

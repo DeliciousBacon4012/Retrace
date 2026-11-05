@@ -8,6 +8,13 @@ struct AppCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") {
+                MainWindowRouter.shared.showSettings(using: openWindow)
+            }
+            .keyboardShortcut(",", modifiers: .command)
+        }
+
         CommandGroup(after: .newItem) {
             Button("Open…") {
                 let panel = NSOpenPanel()

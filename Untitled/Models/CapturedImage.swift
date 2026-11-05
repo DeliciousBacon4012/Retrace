@@ -14,6 +14,8 @@ struct CapturedImage: Identifiable {
     var preferredSaveFolderURL: URL?
     /// True when this is a recording's poster frame rather than a screenshot.
     var isVideo = false
+    /// The screenshot mode, if this image came from a retrace capture action.
+    var captureSource: CaptureSource?
 
     /// The image's size in points, so it displays at its on-screen size.
     var pointSize: NSSize {

@@ -6,8 +6,8 @@ import OSLog
 import UniformTypeIdentifiers
 
 /// One thing you copied: text, or an image kept as a PNG file.
-nonisolated struct ClipboardEntry: Identifiable, Codable, Equatable, Sendable {
-    enum Content: Codable, Equatable, Sendable {
+nonisolated struct ClipboardEntry: Identifiable, Codable, Equatable, Hashable, Sendable {
+    enum Content: Codable, Equatable, Hashable, Sendable {
         case text(String)
         /// `file` is the PNG's name inside the history folder.
         case image(file: String, width: Int, height: Int)

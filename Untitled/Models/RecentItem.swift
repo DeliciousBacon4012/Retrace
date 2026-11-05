@@ -1,19 +1,22 @@
 import Foundation
 
-/// One thing in Recents: a screenshot or recording in the save folder, or captured text.
+/// One Library item from saved captures, clipboard history, or Capture Text.
 nonisolated enum RecentItem: Identifiable, Hashable, Sendable {
     case file(LibraryItem)
     case text(TextSnippet)
+    case clipboard(ClipboardEntry)
 
     enum ID: Hashable, Sendable {
         case file(URL)
         case text(UUID)
+        case clipboard(UUID)
     }
 
     var id: ID {
         switch self {
         case .file(let item): .file(item.url)
         case .text(let snippet): .text(snippet.id)
+        case .clipboard(let entry): .clipboard(entry.id)
         }
     }
 
@@ -21,6 +24,7 @@ nonisolated enum RecentItem: Identifiable, Hashable, Sendable {
         switch self {
         case .file(let item): item.date
         case .text(let snippet): snippet.date
+        case .clipboard(let entry): entry.date
         }
     }
 
@@ -32,8 +36,17 @@ nonisolated enum RecentItem: Identifiable, Hashable, Sendable {
         if case .text(let snippet) = self { snippet } else { nil }
     }
 
-    /// Files and snippets together, newest first.
-    static func merged(files: [LibraryItem], snippets: [TextSnippet]) -> [RecentItem] {
-        (files.map(RecentItem.file) + snippets.map(RecentItem.text)).sorted { $0.date > $1.date }
+    var clipboardEntry: ClipboardEntry? {
+        if case .clipboard(let entry) = self { entry } else { nil }
+    }
+
+    /// Captures and both kinds of clipboard history, newest first.
+    static func merged(
+        files: [LibraryItem],
+        snippets: [TextSnippet],
+        clipboardEntries: [ClipboardEntry] = []
+    ) -> [RecentItem] {
+        (files.map(RecentItem.file) + snippets.map(RecentItem.text) + clipboardEntries.map(RecentItem.clipboard))
+            .sorted { $0.date > $1.date }
     }
 }

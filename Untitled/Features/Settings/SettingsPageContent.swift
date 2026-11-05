@@ -1,31 +1,5 @@
 import SwiftUI
 
-/// Native Settings scene with the Editor's compact, icon-led segmented navigation.
-struct SettingsView: View {
-    @AppStorage(SettingsPane.storageKey) private var selection: SettingsPane = .general
-
-    var body: some View {
-        SettingsPageContent(pane: selection)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("Settings Categories", selection: $selection) {
-                        ForEach(SettingsPane.allCases) { pane in
-                            Label(pane.title, systemImage: pane.symbolName)
-                                .help(pane.title)
-                                .tag(pane)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel("Settings Categories")
-                    .frame(width: 540)
-                }
-            }
-            .navigationTitle("Settings")
-            .frame(minWidth: 880, minHeight: 600)
-    }
-}
-
 struct SettingsPageContent: View {
     let pane: SettingsPane
 

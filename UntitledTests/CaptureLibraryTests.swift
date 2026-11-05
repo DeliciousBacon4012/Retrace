@@ -19,7 +19,11 @@ final class CaptureLibraryTests: XCTestCase {
         try Data([2]).write(to: movie)
         try Data([3]).write(to: text)
 
-        let library = CaptureLibrary(folders: [first, second, first])
+        let sourceIndex = CaptureSourceIndex(fileURL: root.appendingPathComponent("CaptureSources.json"))
+        sourceIndex.record(.window, for: image)
+        XCTAssertEqual(CaptureSourceIndex(fileURL: root.appendingPathComponent("CaptureSources.json")).source(for: image), .window)
+
+        let library = CaptureLibrary(folders: [first, second, first], sourceIndex: sourceIndex)
         library.reload()
         for _ in 0..<100 where library.isLoading {
             try await Task.sleep(for: .milliseconds(10))
@@ -28,6 +32,10 @@ final class CaptureLibraryTests: XCTestCase {
         let actualPaths = Set(library.items.map { $0.url.resolvingSymlinksInPath().path })
         let expectedPaths = Set([image, movie].map { $0.resolvingSymlinksInPath().path })
         XCTAssertEqual(actualPaths, expectedPaths)
+        XCTAssertEqual(
+            library.items.first(where: { $0.url.resolvingSymlinksInPath() == image.resolvingSymlinksInPath() })?.captureSource,
+            .window
+        )
         XCTAssertNil(library.loadError)
     }
 
@@ -117,10 +125,31 @@ final class CaptureLibraryTests: XCTestCase {
     }
 
     @MainActor
-    func testLibrarySearchAndFiltersPreserveNewestFirstOrder() {
-        let screenshot = LibraryItem(
-            url: URL(fileURLWithPath: "/tmp/needle-screenshot.png"),
+    func testLibraryMultiFiltersSearchAndDateSort() {
+        let area = LibraryItem(
+            url: URL(fileURLWithPath: "/tmp/needle-area.png"),
             date: Date(timeIntervalSince1970: 1),
+            kind: .image,
+            byteCount: 1,
+            captureSource: .area
+        )
+        let window = LibraryItem(
+            url: URL(fileURLWithPath: "/tmp/needle-window.png"),
+            date: Date(timeIntervalSince1970: 4),
+            kind: .image,
+            byteCount: 1,
+            captureSource: .window
+        )
+        let fullScreen = LibraryItem(
+            url: URL(fileURLWithPath: "/tmp/full-screen.png"),
+            date: Date(timeIntervalSince1970: 5),
+            kind: .image,
+            byteCount: 1,
+            captureSource: .fullScreen
+        )
+        let legacyImage = LibraryItem(
+            url: URL(fileURLWithPath: "/tmp/legacy-image.png"),
+            date: Date(timeIntervalSince1970: 2),
             kind: .image,
             byteCount: 1
         )
@@ -130,31 +159,64 @@ final class CaptureLibraryTests: XCTestCase {
             kind: .video,
             byteCount: 1
         )
-        let snippet = TextSnippet(id: UUID(), text: "needle in copied text", date: Date(timeIntervalSince1970: 2))
+        let snippet = TextSnippet(id: UUID(), text: "needle in copied text", date: Date(timeIntervalSince1970: 2.5))
+        let clipboard = ClipboardEntry(
+            id: UUID(),
+            date: Date(timeIntervalSince1970: 6),
+            content: .text("needle from clipboard"),
+            appName: "Notes",
+            fingerprint: "text:test"
+        )
         let model = LibraryViewModel()
 
-        model.updateSources(files: [screenshot, recording], snippets: [snippet])
+        model.updateSources(
+            files: [area, window, fullScreen, legacyImage, recording],
+            snippets: [snippet],
+            clipboardEntries: [clipboard]
+        )
         XCTAssertEqual(model.visibleItems.map(\.id), [
+            RecentItem.clipboard(clipboard).id,
+            RecentItem.file(fullScreen).id,
+            RecentItem.file(window).id,
             RecentItem.file(recording).id,
             RecentItem.text(snippet).id,
-            RecentItem.file(screenshot).id,
+            RecentItem.file(legacyImage).id,
+            RecentItem.file(area).id,
         ])
 
-        model.kindFilter = .screenshots
-        XCTAssertEqual(model.visibleItems.map(\.id), [RecentItem.file(screenshot).id])
+        model.selectedCategories = [.windowScreenshots]
+        XCTAssertEqual(model.visibleItems.map(\.id), [RecentItem.file(window).id])
 
-        model.kindFilter = .all
+        model.selectedCategories = [.images]
+        XCTAssertEqual(Set(model.visibleItems.map(\.id)), Set([
+            RecentItem.file(area).id,
+            RecentItem.file(window).id,
+            RecentItem.file(fullScreen).id,
+            RecentItem.file(legacyImage).id,
+        ]))
+
+        model.selectedCategories = [.clipboard, .capturedText]
+        XCTAssertEqual(Set(model.visibleItems.map(\.id)), Set([
+            RecentItem.clipboard(clipboard).id,
+            RecentItem.text(snippet).id,
+        ]))
+
+        model.sortOrder = .oldestFirst
+        XCTAssertEqual(model.visibleItems.map(\.id), [RecentItem.text(snippet).id, RecentItem.clipboard(clipboard).id])
+
+        model.selectedCategories = Set(LibraryViewModel.Category.allCases)
+        model.sortOrder = .newestFirst
         model.searchText = "needle"
-        XCTAssertEqual(model.visibleItems.count, 3)
+        XCTAssertEqual(model.visibleItems.count, 5)
 
-        model.kindFilter = .text
+        model.selectedCategories = [.capturedText]
         XCTAssertEqual(model.visibleItems.map(\.id), [RecentItem.text(snippet).id])
 
         model.searchText = "not present"
         XCTAssertTrue(model.visibleItems.isEmpty)
 
         model.select(.file(recording))
-        model.updateSources(files: [screenshot], snippets: [snippet])
+        model.updateSources(files: [area], snippets: [snippet])
         XCTAssertTrue(model.selection.isEmpty)
     }
 }

@@ -1,9 +1,7 @@
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
-/// The capture library is the main workspace. Capture and recording remain direct toolbar actions;
-/// editing opens in its own document window, and Settings uses the macOS Settings scene.
+/// One persistent workspace switcher keeps the Library, Editor, and Settings in one window.
 struct MainView: View {
     @Environment(AppDependencies.self) private var dependencies
 
@@ -12,24 +10,27 @@ struct MainView: View {
     }
 }
 
-enum MainSection: String, Identifiable {
-    case captures
-    case clipboard
+enum MainTab: String, CaseIterable, Identifiable {
+    case library
+    case editor
+    case settings
 
     var id: String { rawValue }
-    static let storageKey = "mainWindowSection"
+    var title: String { rawValue.capitalized }
+    static let storageKey = "mainWindowTab"
 }
 
 private struct MainContent: View {
     @State var access: ScreenRecordingAccessModel
     @State private var library = LibraryViewModel()
-    @AppStorage(MainSection.storageKey) private var section: MainSection = .captures
+    @AppStorage(MainTab.storageKey) private var tab: MainTab = .library
+    @AppStorage(SettingsPane.storageKey) private var settingsPane: SettingsPane = .general
 
     @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
         VStack(spacing: 0) {
-            if section == .captures, access.screenRecording == .notGranted {
+            if tab != .settings, access.screenRecording == .notGranted {
                 PermissionBanner(model: access)
                     .padding(.horizontal, 24)
                     .padding(.top, 14)
@@ -38,51 +39,46 @@ private struct MainContent: View {
             }
 
             Group {
-                switch section {
-                case .captures:
+                switch tab {
+                case .library:
                     LibraryView(viewModel: library)
-                case .clipboard:
-                    ClipboardView()
+                case .editor:
+                    EditorLandingView()
+                case .settings:
+                    MainSettingsWorkspace(selection: $settingsPane)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationTitle(section == .captures ? "Library" : "Clipboard")
+        .navigationTitle(tab.title)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Picker("Library", selection: $section) {
-                    Label("Library", systemImage: "square.grid.2x2")
-                        .tag(MainSection.captures)
-                    Label("Clipboard", systemImage: "clipboard")
-                        .tag(MainSection.clipboard)
+                Picker("Workspace", selection: $tab) {
+                    ForEach(MainTab.allCases) { tab in
+                        Text(tab.title).tag(tab)
+                    }
                 }
                 .pickerStyle(.segmented)
-                .labelStyle(.iconOnly)
-                .accessibilityLabel("Library Sections")
-                .accessibilityHint("Switch between your captures and clipboard history.")
+                .accessibilityLabel("Workspace")
+                .accessibilityHint("Switch between Library, Editor, and Settings.")
+                .frame(width: 280)
             }
 
-            if section == .captures {
-                ToolbarItem(placement: .automatic) {
-                    LibraryFilterControl(selection: $library.kindFilter)
+            if tab == .library {
+                ToolbarItem(placement: .primaryAction) {
+                    LibraryFilterControl(selection: $library.selectedCategories, sortOrder: $library.sortOrder)
                 }
             }
 
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 CaptureMenu()
+            }
+
+            ToolbarItem(placement: .primaryAction) {
                 RecordControl()
             }
         }
         .frame(minWidth: 800, minHeight: 520)
-        .dropDestination(for: URL.self) { urls, _ in
-            guard let url = urls.first,
-                  UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true else {
-                NSSound.beep()
-                return false
-            }
-            dependencies.editor.open(fileAt: url)
-            return true
-        }
         .animation(.panel, value: access.screenRecording)
         .task {
             await access.watchScreenRecording()
@@ -94,37 +90,77 @@ private struct MainContent: View {
 
 }
 
-/// One compact system menu keeps the content header quiet and makes the active filter explicit.
+/// Settings categories stay in the same window and use the Editor's native segmented toolbar idiom.
+private struct MainSettingsWorkspace: View {
+    @Binding var selection: SettingsPane
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker(selection: $selection) {
+                ForEach(SettingsPane.allCases) { pane in
+                    Label(pane.title, systemImage: pane.symbolName)
+                        .help(pane.title)
+                        .tag(pane)
+                }
+            } label: {
+                EmptyView()
+            }
+            .pickerStyle(.segmented)
+            .labelStyle(.iconOnly)
+            .labelsHidden()
+            .accessibilityLabel("Settings Categories")
+            .frame(width: 540)
+            .padding(.top, 12)
+
+            SettingsPageContent(pane: selection)
+        }
+    }
+}
+
+/// One native filter menu contains multi-select categories and date ordering.
 private struct LibraryFilterControl: View {
-    @Binding var selection: LibraryViewModel.KindFilter
+    @Binding var selection: Set<LibraryViewModel.Category>
+    @Binding var sortOrder: LibraryViewModel.SortOrder
 
     var body: some View {
         Menu {
-            ForEach(LibraryViewModel.KindFilter.allCases) { filter in
-                Button {
-                    selection = filter
-                } label: {
-                    if selection == filter {
-                        Label(filter.title, systemImage: "checkmark")
-                    } else {
-                        Text(filter.title)
-                    }
+            Section("Show") {
+                ForEach(LibraryViewModel.Category.allCases) { category in
+                    Toggle(category.title, systemImage: category.symbolName, isOn: Binding(
+                        get: { selection.contains(category) },
+                        set: { isOn in
+                            if isOn {
+                                selection.insert(category)
+                            } else {
+                                selection.remove(category)
+                            }
+                        }
+                    ))
+                }
+                Button("Select All Filters") {
+                    selection = Set(LibraryViewModel.Category.allCases)
+                }
+            }
+            Picker("Sort by", selection: $sortOrder) {
+                ForEach(LibraryViewModel.SortOrder.allCases) { order in
+                    Text(order.title).tag(order)
                 }
             }
         } label: {
-            Image(systemName: selection == .all ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+            Image(systemName: "line.3.horizontal.decrease")
                 .frame(width: 32, height: 32)
                 .contentShape(.circle)
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .buttonStyle(.glass)
-        .accessibilityLabel("Filter captures")
-        .accessibilityValue(Text(selection.title))
-        .help("Filter captures: \(selection.title)")
+        .accessibilityLabel("Filter and Sort Library")
+        .accessibilityValue(Text("\(selection.count) filters, \(sortOrder.title)"))
+        .help("Filter and sort Library items")
     }
 }
 
-/// One direct capture command and the other capture modes in its menu.
+/// One glass capsule opens the native menu of capture modes; no split arrow or second click target.
 private struct CaptureMenu: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
@@ -144,22 +180,19 @@ private struct CaptureMenu: View {
                 CaptureDestinationOptions()
                 Divider()
             }
-            ForEach(QuickAction.all.filter(\.isScreenshot)) { action in
+            ForEach(QuickAction.all.filter { $0.captureMode != nil }) { action in
                 CaptureButton(action: action, saveFolder: saveFolder)
             }
         } label: {
             Label("Capture", systemImage: "viewfinder")
                 .labelStyle(.titleAndIcon)
-        } primaryAction: {
-            if let action = QuickAction.all.first(where: { $0.id == "captureArea" }) {
-                Task { await dependencies.capture.run(action, savingTo: saveFolder) }
-            }
         }
-        .buttonStyle(.glassProminent)
+        .menuIndicator(.hidden)
+        .buttonStyle(.glass)
         .id(settings.captureDestinationOverridePath)
         .disabled(dependencies.capture.isCapturing)
         .accessibilityValue(Text(destinationName))
-        .help("Capture Area. Saves to \(destinationName). Open the menu for other capture options.")
+        .help("Choose Area, Window, or Full Screen capture. Saves to \(destinationName).")
     }
 }
 
@@ -218,7 +251,7 @@ private struct CaptureDestinationOptions: View {
     }
 }
 
-/// Record starts with the familiar area action; other modes and replay remain in its menu.
+/// Record uses the same single-button menu as Capture; its modes are direct and discoverable.
 private struct RecordControl: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
@@ -238,7 +271,7 @@ private struct RecordControl: View {
             Button("Stop Recording", systemImage: "stop.fill") {
                 recording.recorder.stop()
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(.glass)
             .tint(.red)
             .disabled(recording.recorder.state == .finishing)
             .help("Stop Recording")
@@ -264,9 +297,9 @@ private struct RecordControl: View {
                     systemImage: dependencies.replay.buffer.isOn ? "record.circle.fill" : "record.circle"
                 )
                 .labelStyle(.titleAndIcon)
-            } primaryAction: {
-                Task { await recording.toggle(.area, savingTo: saveFolder) }
             }
+            .menuIndicator(.hidden)
+            .buttonStyle(.glass)
             .id(settings.captureDestinationOverridePath)
             .help(recordHelp)
             .disabled(recording.recorder.state != .idle)
@@ -274,7 +307,7 @@ private struct RecordControl: View {
     }
 
     private var recordHelp: String {
-        let base = String(localized: "Record Area. Open the menu for more.")
+        let base = String(localized: "Choose Area, Window, or Full Screen recording.")
         return dependencies.replay.buffer.isOn ? base + " " + String(localized: "Replay buffer is on.") : base
     }
 }

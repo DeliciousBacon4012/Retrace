@@ -80,7 +80,12 @@ final class CaptureCoordinator {
                 rect: lastArea.screen.topLeftRelativeRect(for: lastArea.rect),
                 options: options()
             )
-            await finish(CapturedImage(image: frame.image, scale: frame.scale, date: .now), savingTo: folder)
+            await finish(CapturedImage(
+                image: frame.image,
+                scale: frame.scale,
+                date: .now,
+                captureSource: .area
+            ), savingTo: folder)
         } catch {
             Log.capture.error("Capture failed: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
@@ -114,7 +119,12 @@ final class CaptureCoordinator {
                 Log.capture.info("Capture cancelled")
                 return
             }
-            await finish(CapturedImage(image: frame.image, scale: frame.scale, date: .now), savingTo: folder)
+            await finish(CapturedImage(
+                image: frame.image,
+                scale: frame.scale,
+                date: .now,
+                captureSource: CaptureSource.screenshot(for: mode)
+            ), savingTo: folder)
         } catch {
             Log.capture.error("Capture failed: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
@@ -229,7 +239,7 @@ final class CaptureCoordinator {
         ]
         if settings.textHistoryLimit > 0 {
             actions.append(.init(title: String(localized: "Show in Recents"), systemImage: "clock") {
-                MainWindowRouter.shared.request(recentsFilter: .text)
+                MainWindowRouter.shared.request(libraryCategories: [.capturedText])
             })
         }
         if let link = content.link {
@@ -364,7 +374,9 @@ final class CaptureCoordinator {
 
         let preferred = capture.preferredSaveFolderURL ?? settings.saveFolderURL
         do {
-            return try await storage.save(data, template: settings.filenameTemplate, date: capture.date, fileExtension: format.fileExtension, in: preferred)
+            let url = try await storage.save(data, template: settings.filenameTemplate, date: capture.date, fileExtension: format.fileExtension, in: preferred)
+            if let source = capture.captureSource { CaptureSourceIndex.shared.record(source, for: url) }
+            return url
         } catch {
             Log.capture.error("Saving to the chosen folder failed: \(error.localizedDescription, privacy: .public)")
         }
@@ -377,6 +389,7 @@ final class CaptureCoordinator {
         }
         do {
             let url = try await storage.save(data, template: settings.filenameTemplate, date: capture.date, fileExtension: format.fileExtension, in: fallback)
+            if let source = capture.captureSource { CaptureSourceIndex.shared.record(source, for: url) }
             ErrorPresenter.present(String(localized: "Saved to Pictures › Untitled instead."), recovery: String(localized: "The chosen folder couldn't be written to. You can pick another one in Settings › Capture."))
             return url
         } catch {

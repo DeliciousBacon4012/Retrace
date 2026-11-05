@@ -7,7 +7,7 @@ struct SaveLastMenu: View {
 
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Menu("Save Last", systemImage: "gobackward") {
@@ -26,7 +26,7 @@ struct SaveLastMenu: View {
             .menuShortcut(settings.shortcuts["saveReplay"])
             Divider()
             Button("Edit Durations…") {
-                MainWindowRouter.shared.showSettings(.recording, using: openSettings)
+                MainWindowRouter.shared.showSettings(.recording, using: openWindow)
             }
         }
         .disabled(!dependencies.replay.buffer.isOn || dependencies.replay.buffer.state == .saving)

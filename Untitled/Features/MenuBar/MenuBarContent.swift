@@ -9,7 +9,6 @@ struct MenuBarContent: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         if let remaining = dependencies.recording.countdown {
@@ -77,7 +76,7 @@ struct MenuBarContent: View {
                 MainWindowRouter.shared.show(using: openWindow)
             }
             Button("Settings…", systemImage: "gearshape") {
-                MainWindowRouter.shared.showSettings(using: openSettings)
+                MainWindowRouter.shared.showSettings(using: openWindow)
             }
             .keyboardShortcut(",")
         }
@@ -175,8 +174,7 @@ private struct ClipboardHistoryMenu: View {
             Divider()
             Toggle("Keep Clipboard History", isOn: $settings.keepsClipboardHistory)
             Button("Show All") {
-                UserDefaults.standard.set(MainSection.clipboard.rawValue, forKey: MainSection.storageKey)
-                MainWindowRouter.shared.show(using: openWindow)
+                MainWindowRouter.shared.show(libraryCategories: [.clipboard], using: openWindow)
             }
         }
     }
@@ -212,7 +210,7 @@ private struct RecentTextMenu: View {
             }
             Divider()
             Button("Show All in Recents") {
-                MainWindowRouter.shared.show(recentsFilter: .text, using: openWindow)
+                MainWindowRouter.shared.show(libraryCategories: [.capturedText], using: openWindow)
             }
         }
     }

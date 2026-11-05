@@ -4,20 +4,52 @@ import Observation
 /// Search, filtering, and selection for Recents.
 @Observable
 final class LibraryViewModel {
-    enum KindFilter: String, CaseIterable, Identifiable {
-        case all
-        case screenshots
+    enum Category: String, CaseIterable, Hashable, Identifiable {
+        case clipboard
+        case images
+        case areaScreenshots
+        case windowScreenshots
+        case fullScreen
         case recordings
-        case text
+        case capturedText
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .all: String(localized: "All")
-            case .screenshots: String(localized: "Screenshots")
+            case .clipboard: String(localized: "Clipboard")
+            case .images: String(localized: "Images")
+            case .areaScreenshots: String(localized: "Area Screenshots")
+            case .windowScreenshots: String(localized: "Window Screenshots")
+            case .fullScreen: String(localized: "Full Screen")
             case .recordings: String(localized: "Recordings")
-            case .text: String(localized: "Text")
+            case .capturedText: String(localized: "Captured Text")
+            }
+        }
+
+        var symbolName: String {
+            switch self {
+            case .clipboard: "clipboard"
+            case .images: "photo"
+            case .areaScreenshots: "rectangle.dashed"
+            case .windowScreenshots: "macwindow"
+            case .fullScreen: "display"
+            case .recordings: "record.circle"
+            case .capturedText: "text.viewfinder"
+            }
+        }
+    }
+
+    enum SortOrder: String, CaseIterable, Hashable, Identifiable {
+        case newestFirst
+        case oldestFirst
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .newestFirst: String(localized: "Newest Added")
+            case .oldestFirst: String(localized: "Oldest Added")
             }
         }
     }
@@ -30,10 +62,11 @@ final class LibraryViewModel {
             if searchText != oldValue { refreshVisibleItems() }
         }
     }
-    var kindFilter: KindFilter = .all {
-        didSet {
-            if kindFilter != oldValue { refreshVisibleItems() }
-        }
+    var selectedCategories = Set(Category.allCases) {
+        didSet { if selectedCategories != oldValue { refreshVisibleItems() } }
+    }
+    var sortOrder: SortOrder = .newestFirst {
+        didSet { if sortOrder != oldValue { refreshVisibleItems() } }
     }
     var selection: Set<RecentItem.ID> = []
     var previewURL: URL?
@@ -47,8 +80,12 @@ final class LibraryViewModel {
     @ObservationIgnored private var navigationCursor: RecentItem.ID?
 
     /// Refreshes the source list when a watched save folder or clipboard history changes.
-    func updateSources(files: [LibraryItem], snippets: [TextSnippet]) {
-        sourceItems = RecentItem.merged(files: files, snippets: snippets)
+    func updateSources(
+        files: [LibraryItem],
+        snippets: [TextSnippet],
+        clipboardEntries: [ClipboardEntry] = []
+    ) {
+        sourceItems = RecentItem.merged(files: files, snippets: snippets, clipboardEntries: clipboardEntries)
         selection.formIntersection(sourceItems.map(\.id))
         if let rangeAnchor, !sourceItems.contains(where: { $0.id == rangeAnchor }) {
             self.rangeAnchor = nil
@@ -59,21 +96,38 @@ final class LibraryViewModel {
         refreshVisibleItems()
     }
 
-    /// Filters the already merged source list, preserving its newest-first order.
-    /// Snippets match on their text; files match on their name.
+    /// Filters and sorts one merged set without rebuilding it on selection-only changes.
+    /// Clipboard entries match their visible text or source app; files match their filename.
     private func refreshVisibleItems() {
         let query = searchText.trimmingCharacters(in: .whitespaces)
-        visibleItems = sourceItems.filter { item in
+        let filtered = sourceItems.filter { item in
             switch item {
             case .file(let file):
-                guard kindFilter == .all
-                        || kindFilter == .screenshots && file.kind == .image
-                        || kindFilter == .recordings && file.kind == .video
-                else { return false }
+                let matchesCategory: Bool
+                switch file.kind {
+                case .image:
+                    matchesCategory = selectedCategories.contains(.images)
+                        || file.captureSource == .area && selectedCategories.contains(.areaScreenshots)
+                        || file.captureSource == .window && selectedCategories.contains(.windowScreenshots)
+                        || file.captureSource == .fullScreen && selectedCategories.contains(.fullScreen)
+                case .video:
+                    matchesCategory = selectedCategories.contains(.recordings)
+                }
+                guard matchesCategory else { return false }
                 return query.isEmpty || file.name.localizedStandardContains(query)
             case .text(let snippet):
-                guard kindFilter == .all || kindFilter == .text else { return false }
+                guard selectedCategories.contains(.capturedText) else { return false }
                 return query.isEmpty || snippet.text.localizedStandardContains(query)
+            case .clipboard(let entry):
+                guard selectedCategories.contains(.clipboard) else { return false }
+                let text = entry.text ?? entry.appName ?? entry.id.uuidString
+                return query.isEmpty || text.localizedStandardContains(query)
+            }
+        }
+        visibleItems = filtered.sorted { lhs, rhs in
+            switch sortOrder {
+            case .newestFirst: lhs.date > rhs.date
+            case .oldestFirst: lhs.date < rhs.date
             }
         }
     }
@@ -175,14 +229,18 @@ final class LibraryViewModel {
     }
 
     /// Quick Look shows files only; text is already readable on its card.
-    func togglePreview(in items: [RecentItem]) {
+    func togglePreview(
+        in items: [RecentItem],
+        imageURLForClipboardEntry: (ClipboardEntry) -> URL? = { _ in nil }
+    ) {
         if previewURL != nil {
             previewURL = nil
             return
         }
 
-        guard let file = selectedItems(in: items).compactMap(\.file).first else { return }
-        previewURL = file.url
+        let selected = selectedItems(in: items)
+        previewURL = selected.compactMap(\.file).first?.url
+            ?? selected.compactMap(\.clipboardEntry).first.flatMap(imageURLForClipboardEntry)
     }
 
 }

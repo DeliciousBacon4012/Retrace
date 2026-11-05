@@ -12,8 +12,8 @@ struct LibraryView: View {
 
     @Environment(AppDependencies.self) private var dependencies
     @AppStorage(LibraryViewModel.quickLookOnClickKey) private var quickLookOnClick = false
-    /// The text card that was just copied, which says so for a moment.
-    @State private var copiedSnippet: TextSnippet.ID?
+    /// The Library item just copied, which briefly shows confirmation.
+    @State private var copiedItem: RecentItem.ID?
     @FocusState private var isGridFocused: Bool
     /// The item under the pointer, kept out of view state so moving it doesn't redraw the grid.
     @State private var gridInteraction = GridInteractionState()
@@ -24,6 +24,7 @@ struct LibraryView: View {
     var body: some View {
         let library = dependencies.library
         let history = dependencies.textHistory
+        let clipboardHistory = dependencies.clipboardHistory
         let items = viewModel.visibleItems
 
         ScrollViewReader { scrollProxy in
@@ -51,19 +52,22 @@ struct LibraryView: View {
                         viewModel.clearSelection()
                         isGridFocused = true
                     }
-                    .quickLookPreview($viewModel.previewURL, in: items.compactMap(\.file).map(\.url))
+                    .quickLookPreview($viewModel.previewURL, in: previewURLs(for: items))
                     .overlay { emptyState(library: library, history: history, isEmpty: items.isEmpty) }
                     .onChange(of: library.items) {
-                        viewModel.updateSources(files: library.items, snippets: history.snippets)
+                        updateSources()
                         if !library.isLoading, library.loadError == nil {
                             dependencies.versions.prune(keeping: library.items.map(\.url))
                         }
                     }
                     .onChange(of: history.snippets) {
-                        viewModel.updateSources(files: library.items, snippets: history.snippets)
+                        updateSources()
+                    }
+                    .onChange(of: clipboardHistory.entries) {
+                        updateSources()
                     }
                     .onAppear {
-                        viewModel.updateSources(files: library.items, snippets: history.snippets)
+                        updateSources()
                         applyPendingFilter()
                         gridInteraction.columnCount = columnCount
                         isGridFocused = true
@@ -71,19 +75,19 @@ struct LibraryView: View {
                         installEventMonitor(scrollProxy: scrollProxy)
                     }
                     .onDisappear(perform: removeEventMonitor)
-                    .onChange(of: MainWindowRouter.shared.pendingRecentsFilter) { applyPendingFilter() }
-                    .task(id: copiedSnippet) {
-                        guard copiedSnippet != nil else { return }
+                    .onChange(of: MainWindowRouter.shared.pendingLibraryCategories) { applyPendingFilter() }
+                    .task(id: copiedItem) {
+                        guard copiedItem != nil else { return }
                         try? await Task.sleep(for: .seconds(1.2))
                         guard !Task.isCancelled else { return }
-                        copiedSnippet = nil
+                        copiedItem = nil
                     }
                 }
                 .focusable()
                 .focused($isGridFocused)
                 .focusEffectDisabled()
                 .onKeyPress(.space) {
-                    viewModel.togglePreview(in: items)
+                    viewModel.togglePreview(in: items, imageURLForClipboardEntry: clipboardHistory.imageURL(for:))
                     return .handled
                 }
                 .onKeyPress(.return) {
@@ -118,17 +122,34 @@ struct LibraryView: View {
                 showQuickLook: { viewModel.previewURL = $0 }
             )
         case .text(let snippet):
-            TextCard(snippet: snippet, isSelected: viewModel.selection.contains(item.id), isCopied: copiedSnippet == snippet.id)
+            TextCard(snippet: snippet, isSelected: viewModel.selection.contains(item.id), isCopied: copiedItem == item.id)
+        case .clipboard(let entry):
+            ClipboardCard(
+                entry: entry,
+                imageURL: dependencies.clipboardHistory.imageURL(for: entry),
+                isSelected: viewModel.selection.contains(item.id),
+                isCopied: copiedItem == item.id
+            )
         }
     }
 
     @ViewBuilder
     private func emptyState(library: CaptureLibrary, history: TextHistory, isEmpty: Bool) -> some View {
-        // The folder only matters when files are shown; text lives elsewhere.
-        let showsFiles = viewModel.kindFilter != .text
-        if isEmpty, showsFiles, library.isLoading {
+        let savedCaptureCategories: Set<LibraryViewModel.Category> = [
+            .images, .areaScreenshots, .windowScreenshots, .fullScreen, .recordings,
+        ]
+        let showsSavedCaptures = !viewModel.selectedCategories.isDisjoint(with: savedCaptureCategories)
+        if isEmpty, viewModel.selectedCategories.isEmpty {
+            ContentUnavailableView {
+                Label("No Filters Selected", systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text("Choose a filter to show Library items.")
+            } actions: {
+                Button("Select All Filters") { viewModel.selectedCategories = Set(LibraryViewModel.Category.allCases) }
+            }
+        } else if isEmpty, showsSavedCaptures, library.isLoading {
             ProgressView()
-        } else if isEmpty, showsFiles, let error = library.loadError {
+        } else if isEmpty, showsSavedCaptures, let error = library.loadError {
             ContentUnavailableView {
                 Label("Can't Open a Library Location", systemImage: "exclamationmark.triangle")
             } description: {
@@ -144,7 +165,7 @@ struct LibraryView: View {
             }
         } else if isEmpty, !viewModel.searchText.trimmingCharacters(in: .whitespaces).isEmpty {
             ContentUnavailableView.search(text: viewModel.searchText)
-        } else if isEmpty, viewModel.kindFilter == .text {
+        } else if isEmpty, viewModel.selectedCategories == [.capturedText] {
             ContentUnavailableView {
                 Label("No Text Yet", systemImage: "text.viewfinder")
             } description: {
@@ -154,11 +175,23 @@ struct LibraryView: View {
                     Text("Text history is off. Turn it on in Settings › Advanced.")
                 }
             }
+        } else if isEmpty, viewModel.selectedCategories == [.clipboard], !dependencies.settings.keepsClipboardHistory {
+            ContentUnavailableView {
+                Label("Clipboard History Is Off", systemImage: "clipboard")
+            } description: {
+                Text("Turn it on in Settings to keep copied text and images here.")
+            }
+        } else if isEmpty, viewModel.selectedCategories == [.clipboard] {
+            ContentUnavailableView {
+                Label("Nothing Copied Yet", systemImage: "clipboard")
+            } description: {
+                Text("Text and images you copy in any app appear here.")
+            }
         } else if isEmpty {
             ContentUnavailableView {
-                Label("No Captures Yet", systemImage: "camera.viewfinder")
+                Label("Nothing to Show", systemImage: "square.grid.2x2")
             } description: {
-                Text("Use the buttons above or a shortcut. Screenshots, recordings and text you capture appear here.")
+                Text("Try another filter or capture something new.")
             }
         }
     }
@@ -205,12 +238,30 @@ struct LibraryView: View {
             Button("Select All") { viewModel.selectAll(items) }
             Divider()
             Button("Delete", role: .destructive) { delete(targets.filter { $0.snippet != nil }) }
+        case .clipboard(let entry):
+            let entries = targets.compactMap(\.clipboardEntry)
+            if let url = dependencies.clipboardHistory.imageURL(for: entry) {
+                Button("Open in Editor") { dependencies.editor.openCopy(ofImageAt: url) }
+                Button("Quick Look") { viewModel.previewURL = url }
+            } else if let text = entry.text {
+                let app = dependencies.settings.plainTextApp
+                Button("Open in \(PlainTextOpener.appName(for: app))") {
+                    PlainTextOpener.open(text, in: app)
+                }
+            }
+            Button("Copy") { dependencies.clipboardHistory.copy(entry) }
+                .disabled(entries.count != 1)
+            Divider()
+            Button("Delete", role: .destructive) {
+                dependencies.clipboardHistory.remove(Set(entries.map(\.id)))
+            }
         }
     }
 
     /// Files go to the Trash, where they can be put back; text is removed from history.
     private func delete(_ items: [RecentItem]) {
         dependencies.textHistory.remove(Set(items.compactMap(\.snippet).map(\.id)))
+        dependencies.clipboardHistory.remove(Set(items.compactMap(\.clipboardEntry).map(\.id)))
         let files = items.compactMap(\.file)
         if !files.isEmpty {
             Task { await dependencies.library.moveToTrash(files) }
@@ -286,6 +337,12 @@ struct LibraryView: View {
                 }
             case .text(let snippet):
                 copy(snippet)
+            case .clipboard(let entry):
+                copy(entry)
+                if (quickLookOnClick || viewModel.previewURL != nil),
+                   let url = dependencies.clipboardHistory.imageURL(for: entry) {
+                    viewModel.previewURL = url
+                }
             }
         }
     }
@@ -297,6 +354,12 @@ struct LibraryView: View {
         case .file(let file) where file.kind == .image: dependencies.editor.open(fileAt: file.url)
         case .file(let file): NSWorkspace.shared.open(file.url)
         case .text(let snippet): PlainTextOpener.open(snippet.text, in: dependencies.settings.plainTextApp)
+        case .clipboard(let entry):
+            if let url = dependencies.clipboardHistory.imageURL(for: entry) {
+                dependencies.editor.openCopy(ofImageAt: url)
+            } else if let text = entry.text {
+                PlainTextOpener.open(text, in: dependencies.settings.plainTextApp)
+            }
         }
     }
 
@@ -310,20 +373,45 @@ struct LibraryView: View {
 
     private func copy(_ snippet: TextSnippet) {
         dependencies.clipboard.copy(text: snippet.text)
-        copiedSnippet = snippet.id
+        copiedItem = .text(snippet.id)
+    }
+
+    private func copy(_ entry: ClipboardEntry) {
+        dependencies.clipboardHistory.copy(entry)
+        copiedItem = .clipboard(entry.id)
     }
 
     private func itemProvider(for item: RecentItem) -> NSItemProvider {
         switch item {
         case .file(let file): NSItemProvider(object: file.url as NSURL)
         case .text(let snippet): NSItemProvider(object: snippet.text as NSString)
+        case .clipboard(let entry):
+            if let url = dependencies.clipboardHistory.imageURL(for: entry) {
+                NSItemProvider(contentsOf: url) ?? NSItemProvider()
+            } else {
+                NSItemProvider(object: (entry.text ?? "") as NSString)
+            }
         }
     }
 
     private func applyPendingFilter() {
-        guard let filter = MainWindowRouter.shared.pendingRecentsFilter else { return }
-        viewModel.kindFilter = filter
-        MainWindowRouter.shared.pendingRecentsFilter = nil
+        guard let categories = MainWindowRouter.shared.pendingLibraryCategories else { return }
+        viewModel.selectedCategories = categories
+        MainWindowRouter.shared.pendingLibraryCategories = nil
+    }
+
+    private func previewURLs(for items: [RecentItem]) -> [URL] {
+        items.compactMap { item in
+            item.file?.url ?? item.clipboardEntry.flatMap(dependencies.clipboardHistory.imageURL(for:))
+        }
+    }
+
+    private func updateSources() {
+        viewModel.updateSources(
+            files: dependencies.library.items,
+            snippets: dependencies.textHistory.snippets,
+            clipboardEntries: dependencies.clipboardHistory.entries
+        )
     }
 }
 

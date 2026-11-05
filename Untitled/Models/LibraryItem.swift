@@ -13,6 +13,7 @@ nonisolated struct LibraryItem: Identifiable, Hashable, Sendable {
     var modified: Date = .distantPast
     let kind: Kind
     let byteCount: Int
+    var captureSource: CaptureSource? = nil
 
     var id: URL { url }
     var name: String { url.deletingPathExtension().lastPathComponent }
