@@ -53,7 +53,7 @@ final class SettingsStore {
     var textHistoryLimit = Defaults.textHistoryLimit { didSet { save(textHistoryLimit, .textHistoryLimit) } }
     /// The choices offered in Settings › Advanced.
     static let textHistoryLimits = [0, 25, 50, 100, 250]
-    /// How much memory Recents and the Capture page may use for thumbnails, in megabytes.
+    /// How much memory Library and the Capture page may use for thumbnails, in megabytes.
     var thumbnailMemoryMB = Defaults.thumbnailMemoryMB { didSet { save(thumbnailMemoryMB, .thumbnailMemoryMB) } }
     static let thumbnailMemoryChoices = [64, 128, 256]
     private var storedToastSeconds: [String: Int] = [:] { didSet { save(storedToastSeconds, .toastSeconds) } }

@@ -41,10 +41,11 @@ struct IntelligenceSettingsView: View {
                     ForEach(TextRecognitionSpeed.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                Toggle("Keep line breaks in copied text", isOn: $settings.keepsOCRLineBreaks)
             } header: {
                 Text("Vision")
             } footer: {
-                Text("Attention finds where your eye goes first, Objects frames everything distinct, and Document finds a page or card. Accurate text recognition reads small type and many languages; Fast suits quick grabs of clear text.")
+                Text("Attention finds where your eye goes first, Objects frames everything distinct, and Document finds a page or card. Accurate text recognition reads small type and many languages; Fast suits quick grabs of clear text. Recognized text is copied automatically; turn off line breaks to join it into one paragraph.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

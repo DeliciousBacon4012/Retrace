@@ -38,7 +38,7 @@ struct NotificationsSettingsView: View {
             } header: {
                 Text("Captured Text")
             } footer: {
-                Text("Text opens as a plain .txt file, from toasts and from Recents.")
+                Text("Text opens as a plain .txt file, from toasts and from the Library.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

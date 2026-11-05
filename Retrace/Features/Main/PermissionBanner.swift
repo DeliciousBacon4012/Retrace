@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Asks for Screen Recording access above Recents, until it's granted. It stays to one
+/// Asks for Screen Recording access above Library, until it's granted. It stays to one
 /// compact row so the captures keep the room; the details are behind the info button.
 /// It's a notice in the content, so it uses a plain fill rather than glass.
 struct PermissionBanner: View {

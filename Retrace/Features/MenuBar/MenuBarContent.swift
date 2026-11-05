@@ -64,10 +64,6 @@ struct MenuBarContent: View {
         Section {
             if settings.textHistoryLimit > 0 {
                 RecentTextMenu()
-            } else {
-                Button("Show Recents", systemImage: "clock") {
-                    MainWindowRouter.shared.show(using: openWindow)
-                }
             }
             ClipboardHistoryMenu()
         }
@@ -210,7 +206,7 @@ private struct RecentTextMenu: View {
                 }
             }
             Divider()
-            Button("Show All in Recents") {
+            Button("Show All in Library") {
                 MainWindowRouter.shared.show(libraryCategories: [.capturedText], using: openWindow)
             }
         }

@@ -31,7 +31,7 @@ struct EditorSettingsView: View {
                     ForEach(EditorToolbarPosition.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
                 }
             } footer: {
-                Text("Drag the inspector by the dots on top: drop it at a side to dock it, or outside the window to give it its own. Right-click the tools to move them to another edge. When opening after each screenshot is off, you can still open one from Quick Access or Recents.")
+                Text("Drag the inspector by the dots on top: drop it at a side to dock it, or outside the window to give it its own. Right-click the tools to move them to another edge. When opening after each screenshot is off, you can still open one from Quick Access or Library.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -81,14 +81,6 @@ struct EditorSettingsView: View {
                 Toggle("Snap highlighter to text", isOn: $snapsToText)
             } footer: {
                 Text("A highlighter stroke along a line of text covers its words neatly. The text is read on this Mac.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle("Keep line breaks in copied text", isOn: $settings.keepsOCRLineBreaks)
-            } footer: {
-                Text("Recognized text is read on this Mac and copied automatically. Turn this off to join the lines into one paragraph.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

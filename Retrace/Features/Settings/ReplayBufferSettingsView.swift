@@ -17,7 +17,7 @@ struct ReplayBufferSettingsView: View {
                     set: { dependencies.replay.setEnabled($0) }
                 ))
             } footer: {
-                Text("Retrace quietly records your screen and keeps only the last stretch, in a temporary folder that's cleared when it stops. Save it from the menu bar, the Capture page, or its shortcut.")
+                Text("Retrace quietly records your screen and keeps only the last stretch, in a temporary folder that's cleared when it stops. Save it from the menu bar, the Record menu, or its shortcut.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -78,7 +78,7 @@ struct ReplayBufferSettingsView: View {
             } header: {
                 Text("Save Last")
             } footer: {
-                Text("These lengths appear under Save Last in the menu bar and on the Capture page. Lengths longer than the buffer keeps are greyed out there.")
+                Text("These lengths appear under Save Last in the menu bar and the Record menu. Lengths longer than the buffer keeps are greyed out there.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -238,7 +238,7 @@ final class CaptureCoordinator {
             },
         ]
         if settings.textHistoryLimit > 0 {
-            actions.append(.init(title: String(localized: "Show in Recents"), systemImage: "clock") {
+            actions.append(.init(title: String(localized: "Show in Library"), systemImage: "clock") {
                 MainWindowRouter.shared.request(libraryCategories: [.capturedText])
             })
         }
@@ -303,7 +303,7 @@ final class CaptureCoordinator {
     }
 
     /// Retrace's panels and overlays (thumbnails, toasts, pins, the HUD) stay out of captures;
-    /// its ordinary windows, like the editor and Recents, can be captured.
+    /// its ordinary windows, like the editor and Library, can be captured.
     private func ownFloatingWindows() -> Set<CGWindowID> {
         Set(NSApplication.shared.windows.lazy
             .filter { $0.isVisible && $0.level != .normal }

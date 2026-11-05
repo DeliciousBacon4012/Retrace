@@ -24,7 +24,7 @@ final class AppDependencies {
     let pins: PinController
     /// The short notices at the top of the screen, shared so they never stack up.
     let toasts: CaptureToastController
-    /// Text read by Capture Text, for Recents and the menu bar.
+    /// Text read by Capture Text, for Library and the menu bar.
     let textHistory: TextHistory
     /// The originals of captures saved over in the editor.
     let versions: CaptureVersions

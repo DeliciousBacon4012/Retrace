@@ -22,7 +22,7 @@ nonisolated enum CaptureVersionError: LocalizedError, Sendable {
     }
 }
 
-/// Keeps the untouched original of every capture saved over in the editor, so Recents can
+/// Keeps the untouched original of every capture saved over in the editor, so Library can
 /// show both versions and put the original back.
 ///
 /// The edited image stays where it was, with the same name, so links and Finder still find

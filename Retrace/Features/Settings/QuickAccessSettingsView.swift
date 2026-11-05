@@ -10,12 +10,6 @@ struct QuickAccessSettingsView: View {
 
         Group {
             Section {
-                Toggle("Show a thumbnail after each capture", isOn: $settings.showsQuickAccess)
-            } footer: {
-                Text("Click a thumbnail to edit it. Drag it into any app, or flick it toward the screen edge to put it away.")
-            }
-
-            Section {
                 Picker("Position", selection: $settings.overlayCorner) {
                     ForEach(OverlayCorner.allCases) { corner in
                         Label(corner.title, systemImage: corner.symbolName).tag(corner)
@@ -51,7 +45,7 @@ struct QuickAccessSettingsView: View {
                 Text("Layout")
             } footer: {
                 Text(settings.quickAccessLayout == .stack
-                    ? "Thumbnails crop to the chosen shape, stack in the corner, and rise into a column while the pointer is over them. The capture itself is unchanged."
+                    ? "Click a thumbnail to edit it, drag it into any app, or flick it toward the screen edge to put it away. Thumbnails crop to the chosen shape, stack in the corner, and rise into a column while the pointer is over them. The capture itself is unchanged. Turn them on or off in Capture."
                     : "Thumbnails crop to the chosen shape in a column, newest nearest the corner. The capture itself is unchanged.")
             }
 

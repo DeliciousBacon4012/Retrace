@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Search, filtering, and selection for Recents.
+/// Search, filtering, and selection for Library.
 @Observable
 final class LibraryViewModel {
     enum Category: String, CaseIterable, Hashable, Identifiable {

@@ -41,7 +41,7 @@ final class ReplayCoordinator {
     /// or with `lastSeconds`, just that much from the end.
     func saveClip(lastSeconds: Int? = nil, to folder: URL? = nil) async {
         guard buffer.isOn else {
-            ErrorPresenter.present(ReplayError.notRunning, recovery: String(localized: "Turn it on from the Capture page or the menu bar, then save a replay any time."))
+            ErrorPresenter.present(ReplayError.notRunning, recovery: String(localized: "Turn it on in the Record menu or the menu bar, then save a replay any time."))
             return
         }
         do {

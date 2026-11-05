@@ -30,7 +30,7 @@ struct AdvancedSettingsView: View {
                         dependencies.textHistory.removeAll()
                     }
                 } message: {
-                    Text("Every saved snippet is removed from Recents and the menu bar. Your clipboard isn't affected.")
+                    Text("Every saved snippet is removed from Library and the menu bar. Your clipboard isn't affected.")
                 }
             } header: {
                 Text("History")

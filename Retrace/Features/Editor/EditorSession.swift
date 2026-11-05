@@ -137,7 +137,7 @@ final class EditorSession {
         if redacts { options.stripsMetadata = true }
         do {
             let data = try await ImageEncoder.encodeInBackground(image, options: options, pointScale: document.scale)
-            // Saving over the capture it came from keeps the untouched original for Recents.
+            // Saving over the capture it came from keeps the untouched original for Library.
             if url.standardizedFileURL == document.fileURL?.standardizedFileURL {
                 try await versions?.preserveOriginal(of: url)
             }

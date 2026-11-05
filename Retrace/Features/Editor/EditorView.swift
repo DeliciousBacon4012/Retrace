@@ -791,21 +791,28 @@ private struct ZoomControl: View {
             .accessibilityLabel("Zoom")
             .accessibilityValue(Text(Double(zoom), format: .percent.precision(.fractionLength(0))))
 
-            HStack {
-                Button("Fit") {
-                    document.zoomToFit()
+            // One button that goes to whichever view you aren't in. An image that already fits
+            // at actual size has only one view, so it needs no button.
+            if let jump = zoomJump {
+                Button(jump.title) {
+                    jump.action()
                     scheduleDismissal()
                 }
-                Button("100%") {
-                    document.zoomToActualSize()
-                    scheduleDismissal()
-                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .buttonStyle(.bordered)
         }
         .capsuleControls()
         .padding(Design.spacingL)
         .frame(width: 260)
+    }
+
+    private var zoomJump: (title: LocalizedStringKey, action: () -> Void)? {
+        let fitsAtActualSize = abs(fitZoom - 1) < 0.005
+        if document.zoom == nil {
+            return fitsAtActualSize ? nil : ("Actual Size", { document.zoomToActualSize() })
+        }
+        return ("Fit in Window", { document.zoomToFit() })
     }
 
     private var drag: some Gesture {

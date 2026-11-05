@@ -570,16 +570,11 @@ private struct CropSection: View {
             .disabled(isFindingSubject)
             .help("Suggest a crop around the main subject using on-device Vision.")
 
-            HStack {
-                Button("Reset") { document.resetCrop() }
-                    .buttonStyle(.bordered)
-                    .disabled(!document.isCropped)
-                Spacer()
-                Button("Crop", systemImage: "checkmark") { document.commitCrop() }
-                    .buttonStyle(.borderedProminent)
-            }
+            Button("Reset to Full Image") { document.resetCrop() }
+                .buttonStyle(.bordered)
+                .disabled(!document.isCropped)
         } footer: {
-            Text(message ?? String(localized: "Drag the handles or move the box. Smart Crop uses on-device Vision; review its suggestion before applying. Press Return to crop, or Esc to cancel."))
+            Text(message ?? String(localized: "Drag the handles or move the box. Smart Crop uses on-device Vision; review its suggestion before applying. Press Return or Crop below the image to apply, or Esc to cancel."))
         }
     }
 
