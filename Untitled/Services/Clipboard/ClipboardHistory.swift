@@ -30,6 +30,31 @@ nonisolated struct ClipboardEntry: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+/// Invalidates image work that started before Clear or a pause/resume change.
+nonisolated struct ClipboardHistoryGeneration: Sendable {
+    private(set) var value = 0
+
+    mutating func invalidate() {
+        value &+= 1
+    }
+
+    func accepts(_ token: Int, isEnabled: Bool) -> Bool {
+        isEnabled && token == value
+    }
+}
+
+/// Limits both edge length and the total decoded pixel count for clipboard images.
+nonisolated enum ClipboardImageBounds {
+    static let maximumPixels = 40_000_000
+    static let maximumDimension = 16_384
+
+    static func permits(width: Int, height: Int) -> Bool {
+        width > 0 && height > 0
+            && width <= maximumDimension && height <= maximumDimension
+            && width <= maximumPixels / height
+    }
+}
+
 /// Everything you copy in any app, newest first, kept until you remove it or the limit in
 /// Settings › Clipboard says otherwise.
 ///
@@ -47,11 +72,12 @@ final class ClipboardHistory {
     @ObservationIgnored private let folder: URL?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var lastChangeCount = NSPasteboard.general.changeCount
+    @ObservationIgnored private var historyGeneration = ClipboardHistoryGeneration()
     @ObservationIgnored private let log = Logger(subsystem: Log.subsystem, category: "clipboard")
 
     /// The longest text kept, so a huge copy doesn't bloat the history.
     nonisolated private static let maximumTextLength = 500_000
-    /// The largest image kept, in bytes of its clipboard data.
+    /// Largest compressed clipboard payload kept; decoded pixels use `ClipboardImageBounds`.
     nonisolated private static let maximumImageBytes = 60 * 1_048_576
 
     /// Types apps use to say "don't keep this" (see nspasteboard.org).
@@ -94,6 +120,7 @@ final class ClipboardHistory {
     func start() {
         guard timer == nil else { return }
         lastChangeCount = NSPasteboard.general.changeCount
+        followClipboardHistorySetting()
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.check() }
         }
@@ -114,17 +141,18 @@ final class ClipboardHistory {
         let app = NSWorkspace.shared.frontmostApplication
         if let id = app?.bundleIdentifier, settings.clipboardExcludedApps.contains(id) { return }
         let appName = app?.localizedName
+        let generation = historyGeneration.value
 
         // A copied file: keep it only when it's an image, as the image itself.
         if types.contains(.fileURL) {
             let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
             guard let url = urls.first(where: { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .image) == true }) else { return }
-            Task { await addImage(fromFileAt: url, appName: appName) }
+            Task { await addImage(fromFileAt: url, appName: appName, generation: generation) }
             return
         }
         if let type = Self.imageTypes.first(where: types.contains), let data = pasteboard.data(forType: type) {
             guard data.count <= Self.maximumImageBytes else { return }
-            Task { await addImage(data, appName: appName) }
+            Task { await addImage(data, appName: appName, generation: generation) }
             return
         }
         if let text = pasteboard.string(forType: .string) {
@@ -140,19 +168,23 @@ final class ClipboardHistory {
         insert(ClipboardEntry(id: UUID(), date: .now, content: .text(text), appName: appName, fingerprint: fingerprint))
     }
 
-    private func addImage(fromFileAt url: URL, appName: String?) async {
+    private func addImage(fromFileAt url: URL, appName: String?, generation: Int) async {
         let data = await Task.detached(priority: .utility) { () -> Data? in
             guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= Self.maximumImageBytes else { return nil }
             return try? Data(contentsOf: url)
         }.value
-        guard let data else { return }
-        await addImage(data, appName: appName)
+        guard let data, canKeepImage(generation: generation) else { return }
+        await addImage(data, appName: appName, generation: generation)
     }
 
-    /// Converts to PNG off the main thread, then keeps it, unless the same image is already kept.
-    private func addImage(_ data: Data, appName: String?) async {
-        guard let folder else { return }
-        let fingerprint = "image:" + Self.digest(data)
+    /// Hashes and converts to PNG off the main thread, then keeps it unless already present.
+    private func addImage(_ data: Data, appName: String?, generation: Int) async {
+        guard let folder, canKeepImage(generation: generation) else { return }
+        let digest = await Task.detached(priority: .utility) {
+            Self.digest(data)
+        }.value
+        guard canKeepImage(generation: generation) else { return }
+        let fingerprint = "image:" + digest
         if let index = entries.firstIndex(where: { $0.fingerprint == fingerprint }) {
             var entry = entries.remove(at: index)
             entry.date = .now
@@ -168,6 +200,10 @@ final class ClipboardHistory {
         }.value
         guard let size else {
             log.error("A copied image couldn't be read")
+            return
+        }
+        guard canKeepImage(generation: generation) else {
+            try? FileManager.default.removeItem(at: destination)
             return
         }
         insert(ClipboardEntry(
@@ -212,9 +248,28 @@ final class ClipboardHistory {
     }
 
     func removeAll() {
+        historyGeneration.invalidate()
         deleteFiles(of: entries)
         entries = []
         save()
+    }
+
+    private func canKeepImage(generation: Int) -> Bool {
+        historyGeneration.accepts(generation, isEnabled: settings.keepsClipboardHistory)
+    }
+
+    /// Invalidates in-flight image conversions when history is paused, including if it is
+    /// quickly re-enabled before a conversion finishes.
+    private func followClipboardHistorySetting() {
+        withObservationTracking {
+            _ = settings.keepsClipboardHistory
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                historyGeneration.invalidate()
+                followClipboardHistorySetting()
+            }
+        }
     }
 
     // MARK: Retention
@@ -285,11 +340,23 @@ final class ClipboardHistory {
     /// Writes any image data as a PNG and returns its pixel size.
     nonisolated private static func writePNG(from data: Data, to url: URL) -> CGSize? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+              width > 0,
+              height > 0,
+              ClipboardImageBounds.permits(width: width, height: height),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
               let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
         else { return nil }
+
+        var finalized = false
+        defer {
+            if !finalized { try? FileManager.default.removeItem(at: url) }
+        }
         CGImageDestinationAddImage(destination, image, nil)
         guard CGImageDestinationFinalize(destination) else { return nil }
+        finalized = true
         return CGSize(width: image.width, height: image.height)
     }
 }
