@@ -14,6 +14,8 @@ final class EditorPresenter {
     @ObservationIgnored private var controllers: [EditorWindowController] = []
     /// The image open in the main window's Editor tab, if any.
     private(set) var tabSession: EditorSession?
+    /// The last image closed with Cancel, kept with its marks and history so it can come back.
+    private(set) var discarded: EditorSession?
     /// Set by the main window, so the menu bar's commands follow the tab in front.
     @ObservationIgnored var isEditorTabInFront = false {
         didSet { followKeyWindow(NSApp?.keyWindow) }
@@ -128,8 +130,16 @@ final class EditorPresenter {
             return
         }
         tabSession?.document.saveStylesNow()
-        let session = makeSession(document)
+        showInTab(makeSession(document))
+    }
+
+    private func showInTab(_ session: EditorSession) {
         session.onClose = { [weak self] in self?.endTabSession() }
+        session.onDiscard = { [weak self, weak session] in
+            guard let self, let session else { return }
+            discarded = session
+            endTabSession()
+        }
         tabSession = session
         followKeyWindow(NSApp.keyWindow)
         MainWindowRouter.shared.requestTab(.editor)
@@ -139,7 +149,24 @@ final class EditorPresenter {
         EditorSession(document: document, settings: settings, clipboard: clipboard, textHistory: textHistory, versions: versions)
     }
 
+    /// Brings back the image last closed with Cancel, where Settings says images open.
+    func reopenDiscarded() {
+        guard let session = discarded else { return }
+        discarded = nil
+        if EditorOpenPlacement.current == .tab, tabSession?.document.hasUnsavedChanges != true {
+            showInTab(session)
+            MainWindowRouter.shared.requestTab(.editor)
+        } else {
+            presentWindow(session)
+        }
+    }
+
     private func presentWindow(_ session: EditorSession) {
+        session.onDiscard = { [weak self, weak session] in
+            guard let self, let session else { return }
+            discarded = session
+            controllers.first { $0.session === session }?.close()
+        }
         let controller = EditorWindowController(session: session) { [weak self] closed in
             self?.controllers.removeAll { $0 === closed }
             if self?.active === closed.session { self?.active = nil }
@@ -201,7 +228,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         session.onSaved = { [weak self] in self?.updateTitle() }
         updateTitle()
 
-        let hosting = NSHostingController(rootView: EditorView(document: session.document, actions: session.actions))
+        let hosting = NSHostingController(rootView: EditorView(document: session.document, actions: session.actions, session: session))
         hosting.sceneBridgingOptions = [.toolbars, .title]
         window.contentViewController = hosting
         // The hosting controller may have resized the window to its content; put it back,

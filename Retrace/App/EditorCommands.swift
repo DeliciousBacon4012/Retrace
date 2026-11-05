@@ -17,6 +17,9 @@ struct EditorCommands: Commands {
             Button("Save") { editor?.save() }
                 .keyboardShortcut("s")
                 .disabled(editor == nil)
+            Button("Save As…") { editor?.saveAs() }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+                .disabled(editor == nil)
             Button("Export…") { document?.send(.export) }
                 .keyboardShortcut("e")
                 .disabled(editor == nil)

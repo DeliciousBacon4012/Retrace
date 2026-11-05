@@ -23,6 +23,9 @@ struct AppCommands: Commands {
                     .environment(dependencies)
                     .keyboardShortcut("v", modifiers: [.command, .shift])
             }
+            Button("Reopen Canceled Image") { dependencies.editor.reopenDiscarded() }
+                .keyboardShortcut("t", modifiers: [.command, .option, .shift])
+                .disabled(dependencies.editor.discarded == nil)
             Button("Pin to Screen…") {
                 dependencies.pins.pinFromFile()
             }

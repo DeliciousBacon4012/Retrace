@@ -6,6 +6,8 @@ import SwiftUI
 struct EditorView: View {
     @Bindable var document: EditorDocument
     let actions: EditorActions
+    /// Supplies the save menu's folders. Nil in previews.
+    var session: EditorSession? = nil
     /// Set when the editor sits in the main window's Editor tab rather than a window of its own.
     /// Its tools join that window's toolbar while the tab is in front.
     var tabControls: TabControls?
@@ -46,13 +48,24 @@ struct EditorView: View {
 
     /// Room kept clear on each side for docked panels, so they never cover the image. The
     /// image keeps its own margin inside, so it sits as far from a panel as from the edge.
+    /// The side the inspector covers, wherever it sits, so the image moves over beside it
+    /// instead of underneath. The glass still floats over the background either way.
+    private var inspectorSide: HorizontalEdge? {
+        guard showsPanelInspector, dragOrigin == nil else { return nil }
+        switch inspectorPlacement {
+        case .left: return .leading
+        case .right: return .trailing
+        case .floating: return floatX < 0.5 ? .leading : .trailing
+        case .window: return nil
+        }
+    }
+
     private var canvasInsets: EdgeInsets {
-        let docked = showsPanelInspector && dragOrigin == nil
-        return EdgeInsets(
+        EdgeInsets(
             top: 0,
-            leading: (toolbarPosition == .left ? paletteRoom : 0) + (docked && inspectorPlacement == .left ? dockedInspectorRoom : 0),
+            leading: (toolbarPosition == .left ? paletteRoom : 0) + (inspectorSide == .leading ? dockedInspectorRoom : 0),
             bottom: toolbarPosition == .bottom ? paletteRoom : 0,
-            trailing: (toolbarPosition == .right ? paletteRoom : 0) + (docked && inspectorPlacement == .right ? dockedInspectorRoom : 0)
+            trailing: (toolbarPosition == .right ? paletteRoom : 0) + (inspectorSide == .trailing ? dockedInspectorRoom : 0)
         )
     }
 
@@ -98,6 +111,7 @@ struct EditorView: View {
         }
         .animation(.panel, value: showsInspector)
         .animation(.panel, value: inspectorPlacement)
+        .animation(.panel, value: inspectorSide)
         .animation(.panel, value: toolbarPosition)
         .onChange(of: showsInspector, initial: true) { syncInspectorWindow(near: nil) }
         .onChange(of: inspectorPlacement) { syncInspectorWindow(near: nil) }
@@ -363,17 +377,14 @@ struct EditorView: View {
             Button("Copy", systemImage: "doc.on.doc") { actions.copy() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .help("Copy the edited image (⇧⌘C)")
-            Button("Save", systemImage: "square.and.arrow.down") { actions.save() }
-                .keyboardShortcut("s", modifiers: .command)
-                .help("Save (⌘S)")
-            Button("Export", systemImage: "square.and.arrow.up") { startExport() }
-            .keyboardShortcut("e", modifiers: .command)
-            .help("Export with a different format, size, or quality (⌘E)")
+            EditorSaveMenu(session: session, hasFile: document.fileURL != nil, export: startExport, save: actions.save, saveAs: actions.saveAs)
         }
 
         ToolbarSpacer(.fixed)
 
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button("Cancel") { actions.discard() }
+                .help("Close without saving. Press ⌘Z on the Editor tab, or choose File › Reopen Canceled Image (⌥⇧⌘T), to get it back.")
             Button("Done") { actions.done() }
                 .buttonStyle(.glassProminent)
                 .keyboardShortcut(.return, modifiers: .command)
@@ -592,6 +603,9 @@ struct EditorView: View {
 
 /// What the editor window does with the finished image.
 struct EditorActions {
+    var discard: () -> Void = {}
+    var saveAs: () -> Void = {}
+    var saveCopy: (String) -> Void = { _ in }
     var copy: () -> Void
     var copyImage: (CGImage) -> Void
     var save: () -> Void
@@ -918,5 +932,55 @@ private struct ScrollWheelCatcher: NSViewRepresentable {
         override func scrollWheel(with event: NSEvent) {
             onScroll?(event)
         }
+    }
+}
+
+/// Save, with where to: the original file, any of the save folders (several at once), or
+/// somewhere new. ⌘S saves straight away to what's chosen here.
+private struct EditorSaveMenu: View {
+    let session: EditorSession?
+    let hasFile: Bool
+    let export: () -> Void
+    let save: () -> Void
+    let saveAs: () -> Void
+
+    @State private var refresh = false
+
+    var body: some View {
+        Menu {
+            if let session {
+                if hasFile {
+                    Button("Save", systemImage: "square.and.arrow.down", action: save)
+                    Section("Save a Copy To") {
+                        ForEach(session.availableSaveFolders, id: \.self) { path in
+                            Button(session.folderName(path)) { session.saveCopy(to: path) }
+                        }
+                    }
+                } else {
+                    Section("Save To") {
+                        ForEach(session.availableSaveFolders, id: \.self) { path in
+                            Toggle(session.folderName(path), isOn: Binding(
+                                get: { _ = refresh; return session.chosenSaveFolders.contains(path) },
+                                set: { session.setSaveFolder(path, chosen: $0); refresh.toggle() }
+                            ))
+                        }
+                    }
+                    Button(saveTitle(for: session), systemImage: "square.and.arrow.down", action: save)
+                }
+            }
+            Button("Save As…", action: saveAs)
+            Divider()
+            Button("Export…", systemImage: "square.and.arrow.up", action: export)
+        } label: {
+            Label("Save", systemImage: "square.and.arrow.down")
+        }
+        .menuIndicator(.hidden)
+        .help("Save, choose where, or export (⌘S saves)")
+    }
+
+    private func saveTitle(for session: EditorSession) -> String {
+        _ = refresh
+        let count = session.chosenSaveFolders.count
+        return count > 1 ? String(localized: "Save to \(count) Folders") : String(localized: "Save")
     }
 }

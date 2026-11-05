@@ -143,8 +143,9 @@ struct LibraryView: View {
                     return .handled
                 }
                 .onKeyPress(.return) {
-                    guard let item = viewModel.selectedItems(in: items).first else { return .ignored }
-                    open(item)
+                    let selected = viewModel.selectedItems(in: items)
+                    guard !selected.isEmpty else { return .ignored }
+                    selected.forEach(open)
                     return .handled
                 }
                 .onCommand(#selector(NSResponder.selectAll(_:))) { viewModel.selectAll(items) }
@@ -385,14 +386,11 @@ struct LibraryView: View {
     @ViewBuilder
     private func contextMenu(for item: RecentItem, in items: [RecentItem]) -> some View {
         let targets = viewModel.targets(for: item, in: items)
+        openSection(for: targets)
+        Divider()
         switch item {
         case .file(let file):
             let files = targets.compactMap(\.file)
-            if file.kind == .image {
-                Button("Open in Editor") { files.forEach { dependencies.editor.open(fileAt: $0.url) } }
-                Button("Open in New Window") { files.forEach { dependencies.editor.open(fileAt: $0.url, inNewWindow: true) } }
-            }
-            Button(file.kind == .image ? "Open in Default App" : "Open") { files.forEach { NSWorkspace.shared.open($0.url) } }
             Button("Quick Look") { viewModel.previewURL = file.url }
             if file.kind == .image {
                 Button("Find Similar") { findSimilar(to: file) }
@@ -420,9 +418,6 @@ struct LibraryView: View {
             Divider()
             Button("Move to Trash", role: .destructive) { delete(targets.filter { $0.file != nil }) }
         case .text(let snippet):
-            let app = dependencies.settings.plainTextApp
-            Button("Open in \(PlainTextOpener.appName(for: app))") { PlainTextOpener.open(snippet.text, in: app) }
-                .disabled(targets.count > 1)
             Button("Copy") { copy(snippet) }
                 .disabled(targets.count > 1)
             Button("Translate") { textToTranslate = snippet.text }
@@ -434,13 +429,7 @@ struct LibraryView: View {
         case .clipboard(let entry):
             let entries = targets.compactMap(\.clipboardEntry)
             if let url = dependencies.clipboardHistory.imageURL(for: entry) {
-                Button("Open in Editor") { dependencies.editor.openCopy(ofImageAt: url) }
                 Button("Quick Look") { viewModel.previewURL = url }
-            } else if let text = entry.text {
-                let app = dependencies.settings.plainTextApp
-                Button("Open in \(PlainTextOpener.appName(for: app))") {
-                    PlainTextOpener.open(text, in: app)
-                }
             }
             Button("Copy") { dependencies.clipboardHistory.copy(entry) }
                 .disabled(entries.count != 1)
@@ -452,6 +441,35 @@ struct LibraryView: View {
             Button("Delete", role: .destructive) {
                 dependencies.clipboardHistory.remove(Set(entries.map(\.id)))
             }
+        }
+    }
+
+    /// Every way to open what's selected, each item in its own window. With several kinds
+    /// selected, Open All sends text to the text app, images to Preview, and movies to QuickTime.
+    @ViewBuilder
+    private func openSection(for targets: [RecentItem]) -> some View {
+        let opener = LibraryOpener(targets, clipboardImageURL: dependencies.clipboardHistory.imageURL(for:))
+        let textApp = dependencies.settings.plainTextApp
+        let savedImages = targets.compactMap(\.file).filter { $0.kind == .image }.map(\.url)
+        let clipboardImages = targets.compactMap(\.clipboardEntry).compactMap(dependencies.clipboardHistory.imageURL(for:))
+        if opener.isMixed {
+            Button("Open All") { opener.openAll(textApp: textApp) }
+        }
+        if !savedImages.isEmpty || !clipboardImages.isEmpty {
+            Button("Open in Editor") {
+                savedImages.forEach { dependencies.editor.open(fileAt: $0) }
+                clipboardImages.forEach { dependencies.editor.openCopy(ofImageAt: $0) }
+            }
+            if !savedImages.isEmpty {
+                Button("Open in New Window") { savedImages.forEach { dependencies.editor.open(fileAt: $0, inNewWindow: true) } }
+            }
+            Button("Open in Preview") { opener.openImagesInPreview() }
+        }
+        if !opener.movies.isEmpty {
+            Button("Open in QuickTime Player") { opener.openMoviesInQuickTime() }
+        }
+        if !opener.texts.isEmpty {
+            Button("Open in \(PlainTextOpener.appName(for: textApp))") { opener.openTexts(in: textApp) }
         }
     }
 

@@ -100,7 +100,7 @@ struct EditorInspector: View {
                                 Label("Copy Subject", systemImage: "person.crop.rectangle")
                             }
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(InspectorButtonStyle())
                         .disabled(isLiftingSubject)
                         .help("Copy the foreground as a transparent image using on-device Vision. Existing redactions are included.")
 
@@ -133,7 +133,7 @@ struct EditorInspector: View {
                     Button("Reset to Default Style", systemImage: "arrow.counterclockwise") {
                         withAnimation(.response) { document.resetStyle() }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(InspectorButtonStyle())
                 }
             }
         }
@@ -175,6 +175,18 @@ private struct InspectorPanelLayout: Layout {
 }
 
 /// A compact native control group sized to its contents inside the floating inspector.
+/// A standalone inspector button: bordered and as wide as the inspector, so buttons line up
+/// with each other and with the rows above instead of sitting at odd widths.
+private struct InspectorButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button(role: configuration.role, action: configuration.trigger) {
+            configuration.label
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+    }
+}
+
 /// A label on the left and its control on the right, so every row lines up with the next.
 private struct InspectorRowStyle: LabeledContentStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -261,28 +273,31 @@ private struct InspectorHeader: View {
     }
 
     var body: some View {
-        LabeledContent {
+        HStack(spacing: Design.spacingM) {
+            Image(systemName: tool.symbolName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 32, height: 32)
+                .background(Color.accentColor.opacity(0.14), in: .circle)
+                .contentTransition(.symbolEffect(.replace))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(isMixed ? String(localized: "Selection") : tool.title)
+                    .font(.headline)
+                Text(caption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
             if !isMixed {
                 Text(String(tool.key).uppercased())
-                    .font(.callout.monospaced())
+                    .font(.callout.weight(.medium).monospaced())
                     .foregroundStyle(.secondary)
+                    .frame(minWidth: 26, minHeight: 22)
+                    .background(.quaternary, in: .capsule)
                     .help("Press \(String(tool.key).uppercased()) to pick this tool")
             }
-        } label: {
-            Label {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(isMixed ? String(localized: "Selection") : tool.title)
-                        .font(.headline)
-                    Text(caption)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } icon: {
-                Image(systemName: tool.symbolName)
-                    .foregroundStyle(.tint)
-                    .contentTransition(.symbolEffect(.replace))
-            }
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -307,7 +322,7 @@ private struct VariantSection: View {
                     document.style.startHead = document.style.endHead
                     document.style.endHead = start
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(InspectorButtonStyle())
             }
         case .shape:
             InspectorGroup {
@@ -566,12 +581,12 @@ private struct CropSection: View {
                     Label("Suggest Crop", systemImage: "viewfinder")
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(InspectorButtonStyle())
             .disabled(isFindingSubject)
             .help("Suggest a crop around the main subject using on-device Vision.")
 
             Button("Reset to Full Image") { document.resetCrop() }
-                .buttonStyle(.bordered)
+                .buttonStyle(InspectorButtonStyle())
                 .disabled(!document.isCropped)
         } footer: {
             Text(message ?? String(localized: "Drag the handles or move the box. Smart Crop uses on-device Vision; review its suggestion before applying. Press Return or Crop below the image to apply, or Esc to cancel."))
@@ -618,7 +633,7 @@ private struct IdentifySection: View {
                     Label("Identify Image", systemImage: "sparkle.magnifyingglass")
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(InspectorButtonStyle())
             .disabled(isReading)
             .help("Recognize what's in the image, on this Mac.")
 
@@ -657,11 +672,10 @@ private struct ArrangeSection: View {
                     .help("Bring to Front (⌘])")
                 Button("Send to Back", systemImage: "square.3.layers.3d.bottom.filled") { document.sendSelectionToBack() }
                     .help("Send to Back (⌘[)")
-                Spacer()
                 Button("Delete", systemImage: "trash", role: .destructive) { document.deleteSelection() }
                     .help("Delete (⌫)")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(InspectorButtonStyle())
             .labelStyle(.iconOnly)
         }
     }

@@ -14,6 +14,7 @@ struct EditorTabPage: View {
             EditorView(
                 document: session.document,
                 actions: session.actions,
+                session: session,
                 tabControls: .init(
                     isInFront: isInFront,
                     close: { editor.closeTabSession() },
@@ -38,6 +39,15 @@ struct EditorLandingView: View {
 
     var body: some View {
         VStack(spacing: Design.spacingXL) {
+            if dependencies.editor.discarded != nil {
+                Button("Reopen Canceled Image", systemImage: "arrow.uturn.backward") {
+                    dependencies.editor.reopenDiscarded()
+                }
+                .buttonStyle(.glass)
+                .controlSize(.large)
+                .keyboardShortcut("z", modifiers: .command)
+                .help("Bring back the image you canceled, as you left it (⌘Z)")
+            }
             if recentImages.isEmpty {
                 ContentUnavailableView {
                     Label("Start Editing", systemImage: "photo.badge.plus")

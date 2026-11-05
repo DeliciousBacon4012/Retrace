@@ -30,6 +30,11 @@ final class EditorSession {
     var onClose: (() -> Void)?
     /// Called after a save, since the file's name may have changed.
     var onSaved: (() -> Void)?
+    /// Called when the person cancels, so the session can be kept for reopening.
+    var onDiscard: (() -> Void)?
+
+    /// Where new images save, remembered between sessions. Several can be chosen.
+    static let saveFoldersKey = "editorSaveFolders"
 
     private let settings: SettingsStore
     private let clipboard: any ClipboardWriting
@@ -45,6 +50,9 @@ final class EditorSession {
     }
 
     private(set) lazy var actions = EditorActions(
+        discard: { [weak self] in self?.discard() },
+        saveAs: { [weak self] in self?.saveAs() },
+        saveCopy: { [weak self] path in self?.saveCopy(to: path) },
         copy: { [weak self] in self?.copyImage() },
         copyImage: { [weak self] image in
             guard let self else { return }
@@ -75,7 +83,35 @@ final class EditorSession {
         clipboard.copy(NSImage(cgImage: image, size: size))
     }
 
-    /// Saves over the original file, or asks where to save if there isn't one.
+    /// The save folders currently chosen, from those in Settings › Capture.
+    var chosenSaveFolders: [String] {
+        let stored = UserDefaults.standard.stringArray(forKey: Self.saveFoldersKey) ?? []
+        let chosen = settings.saveFolderPaths.filter(stored.contains)
+        return chosen.isEmpty ? [settings.saveFolderPath] : chosen
+    }
+
+    var availableSaveFolders: [String] { settings.saveFolderPaths }
+
+    func folderName(_ path: String) -> String { settings.saveFolderDisplayName(for: path) }
+
+    /// Adds or removes a folder. One always stays chosen.
+    func setSaveFolder(_ path: String, chosen: Bool) {
+        var folders = chosenSaveFolders
+        if chosen {
+            if !folders.contains(path) { folders.append(path) }
+        } else if folders.count > 1 {
+            folders.removeAll { $0 == path }
+        }
+        UserDefaults.standard.set(folders, forKey: Self.saveFoldersKey)
+    }
+
+    /// Closes without saving. The session is kept, so it can be reopened as it was.
+    func discard() {
+        document.finishTextEditing()
+        onDiscard?()
+    }
+
+    /// Saves over the original file, or into the chosen folders if there isn't one. No dialog.
     func save() {
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -120,10 +156,62 @@ final class EditorSession {
     }
 
     private func saveDocument() async -> Bool {
-        guard !document.isSaving,
-              let url = document.fileURL ?? askForSaveLocation()
-        else { return false }
-        return await write(to: url)
+        guard !document.isSaving else { return false }
+        if let url = document.fileURL { return await write(to: url) }
+        return await saveToChosenFolders()
+    }
+
+    /// Asks where to save, for a one-off location.
+    func saveAs() {
+        Task { @MainActor [weak self] in
+            guard let self, let url = askForSaveLocation() else { return }
+            _ = await write(to: url)
+        }
+    }
+
+    /// Saves a copy in one folder, leaving the image's own file as it is.
+    func saveCopy(to path: String) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            _ = await writeNew(into: [path], becomesDocumentFile: false)
+        }
+    }
+
+    private func saveToChosenFolders() async -> Bool {
+        await writeNew(into: chosenSaveFolders, becomesDocumentFile: true)
+    }
+
+    /// Encodes once and writes a new file in each folder. The first becomes the image's file,
+    /// so the next save goes back to it.
+    private func writeNew(into folders: [String], becomesDocumentFile: Bool) async -> Bool {
+        guard !folders.isEmpty, !document.isSaving, let image = renderOrWarn(), document.beginSaving() else { return false }
+        defer { document.finishSaving() }
+        var options = settings.exportOptions(for: document.scale)
+        options.scalePercent = 100
+        if document.hasRedactions { options.stripsMetadata = true }
+        do {
+            let data = try await ImageEncoder.encodeInBackground(image, options: options, pointScale: document.scale)
+            let storage = FileCaptureStorage()
+            var first: URL?
+            for path in folders {
+                let url = try await storage.save(
+                    data,
+                    template: settings.filenameTemplate,
+                    date: .now,
+                    fileExtension: options.format.fileExtension,
+                    in: URL(fileURLWithPath: path, isDirectory: true)
+                )
+                if first == nil { first = url }
+            }
+            if becomesDocumentFile, let first { document.markSaved(to: first) }
+            onSaved?()
+            Log.capture.info("Saved edited image to \(folders.count, privacy: .public) folders")
+            return true
+        } catch {
+            Log.capture.error("Saving the edited image failed: \(error.localizedDescription, privacy: .public)")
+            ErrorPresenter.present(error)
+            return false
+        }
     }
 
     private func write(to url: URL) async -> Bool {
