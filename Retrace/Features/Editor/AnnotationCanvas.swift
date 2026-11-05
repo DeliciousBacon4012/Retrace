@@ -181,11 +181,18 @@ struct AnnotationCanvas: View {
             }
     }
 
-    /// Two-finger scrolling pans a zoomed image; with ⌘ held it zooms instead.
+    /// Two-finger scrolling pans a zoomed image; with ⌘ held it zooms instead. A two-finger
+    /// double-tap is the system's smart zoom: to 100%, and back to fit.
     private func installScrollMonitor(fitFactor: CGFloat) {
         guard scrollMonitor == nil else { return }
-        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [document] event in
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .smartMagnify]) { [document] event in
             guard isHovering, !document.isPointerOverZoomControl else { return event }
+            if event.type == .smartMagnify {
+                withAnimation(.panel) {
+                    if document.zoom == nil { document.zoomToActualSize() } else { document.zoomToFit() }
+                }
+                return nil
+            }
             if event.modifierFlags.contains(.command) {
                 let current = document.currentZoom(fitFactor: fitFactor)
                 document.zoom = min(max(current * (1 + event.scrollingDeltaY * 0.01), 0.1), 8)

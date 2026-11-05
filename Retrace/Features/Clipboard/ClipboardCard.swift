@@ -19,7 +19,7 @@ struct ClipboardCard: View {
                             .font(.caption.weight(.medium))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .glassEffect(.regular, in: .capsule)
+                            .background(.regularMaterial, in: .capsule)
                             .padding(8)
                             .transition(.opacity)
                     }

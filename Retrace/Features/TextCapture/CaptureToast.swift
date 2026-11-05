@@ -182,13 +182,12 @@ private struct CaptureToastView: View {
         .opacity(isShown ? 1 : 0)
         .padding(10)
         .onHover { hovering in
-            isHovering = hovering
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .response) { isHovering = hovering }
             hoverChanged(hovering)
         }
         .onAppear {
             withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .pop) { isShown = true }
         }
-        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .response, value: isHovering)
     }
 
     private var notice: some View {

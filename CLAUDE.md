@@ -7,7 +7,8 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the code fits together
 ## Rules
 
 - Use Apple's newest native Liquid Glass and material APIs only. Never imitate glass with blurs, gradients, or stacked shapes. Check the current docs before using a new API.
-- Standard controls first, since they get the system's glass for free. Custom `glassEffect` goes on floating controls, with `GlassEffectContainer` around any that sit together. Images, lists, and forms stay clear.
+- Follow Apple's material rules: glass is for controls and navigation floating above content, never in the content layer, and never on top of other glass. Standard controls get it for free. Custom `glassEffect` goes on floating controls, inside a `GlassEffectContainer` when they sit together. Use standard materials on content such as Library thumbnails. Use `.clear` glass only over media, with a 35% dim if it's bright.
+- Follow Apple's trackpad conventions: two-finger swipes between pages, pinch to zoom, force click for Quick Look, two-finger double-tap for smart zoom. Don't redefine system gestures. Haptics use Apple's Mac patterns: alignment for snaps and limits, generic otherwise.
 - Motion comes from `Animation.response`, `.panel`, and `.pop` in `Support/Design.swift`, and honors Reduce Motion. No linear or keyframe-looking animation.
 - Every screen handles keyboard, pointer, trackpad gestures, VoiceOver, and light and dark mode.
 - Anything that can be a preference is one, and it persists.

@@ -112,7 +112,7 @@ struct ExportSheet: View {
                         Text("Export…")
                     }
                 }
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(isExporting)
             }

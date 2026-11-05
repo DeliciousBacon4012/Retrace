@@ -221,10 +221,10 @@ private struct QuickAccessCard: View {
         }
     }
 
-    /// Clear glass buttons over a light dim, as macOS does for controls over photos and video.
+    /// Clear glass over a 35% dim, which is Apple's guidance for controls over photos and video.
     private var hoverActions: some View {
         ZStack {
-            Color.black.opacity(0.2)
+            Color.black.opacity(0.35)
                 .clipShape(.rect(cornerRadius: 12, style: .continuous))
                 .onTapGesture { actions.open(id) }
 
@@ -234,14 +234,14 @@ private struct QuickAccessCard: View {
                         actions.copy(id)
                         didCopy = true
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.glass(.clear))
                     // A capture that's already on disk has nothing to save, only somewhere to go.
                     if card.capture.fileURL == nil {
                         Button("Save") { actions.save(id) }
                             .buttonStyle(.glassProminent)
                     } else {
                         Button("Show in Finder") { actions.showInFinder(id) }
-                            .buttonStyle(.glass)
+                            .buttonStyle(.glass(.clear))
                     }
                 }
                 .controlSize(.regular)
@@ -269,7 +269,7 @@ private struct QuickAccessCard: View {
         Button(action: action) {
             Image(systemName: symbol)
         }
-        .buttonStyle(.glass)
+        .buttonStyle(.glass(.clear))
         .buttonBorderShape(.circle)
         .controlSize(.small)
         .help(Text(title))

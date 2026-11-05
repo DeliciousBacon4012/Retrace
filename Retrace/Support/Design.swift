@@ -23,12 +23,10 @@ extension Animation {
     static let pop = Animation.bouncy(duration: 0.38, extraBounce: 0.12)
 }
 
-/// Trackpad feedback, at the moments macOS itself uses it. Silent without a Force Touch trackpad.
+/// Trackpad feedback, using Apple's patterns for the Mac. Silent without a Force Touch trackpad.
 enum Haptics {
-    /// Something snapped into place: a zoom stop, a docked panel, a limit reached.
+    /// Something dragged lined up or reached its limit: a zoom stop, a docked panel.
     static func alignment() { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
-    /// A discrete step, like moving to another page.
-    static func levelChange() { NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now) }
-    /// An action finished, like flicking a thumbnail away.
+    /// Anything else worth feeling, like landing on a page or flicking a thumbnail away.
     static func generic() { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
 }

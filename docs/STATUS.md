@@ -18,7 +18,7 @@ Run on macOS 27 with an unsigned development build, which has no Screen Recordin
 
 - First launch of the signed app: settings, clipboard history, and captures carried over from Untitled
 - Two-finger swipes between tabs and between Settings categories, and how they feel
-- Pinch to resize thumbnails; haptics on tab changes, zoom stops, docking the inspector, and flicking a thumbnail
+- Pinch to resize thumbnails; force click for Quick Look; two-finger double-tap in the editor; haptics on tab changes, zoom stops, docking the inspector, and flicking a thumbnail
 - Glass morphing on toast actions and the crop buttons; not yet seen moving
 - Quick Access thumbnails, toasts, the recording HUD, and pins, since they need a real capture
 - Capture and recording modes beyond one area screenshot and one short area movie
@@ -31,3 +31,4 @@ Run on macOS 27 with an unsigned development build, which has no Screen Recordin
 - Signing: `security find-identity` showed no valid identities on 2026-11-05 and strict `codesign` verification fails, so the build is local only. Distribution isn't set up, and App Sandbox is off.
 - `xcodebuild analyze` fails in actool on the Icon Composer file.
 - Rendering performance has not been measured with Instruments.
+- An unanswered Apple developer forum post reports that only the key window shows active Liquid Glass. If so, nonactivating panels like thumbnails and toasts may look slightly flatter. No confirmed workaround; check it live.

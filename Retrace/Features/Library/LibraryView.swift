@@ -361,7 +361,19 @@ struct LibraryView: View {
     /// that's already selected keeps the selection, and the menu acts on all of it.
     private func installEventMonitor(scrollProxy: ScrollViewProxy) {
         guard interactionMonitor == nil else { return }
-        interactionMonitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown, .keyDown]) { [viewModel, gridInteraction] event in
+        let clipboardHistory = dependencies.clipboardHistory
+        interactionMonitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown, .keyDown, .pressure]) { [viewModel, gridInteraction] event in
+            // A force click shows Quick Look, as it does in Finder.
+            if event.type == .pressure {
+                defer { gridInteraction.pressureStage = event.stage }
+                guard event.stage == 2, gridInteraction.pressureStage < 2, let item = gridInteraction.pointerItem,
+                      let url = item.file?.url ?? item.clipboardEntry.flatMap(clipboardHistory.imageURL(for:))
+                else { return event }
+                viewModel.select(item)
+                viewModel.previewURL = url
+                return event
+            }
+
             if event.type == .keyDown {
                 // ScrollView uses arrow keys to scroll, so handle them only while the Library grid has focus.
                 guard gridInteraction.isFocused,
@@ -509,6 +521,7 @@ private final class GridInteractionState {
     /// Where each visible item sits in the grid, for drag selection.
     var frames: [RecentItem.ID: CGRect] = [:]
     var columnCount = 1
+    var pressureStage = 0
     var isFocused = false
 }
 
@@ -533,7 +546,7 @@ private struct TextCard: View {
                             .font(.caption.weight(.medium))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .glassEffect(.regular, in: .capsule)
+                            .background(.regularMaterial, in: .capsule)
                             .padding(8)
                             .transition(.opacity)
                     }
@@ -586,7 +599,7 @@ private struct LibraryCell: View {
                         Image(systemName: "video.fill")
                             .font(.caption)
                             .padding(6)
-                            .glassEffect(.regular, in: .capsule)
+                            .background(.regularMaterial, in: .capsule)
                             .padding(8)
                             .accessibilityLabel("Recording")
                     }
@@ -599,7 +612,9 @@ private struct LibraryCell: View {
                             Label("Edited", systemImage: "square.stack")
                                 .font(.caption.weight(.medium))
                         }
-                        .buttonStyle(.glass)
+                        .buttonStyle(.bordered)
+                        .background(.regularMaterial, in: .capsule)
+                        .buttonBorderShape(.capsule)
                         .controlSize(.small)
                         .padding(6)
                         .help("Show the edited and original versions")
@@ -678,7 +693,6 @@ private struct VersionsView: View {
                 }
                 .help("Puts the original back and moves the edited version to the Trash")
             }
-            .buttonStyle(.glass)
         }
         .padding(16)
         .frame(width: 440)

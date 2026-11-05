@@ -40,7 +40,7 @@ struct PagedTabs<Page: Hashable, Content: View>: View {
                 if new == destination { self.destination = nil }
             } else if new != selection {
                 selection = new
-                Haptics.levelChange()
+                Haptics.generic()
             }
         }
     }
