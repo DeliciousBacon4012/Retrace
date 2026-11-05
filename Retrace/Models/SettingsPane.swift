@@ -7,6 +7,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
     case quickAccess
     case clipboard
     case editor
+    case intelligence
     case recording
     case shortcuts
     case advanced
@@ -23,6 +24,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
         case .quickAccess: String(localized: "Quick Access")
         case .clipboard: String(localized: "Clipboard")
         case .editor: String(localized: "Editor")
+        case .intelligence: String(localized: "Intelligence")
         case .recording: String(localized: "Recording")
         case .shortcuts: String(localized: "Shortcuts")
         case .advanced: String(localized: "Advanced")
@@ -36,6 +38,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
         case .quickAccess: "rectangle.stack"
         case .clipboard: "clipboard"
         case .editor: "pencil.and.scribble"
+        case .intelligence: "sparkles"
         case .recording: "record.circle"
         case .shortcuts: "command"
         case .advanced: "slider.horizontal.3"

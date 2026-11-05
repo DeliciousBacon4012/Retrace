@@ -850,8 +850,9 @@ final class EditorDocument {
     func redactedImageNow(_ redaction: Redaction, strength: Double) -> CGImage? {
         guard redaction != .solid else { return nil }
         let level = Self.level(for: strength)
-        if let cached = redactionLayers[Self.key(redaction, level)] { return cached }
-        return Self.redacted(image, redaction: redaction, level: Double(level) / 10, scale: scale)
+        // Fast previews are made from a smaller copy, so an export never reuses one.
+        if EditorBlurQuality.current == .quality, let cached = redactionLayers[Self.key(redaction, level)] { return cached }
+        return Self.redacted(image, redaction: redaction, level: Double(level) / 10, scale: scale, quality: .quality)
     }
 
     /// Makes the current strength and its two neighbours in the background, so nudging the
@@ -1073,16 +1074,25 @@ final class EditorDocument {
 
     nonisolated private static let ciContext = CIContext(options: [.cacheIntermediates: false])
 
-    nonisolated private static func redacted(_ image: CGImage, redaction: Redaction, level: Double, scale: CGFloat) -> CGImage? {
+    nonisolated private static func redacted(_ image: CGImage, redaction: Redaction, level: Double, scale: CGFloat, quality: EditorBlurQuality = .current) -> CGImage? {
         let input = CIImage(cgImage: image)
         let output: CIImage?
         switch redaction {
         case .blur:
-            let filter = CIFilter.gaussianBlur()
-            filter.inputImage = input.clampedToExtent()
             // Even the weakest setting is strong enough that text underneath can't be read.
-            filter.radius = Float((10 + 20 * level) * scale)
-            output = filter.outputImage
+            let radius = (10 + 20 * level) * scale
+            let filter = CIFilter.gaussianBlur()
+            if quality == .fast {
+                // Blurring a quarter-size copy costs about a sixteenth as much and looks nearly the same.
+                let reduction: CGFloat = 0.25
+                filter.inputImage = input.transformed(by: CGAffineTransform(scaleX: reduction, y: reduction)).clampedToExtent()
+                filter.radius = Float(radius * reduction)
+                output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 1 / reduction, y: 1 / reduction))
+            } else {
+                filter.inputImage = input.clampedToExtent()
+                filter.radius = Float(radius)
+                output = filter.outputImage
+            }
         case .pixelate:
             let filter = CIFilter.pixellate()
             filter.inputImage = input.clampedToExtent()

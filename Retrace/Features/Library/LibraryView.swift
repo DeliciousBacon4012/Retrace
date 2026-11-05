@@ -25,6 +25,12 @@ struct LibraryView: View {
     /// The rectangle being dragged out on empty space, and what was selected before it began.
     @State private var marquee: CGRect?
     @State private var marqueeBase: Set<RecentItem.ID> = []
+    /// Where the marquee's moving corner is, for scrolling when it nears an edge.
+    @State private var marqueeEnd: CGPoint = .zero
+    @State private var scrollPosition = ScrollPosition()
+    @State private var scrollOffset: CGFloat = 0
+    @State private var viewportHeight: CGFloat = 0
+    @State private var autoScroll: Task<Void, Never>?
 
     private static let thumbnailSizes = 110.0...360.0
     private nonisolated static let gridSpace = "libraryGrid"
@@ -73,6 +79,12 @@ struct LibraryView: View {
                         .overlay(alignment: .topLeading) { marqueeOverlay }
                         .coordinateSpace(.named(Self.gridSpace))
                     }
+                    .scrollPosition($scrollPosition)
+                    .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, offset in
+                        scrollOffset = offset
+                    }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+                    .safeAreaBar(edge: .top) { similarBar }
                     .simultaneousGesture(pinchGesture)
                     .contentShape(.rect)
                     .onTapGesture {
@@ -93,7 +105,13 @@ struct LibraryView: View {
                     .onChange(of: clipboardHistory.entries) {
                         updateSources()
                     }
+                    .onChange(of: dependencies.contentIndex.version) {
+                        viewModel.contentIndexDidChange()
+                    }
                     .onAppear {
+                        viewModel.contentMatcher = { [index = dependencies.contentIndex] url, query in
+                            index.matches(url, query: query)
+                        }
                         updateSources()
                         applyPendingFilter()
                         gridInteraction.columnCount = columnCount(width: geometry.size.width)
@@ -126,7 +144,13 @@ struct LibraryView: View {
                 .onDeleteCommand {
                     delete(viewModel.selectedItems(in: items))
                 }
-                .onExitCommand { viewModel.clearSelection() }
+                .onExitCommand {
+                    if viewModel.similarResults != nil, viewModel.selection.isEmpty {
+                        withAnimation(.panel) { viewModel.similarResults = nil }
+                    } else {
+                        viewModel.clearSelection()
+                    }
+                }
                 .onChange(of: geometry.size.width) { _, width in
                     gridInteraction.columnCount = columnCount(width: width)
                 }
@@ -158,16 +182,83 @@ struct LibraryView: View {
                     height: abs(value.location.y - value.startLocation.y)
                 )
                 marquee = rect
-                let touched = items.lazy
-                    .filter { gridInteraction.frames[$0.id]?.intersects(rect) == true }
-                    .map(\.id)
-                let selection = marqueeBase.union(touched)
-                if selection != viewModel.selection { viewModel.selection = selection }
+                marqueeEnd = value.location
+                updateMarqueeSelection(rect, in: items)
+                startAutoScroll(in: items, anchor: value.startLocation)
             }
             .onEnded { _ in
+                autoScroll?.cancel()
+                autoScroll = nil
                 marquee = nil
                 marqueeBase = []
             }
+    }
+
+    private func updateMarqueeSelection(_ rect: CGRect, in items: [RecentItem]) {
+        let touched = items.lazy
+            .filter { gridInteraction.frames[$0.id]?.intersects(rect) == true }
+            .map(\.id)
+        let selection = marqueeBase.union(touched)
+        if selection != viewModel.selection { viewModel.selection = selection }
+    }
+
+    /// Scrolls while the pointer rests near the top or bottom edge during a drag selection,
+    /// faster the closer it gets, and extends the selection along the way.
+    private func startAutoScroll(in items: [RecentItem], anchor: CGPoint) {
+        guard autoScroll == nil else { return }
+        autoScroll = Task { @MainActor in
+            let edge: CGFloat = 48
+            let topMost: CGFloat = 16
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(16))
+                guard marquee != nil else { return }
+                let inViewport = marqueeEnd.y - scrollOffset
+                var step: CGFloat = 0
+                if inViewport < edge {
+                    step = -topMost * min(max((edge - inViewport) / edge, 0), 1)
+                } else if inViewport > viewportHeight - edge {
+                    step = topMost * min(max((inViewport - viewportHeight + edge) / edge, 0), 1)
+                }
+                guard step != 0 else { continue }
+                scrollPosition.scrollTo(y: max(scrollOffset + step, 0))
+                marqueeEnd.y += step
+                let rect = CGRect(
+                    x: min(anchor.x, marqueeEnd.x),
+                    y: min(anchor.y, marqueeEnd.y),
+                    width: abs(marqueeEnd.x - anchor.x),
+                    height: abs(marqueeEnd.y - anchor.y)
+                )
+                marquee = rect
+                updateMarqueeSelection(rect, in: items)
+            }
+        }
+    }
+
+    /// Shown while the Library is showing images like another one.
+    @ViewBuilder
+    private var similarBar: some View {
+        if viewModel.similarResults != nil {
+            HStack {
+                Label("Similar Images", systemImage: "square.on.square.intersection.dashed")
+                    .font(.callout.weight(.medium))
+                Spacer()
+                Button("Show All") {
+                    withAnimation(.panel) { viewModel.similarResults = nil }
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+            }
+            .padding(.horizontal, Self.gridInset)
+            .padding(.vertical, Design.spacingS)
+        }
+    }
+
+    private func findSimilar(to file: LibraryItem) {
+        let urls = dependencies.library.items.filter { $0.kind == .image }.map(\.url)
+        withAnimation(.panel) {
+            viewModel.similarResults = dependencies.contentIndex.similar(to: file.url, among: urls)
+        }
     }
 
     @ViewBuilder
@@ -296,6 +387,10 @@ struct LibraryView: View {
             }
             Button(file.kind == .image ? "Open in Default App" : "Open") { files.forEach { NSWorkspace.shared.open($0.url) } }
             Button("Quick Look") { viewModel.previewURL = file.url }
+            if file.kind == .image {
+                Button("Find Similar") { findSimilar(to: file) }
+                    .disabled(dependencies.contentIndex.entry(for: file.url)?.featurePrint == nil)
+            }
             if dependencies.versions.hasOriginal(for: file.url) {
                 Button("Restore Original") { restoreOriginal(of: file.url) }
                     .disabled(files.count > 1)

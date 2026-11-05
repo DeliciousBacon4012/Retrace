@@ -14,6 +14,7 @@ final class AppDependencies {
     let dockIcon: any DockIconControlling
     let clipboard: any ClipboardWriting
     let library: CaptureLibrary
+    let contentIndex = LibraryContentIndex()
     let capture: CaptureCoordinator
     let recording: RecordingCoordinator
     let replay: ReplayCoordinator
@@ -123,6 +124,20 @@ final class AppDependencies {
         )
     }
 
+    /// Keeps the Library's content index in step with its files and with Settings.
+    private func followContentIndexSetting() {
+        let (enabled, items) = withObservationTracking {
+            (settings.indexesLibraryContent, library.items)
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.followContentIndexSetting() }
+        }
+        if enabled {
+            contentIndex.update(with: items)
+        } else if contentIndex.indexedCount > 0 || contentIndex.isIndexing {
+            contentIndex.removeAll()
+        }
+    }
+
     /// Call once the app has finished launching.
     func start() {
         followDockIconSetting()
@@ -131,6 +146,7 @@ final class AppDependencies {
         shortcuts.start()
         replay.start()
         clipboardHistory.start()
+        followContentIndexSetting()
         followThumbnailMemorySetting()
         memory.onPressure = { [weak self] pressure in self?.relieveMemory(pressure) }
         memory.start()

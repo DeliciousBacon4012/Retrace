@@ -104,6 +104,8 @@ struct EditorInspector: View {
                         .disabled(isLiftingSubject)
                         .help("Copy the foreground as a transparent image using on-device Vision. Existing redactions are included.")
 
+                        IdentifySection(image: document.image)
+
                         Text("Select a mark to edit it. Drag the mark or its handles to adjust it. Shift-click or ⌘A selects several.")
                             .foregroundStyle(.secondary)
                     }
@@ -538,6 +540,7 @@ private struct EffectsSection: View {
 private struct CropSection: View {
     let document: EditorDocument
     @State private var isFindingSubject = false
+    @AppStorage(SmartCropMode.storageKey) private var smartCropMode: SmartCropMode = .attention
     @State private var message: String?
 
     var body: some View {
@@ -548,6 +551,9 @@ private struct CropSection: View {
                 Divider()
                 ForEach(CropAspect.allCases.filter { $0 != .free && $0 != .original }) { Text($0.title).tag($0) }
             }
+            InspectorPicker("Smart Crop", selection: $smartCropMode) {
+                ForEach(SmartCropMode.allCases) { Text($0.title).tag($0) }
+            }
             Button {
                 Task { await suggestCrop() }
             } label: {
@@ -557,7 +563,7 @@ private struct CropSection: View {
                         Text("Finding subject…")
                     }
                 } else {
-                    Label("Smart Crop", systemImage: "viewfinder")
+                    Label("Suggest Crop", systemImage: "viewfinder")
                 }
             }
             .buttonStyle(.bordered)
@@ -583,7 +589,7 @@ private struct CropSection: View {
         isFindingSubject = true
         defer { isFindingSubject = false }
         do {
-            guard let suggestion = try await TextRecognizer.attentionCrop(in: document.image),
+            guard let suggestion = try await TextRecognizer.attentionCrop(in: document.image, mode: smartCropMode),
                   document.applySuggestedCrop(suggestion)
             else {
                 message = String(localized: "No clear subject was found. Adjust the crop manually.")
@@ -593,6 +599,53 @@ private struct CropSection: View {
         } catch {
             message = error.localizedDescription
         }
+    }
+}
+
+/// What Vision recognizes in the image, on request.
+private struct IdentifySection: View {
+    let image: CGImage
+
+    @State private var labels: [ImageLabel]?
+    @State private var isReading = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                Task { await identify() }
+            } label: {
+                if isReading {
+                    HStack(spacing: 7) {
+                        ProgressView().controlSize(.small)
+                        Text("Looking…")
+                    }
+                } else {
+                    Label("Identify Image", systemImage: "sparkle.magnifyingglass")
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(isReading)
+            .help("Recognize what's in the image, on this Mac.")
+
+            if let labels {
+                if labels.isEmpty {
+                    Text("Nothing recognized with confidence.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(labels.map(\.title).joined(separator: ", "))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func identify() async {
+        isReading = true
+        defer { isReading = false }
+        let found = try? await ImageIntelligence.labels(in: image)
+        withAnimation(.response) { labels = found ?? [] }
     }
 }
 

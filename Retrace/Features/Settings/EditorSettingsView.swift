@@ -2,6 +2,7 @@ import SwiftUI
 
 /// How the annotation editor looks and behaves.
 struct EditorSettingsView: View {
+    @AppStorage(EditorBlurQuality.storageKey) private var blurQuality: EditorBlurQuality = .quality
     @Environment(SettingsStore.self) private var settings
     @Environment(AppDependencies.self) private var dependencies
 
@@ -49,6 +50,17 @@ struct EditorSettingsView: View {
                 Text("Colors")
             } footer: {
                 Text("Number keys 1 to 9 and 0 pick the first ten colors. A custom color picker is always available; choose Custom to edit a saved palette.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker("Blur preview", selection: $blurQuality) {
+                    ForEach(EditorBlurQuality.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text("Fast keeps blur and Spotlight responsive on large images. Saved and exported images always use the full-quality blur.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

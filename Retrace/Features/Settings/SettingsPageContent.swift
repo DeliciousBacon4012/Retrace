@@ -55,6 +55,8 @@ struct SettingsPageContent: View {
                 ClipboardSettingsView()
             case .editor:
                 EditorSettingsView()
+            case .intelligence:
+                IntelligenceSettingsView()
             case .recording:
                 RecordingSettingsView()
                 ReplayBufferSettingsView()

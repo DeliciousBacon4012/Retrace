@@ -90,6 +90,19 @@
 - [~] Custom Save Last lengths
 - [~] Save Last is fast and never cuts the video
 
+## Depth and customization
+
+- [~] Encoder, codec (H.264, HEVC, ProRes), quality, color space, and frame buffer settings
+- [~] Replay frame rate, resolution, and quality
+- [~] Cursor motion blur with Fast and Quality modes and an amount
+- [~] Show clicks in recordings
+- [~] Blur preview: Fast or Quality
+- [~] Search inside images (text and what Vision recognizes), on this Mac
+- [~] Find Similar images
+- [~] Identify Image in the editor
+- [~] Smart Crop: Attention, Objects, or Document
+- [~] Text recognition: Accurate or Fast
+
 ## Notifications
 
 - [x] Notice at the top of the screen after copying text
@@ -129,13 +142,10 @@
 - [ ] Rotate, flip, resize and expand the canvas
 - [ ] Save editable project files
 - [ ] Combine several captures
-- [ ] Remove a subject's background
 - [ ] Trim recordings and export GIFs
-- [ ] Show clicks and keystrokes in recordings
+- [ ] Show keystrokes in recordings
 - [ ] Webcam overlay
-- [ ] 120 fps recording on ProMotion displays
 - [ ] Replay auto-start, pause on battery or lock, and markers
-- [ ] Search text inside images
 - [ ] Tags, favorites and auto-delete
 - [ ] Floating shelf and drop zones
 - [ ] Sync all settings across Macs
@@ -143,3 +153,6 @@
 - [ ] Color picker
 - [ ] Pixel ruler
 - [ ] Draw on screen live
+- [ ] HDR recording
+- [ ] Summarize or rename captures with Apple Intelligence
+- [ ] Translate captured text on this Mac

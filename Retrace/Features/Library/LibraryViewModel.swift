@@ -68,6 +68,12 @@ final class LibraryViewModel {
     var sortOrder: SortOrder = .newestFirst {
         didSet { if sortOrder != oldValue { refreshVisibleItems() } }
     }
+    /// Set by the Library so search can look inside images as well as at file names.
+    @ObservationIgnored var contentMatcher: ((URL, String) -> Bool)?
+    /// When set, the Library shows only these files, in this order.
+    var similarResults: [URL]? {
+        didSet { if similarResults != oldValue { refreshVisibleItems() } }
+    }
     var selection: Set<RecentItem.ID> = []
     var previewURL: URL?
     /// The date-sorted source changes only when captures or captured text change.
@@ -99,6 +105,11 @@ final class LibraryViewModel {
     /// Filters and sorts one merged set without rebuilding it on selection-only changes.
     /// Clipboard entries match their visible text or source app; files match their filename.
     private func refreshVisibleItems() {
+        if let similarResults {
+            let files = Dictionary(sourceItems.compactMap { item in item.file.map { ($0.url.standardizedFileURL, item) } }, uniquingKeysWith: { first, _ in first })
+            visibleItems = similarResults.compactMap { files[$0.standardizedFileURL] }
+            return
+        }
         let query = searchText.trimmingCharacters(in: .whitespaces)
         let filtered = sourceItems.filter { item in
             switch item {
@@ -114,7 +125,9 @@ final class LibraryViewModel {
                     matchesCategory = selectedCategories.contains(.recordings)
                 }
                 guard matchesCategory else { return false }
-                return query.isEmpty || file.name.localizedStandardContains(query)
+                return query.isEmpty
+                    || file.name.localizedStandardContains(query)
+                    || contentMatcher?(file.url, query) == true
             case .text(let snippet):
                 guard selectedCategories.contains(.capturedText) else { return false }
                 return query.isEmpty || snippet.text.localizedStandardContains(query)
@@ -130,6 +143,11 @@ final class LibraryViewModel {
             case .oldestFirst: lhs.date < rhs.date
             }
         }
+    }
+
+    /// New information about what's inside images can change a search's results.
+    func contentIndexDidChange() {
+        if !searchText.trimmingCharacters(in: .whitespaces).isEmpty { refreshVisibleItems() }
     }
 
     func select(_ item: RecentItem) {

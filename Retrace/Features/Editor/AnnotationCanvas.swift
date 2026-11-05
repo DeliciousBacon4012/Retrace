@@ -10,6 +10,9 @@ struct AnnotationCanvas: View {
     @State private var isHovering = false
     @State private var magnifyStart: CGFloat?
     @State private var scrollMonitor: Any?
+    @State private var panMonitor: Any?
+    /// Where the image was when a Space-drag began.
+    @State private var panStart: CGSize?
     @State private var rightClickMonitor: Any?
     /// The pointer over the image, for selecting the mark under a right-click.
     @State private var pointer = HoverPoint()
@@ -119,10 +122,12 @@ struct AnnotationCanvas: View {
             }
             .onAppear {
                 installScrollMonitor(fitFactor: layout.fitFactor)
+                installPanMonitor()
                 installRightClickMonitor()
             }
             .onDisappear {
                 removeScrollMonitor()
+                removePanMonitor()
                 removeRightClickMonitor()
             }
         }
@@ -134,6 +139,14 @@ struct AnnotationCanvas: View {
     private func drawingGesture(layout: CanvasLayout) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
+                // Hold Space and drag to move a zoomed image, as in most Mac design apps.
+                if pointer.isSpaceHeld, document.zoom != nil {
+                    let start = panStart ?? document.pan
+                    panStart = start
+                    NSCursor.closedHand.set()
+                    document.pan = CGSize(width: start.width + value.translation.width, height: start.height + value.translation.height)
+                    return
+                }
                 if document.isPickingTextArea {
                     if !isPointerDown {
                         isPointerDown = true
@@ -160,6 +173,11 @@ struct AnnotationCanvas: View {
                 }
             }
             .onEnded { _ in
+                if panStart != nil {
+                    panStart = nil
+                    NSCursor.openHand.set()
+                    return
+                }
                 isPointerDown = false
                 if document.isPickingTextArea {
                     document.textAreaUp()
@@ -206,6 +224,37 @@ struct AnnotationCanvas: View {
         }
     }
 
+    /// Space held over the canvas turns a drag into a pan, and so does the middle mouse button.
+    private func installPanMonitor() {
+        guard panMonitor == nil else { return }
+        panMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .otherMouseDragged]) { [document, pointer] event in
+            if event.type == .otherMouseDragged {
+                guard isHovering, document.zoom != nil else { return event }
+                document.pan.width += event.deltaX
+                document.pan.height += event.deltaY
+                return nil
+            }
+            // 49 is the Space bar's virtual key code.
+            guard event.keyCode == 49, document.editingTextID == nil,
+                  !(NSApp.keyWindow?.firstResponder is NSText)
+            else { return event }
+            guard isHovering || pointer.isSpaceHeld else { return event }
+            let isDown = event.type == .keyDown
+            if pointer.isSpaceHeld != isDown {
+                pointer.isSpaceHeld = isDown
+                if document.zoom != nil { (isDown ? NSCursor.openHand : NSCursor.arrow).set() }
+            }
+            return nil
+        }
+    }
+
+    private func removePanMonitor() {
+        if let panMonitor {
+            NSEvent.removeMonitor(panMonitor)
+        }
+        panMonitor = nil
+    }
+
     private func removeScrollMonitor() {
         if let scrollMonitor {
             NSEvent.removeMonitor(scrollMonitor)
@@ -235,6 +284,10 @@ struct AnnotationCanvas: View {
 
     private func updateCursor(at location: CGPoint, layout: CanvasLayout) {
         guard !isPointerDown else { return }
+        if pointer.isSpaceHeld, document.zoom != nil {
+            NSCursor.openHand.set()
+            return
+        }
         if document.isPickingTextArea {
             NSCursor.crosshair.set()
             return
@@ -291,6 +344,7 @@ struct AnnotationCanvas: View {
 private final class HoverPoint {
     var location: CGPoint = .zero
     var tolerance: CGFloat = 0
+    var isSpaceHeld = false
 }
 
 nonisolated struct CanvasLayout: Equatable {

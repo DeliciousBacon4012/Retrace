@@ -218,32 +218,10 @@ nonisolated enum TextRecognizer {
         }
     }
 
-    /// Suggests a crop around the most visually salient region, in top-left image pixels.
-    /// Returns nil when Vision can't identify a useful region smaller than the full image.
-    static func attentionCrop(in image: CGImage) async throws -> CGRect? {
+    /// Suggests a crop around what Vision finds most salient, in top-left image pixels.
+    static func attentionCrop(in image: CGImage, mode: SmartCropMode = .attention) async throws -> CGRect? {
         try validateImageSize(image)
-        let crop: CGRect? = try await run {
-            let request = VNGenerateAttentionBasedSaliencyImageRequest()
-            try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
-            guard let observation = request.results?.first,
-                  let objects = observation.salientObjects,
-                  !objects.isEmpty,
-                  let strongest = objects.max(by: { $0.confidence < $1.confidence })
-            else { return nil }
-
-            let bounds = CGRect(origin: .zero, size: CGSize(width: image.width, height: image.height))
-            let subject = pixelRect(strongest.boundingBox, in: bounds.size)
-            guard subject.width.isFinite, subject.height.isFinite, subject.width > 0, subject.height > 0 else { return nil }
-
-            let padded = subject.insetBy(dx: -subject.width * 0.18, dy: -subject.height * 0.18)
-                .intersection(bounds)
-                .integral
-            guard padded.width >= 8, padded.height >= 8,
-                  padded.width < bounds.width * 0.98 || padded.height < bounds.height * 0.98
-            else { return nil }
-            return padded
-        }
-        return crop
+        return try await ImageIntelligence.suggestedCrop(in: image, mode: mode)
     }
 
     /// Isolates all detected foreground instances with a transparent background.
@@ -326,7 +304,7 @@ nonisolated enum TextRecognizer {
 
     private static func textRequest(correctsLanguage: Bool) -> VNRecognizeTextRequest {
         let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
+        request.recognitionLevel = TextRecognitionSpeed.current == .fast ? .fast : .accurate
         request.usesLanguageCorrection = correctsLanguage
         request.automaticallyDetectsLanguage = true
         return request

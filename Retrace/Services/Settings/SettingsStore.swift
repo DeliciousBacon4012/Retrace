@@ -91,6 +91,8 @@ final class SettingsStore {
     var recordsSystemAudio = Defaults.recordsSystemAudio { didSet { save(recordsSystemAudio, .recordsSystemAudio) } }
     var recordsMicrophone = Defaults.recordsMicrophone { didSet { save(recordsMicrophone, .recordsMicrophone) } }
     var showsClicks = Defaults.showsClicks { didSet { save(showsClicks, .showsClicks) } }
+    /// Reads Library images on this Mac so search and Find Similar can use them.
+    var indexesLibraryContent = Defaults.indexesLibraryContent { didSet { save(indexesLibraryContent, .indexesLibraryContent) } }
     var videoColor = Defaults.videoColor { didSet { save(videoColor.rawValue, .videoColor) } }
     var videoQuality = Defaults.videoQuality { didSet { save(videoQuality.rawValue, .videoQuality) } }
     var videoEncoder = Defaults.videoEncoder { didSet { save(videoEncoder.rawValue, .videoEncoder) } }
@@ -310,6 +312,7 @@ final class SettingsStore {
         recordsSystemAudio = value(.recordsSystemAudio, default: Defaults.recordsSystemAudio)
         recordsMicrophone = value(.recordsMicrophone, default: Defaults.recordsMicrophone)
         showsClicks = value(.showsClicks, default: Defaults.showsClicks)
+        indexesLibraryContent = value(.indexesLibraryContent, default: Defaults.indexesLibraryContent)
         videoColor = VideoColor(rawValue: value(.videoColor, default: "")) ?? Defaults.videoColor
         videoQuality = VideoQuality(rawValue: value(.videoQuality, default: "")) ?? Defaults.videoQuality
         videoEncoder = VideoEncoderChoice(rawValue: value(.videoEncoder, default: "")) ?? Defaults.videoEncoder
@@ -436,6 +439,7 @@ private extension SettingsStore {
         case recordsSystemAudio
         case recordsMicrophone
         case showsClicks
+        case indexesLibraryContent
         case videoColor
         case videoQuality
         case videoEncoder
@@ -505,6 +509,7 @@ private extension SettingsStore {
         static let recordsSystemAudio = true
         static let recordsMicrophone = false
         static let showsClicks = false
+        static let indexesLibraryContent = true
         static let videoColor = VideoColor.automatic
         static let videoQuality = VideoQuality.original
         static let videoEncoder = VideoEncoderChoice.automatic

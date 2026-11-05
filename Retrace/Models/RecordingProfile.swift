@@ -112,3 +112,23 @@ nonisolated enum CursorBlurMode: String, CaseIterable, Identifiable, Sendable {
         }
     }
 }
+
+/// How the editor previews blur. Exports always use the full-quality blur.
+nonisolated enum EditorBlurQuality: String, CaseIterable, Identifiable, Sendable {
+    case fast
+    case quality
+
+    static let storageKey = "editorBlurQuality"
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .fast: String(localized: "Fast")
+        case .quality: String(localized: "Quality")
+        }
+    }
+
+    static var current: EditorBlurQuality {
+        UserDefaults.standard.string(forKey: storageKey).flatMap(Self.init(rawValue:)) ?? .quality
+    }
+}

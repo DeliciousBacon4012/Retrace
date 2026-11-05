@@ -551,9 +551,15 @@ final class QuickAccessHostingView: NSHostingView<QuickAccessStackView> {
     private func throwAway(_ id: UUID, from travelled: CGFloat, velocity: CGFloat) {
         guard let model else { return }
         let target = model.geometry.cardSize.width + model.geometry.padding * 2 + 20
-        let duration = min(max(Double((target - travelled) / velocity), 0.12), 0.4) * model.speed
-        withAnimation(.timingCurve(0.15, 0.6, 0.35, 1, duration: duration)) {
-            Haptics.generic()
+        Haptics.generic()
+        // A spring that starts at the flick's own speed, so the card leaves as it was thrown.
+        let distance = max(target - travelled, 1)
+        let spring: Animation = .interpolatingSpring(
+            duration: 0.4 * model.speed,
+            bounce: 0,
+            initialVelocity: Double(velocity / distance)
+        )
+        withAnimation(spring, completionCriteria: .logicallyComplete) {
             model.swipeOffsets[id] = target * edge
         } completion: { [weak self] in
             self?.onSwipeAway(id)
