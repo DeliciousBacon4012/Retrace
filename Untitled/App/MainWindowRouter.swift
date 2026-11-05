@@ -32,10 +32,9 @@ final class MainWindowRouter {
     private func showCaptures(filter: LibraryViewModel.KindFilter) {
         pendingRecentsFilter = filter
         UserDefaults.standard.set(MainSection.captures.rawValue, forKey: MainSection.storageKey)
-        UserDefaults.standard.set(MainTab.library.rawValue, forKey: MainTab.storageKey)
     }
 
-    /// Opens Settings, on `pane` if one is given, otherwise on the tab last used.
+    /// Opens Settings, on `pane` if one is given, otherwise on the category last used.
     /// Activating first brings the window in front even while retrace has no Dock icon.
     func showSettings(_ pane: SettingsPane? = nil, using openSettings: OpenSettingsAction) {
         if let pane {

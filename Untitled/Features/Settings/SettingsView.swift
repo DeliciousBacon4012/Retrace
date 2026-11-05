@@ -1,32 +1,28 @@
 import SwiftUI
 
-/// Native Settings scene with the same category sidebar and page content used in the workspace.
+/// Native Settings scene with the Editor's compact, icon-led segmented navigation.
 struct SettingsView: View {
     @AppStorage(SettingsPane.storageKey) private var selection: SettingsPane = .general
 
     var body: some View {
-        HStack(spacing: 0) {
-            SettingsCategorySidebar(selection: $selection)
-                .frame(width: 220)
-            Divider()
-            SettingsPageContent(pane: selection)
-        }
-        .frame(minWidth: 820, minHeight: 560)
-    }
-}
-
-struct SettingsCategorySidebar: View {
-    @Binding var selection: SettingsPane
-
-    var body: some View {
-        List(selection: $selection) {
-            ForEach(SettingsPane.allCases) { pane in
-                Label(pane.title, systemImage: pane.symbolName)
-                    .tag(pane)
+        SettingsPageContent(pane: selection)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Picker("Settings Categories", selection: $selection) {
+                        ForEach(SettingsPane.allCases) { pane in
+                            Label(pane.title, systemImage: pane.symbolName)
+                                .help(pane.title)
+                                .tag(pane)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel("Settings Categories")
+                    .frame(width: 540)
+                }
             }
-        }
-        .listStyle(.sidebar)
-        .navigationTitle("Settings")
+            .navigationTitle("Settings")
+            .frame(minWidth: 880, minHeight: 600)
     }
 }
 
@@ -36,10 +32,24 @@ struct SettingsPageContent: View {
     @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
-        page(for: pane)
-            .frame(maxWidth: 720)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .navigationTitle(pane.title)
+        ScrollView {
+            HStack(alignment: .top) {
+                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 18) {
+                    Text(pane.title)
+                        .font(.title2.weight(.semibold))
+
+                    page(for: pane)
+                }
+                .frame(maxWidth: 800, alignment: .leading)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 32)
+            .padding(.top, 24)
+            .padding(.bottom, 28)
+        }
+        .scrollIndicators(.visible)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -83,9 +93,12 @@ struct SettingsPageContent: View {
 }
 
 extension View {
-    /// Puts settings sections in the standard grouped form.
+    /// Keeps settings controls in the macOS vertical form layout without grouped card rows.
     func settingsPage() -> some View {
         Form { self }
-            .formStyle(.grouped)
+            .formStyle(.automatic)
+            .toggleStyle(.switch)
+            .buttonStyle(.glass)
+            .scrollContentBackground(.hidden)
     }
 }

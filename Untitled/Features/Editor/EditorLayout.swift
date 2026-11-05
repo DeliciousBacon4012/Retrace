@@ -103,7 +103,7 @@ struct EditorToolPalette: View {
                 }
             }
             .padding(4)
-            .glassEffect(.regular, in: .capsule)
+            .glassEffect(.regular.interactive(), in: .capsule)
         }
         .animation(.smooth(duration: 0.25), value: document.tool)
         .contextMenu {

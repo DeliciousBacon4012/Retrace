@@ -1,7 +1,9 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// Main workspace with native Library, Editor, and Settings navigation and capture commands.
+/// The capture library is the main workspace. Capture and recording remain direct toolbar actions;
+/// editing opens in its own document window, and Settings uses the macOS Settings scene.
 struct MainView: View {
     @Environment(AppDependencies.self) private var dependencies
 
@@ -18,76 +20,69 @@ enum MainSection: String, Identifiable {
     static let storageKey = "mainWindowSection"
 }
 
-enum MainTab: String, Identifiable {
-    case library
-    case editor
-    case settings
-
-    var id: String { rawValue }
-    static let storageKey = "mainWindowTab"
-}
-
 private struct MainContent: View {
     @State var access: ScreenRecordingAccessModel
     @State private var library = LibraryViewModel()
     @AppStorage(MainSection.storageKey) private var section: MainSection = .captures
-    @AppStorage(MainTab.storageKey) private var tab: MainTab = .library
-    @AppStorage(SettingsPane.storageKey) private var settingsPane: SettingsPane = .general
 
     @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
-        HStack(spacing: 0) {
-            if tab == .library {
-                librarySidebar
-                    .frame(width: 205)
-                Divider()
-            } else if tab == .settings {
-                SettingsCategorySidebar(selection: $settingsPane)
-                    .frame(width: 210)
-                Divider()
+        VStack(spacing: 0) {
+            if section == .captures, access.screenRecording == .notGranted {
+                PermissionBanner(model: access)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 14)
+                    .padding(.bottom, 2)
+                    .transition(.opacity)
             }
 
-            VStack(spacing: 0) {
-                if tab == .library, access.screenRecording == .notGranted {
-                    PermissionBanner(model: access)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 14)
-                        .padding(.bottom, 2)
-                        .transition(.opacity)
+            Group {
+                switch section {
+                case .captures:
+                    LibraryView(viewModel: library)
+                case .clipboard:
+                    ClipboardView()
                 }
-
-                pageHeader
-
-                Group {
-                    switch tab {
-                    case .library:
-                        switch section {
-                        case .captures:
-                            LibraryView(viewModel: library)
-                        case .clipboard:
-                            ClipboardView()
-                        }
-                    case .editor:
-                        EditorLandingView {
-                            section = .captures
-                            tab = .library
-                        }
-                    case .settings:
-                        SettingsPageContent(pane: settingsPane)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationTitle(navigationTitle)
+        .navigationTitle(section == .captures ? "Library" : "Clipboard")
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Library", selection: $section) {
+                    Label("Library", systemImage: "square.grid.2x2")
+                        .tag(MainSection.captures)
+                    Label("Clipboard", systemImage: "clipboard")
+                        .tag(MainSection.clipboard)
+                }
+                .pickerStyle(.segmented)
+                .labelStyle(.iconOnly)
+                .accessibilityLabel("Library Sections")
+                .accessibilityHint("Switch between your captures and clipboard history.")
+            }
+
+            if section == .captures {
+                ToolbarItem(placement: .automatic) {
+                    LibraryFilterControl(selection: $library.kindFilter)
+                }
+            }
+
             ToolbarItemGroup(placement: .primaryAction) {
                 CaptureMenu()
                 RecordControl()
             }
         }
         .frame(minWidth: 800, minHeight: 520)
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let url = urls.first,
+                  UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true else {
+                NSSound.beep()
+                return false
+            }
+            dependencies.editor.open(fileAt: url)
+            return true
+        }
         .animation(.panel, value: access.screenRecording)
         .task {
             await access.watchScreenRecording()
@@ -97,54 +92,6 @@ private struct MainContent: View {
         }
     }
 
-    private var navigationTitle: String {
-        switch tab {
-        case .library:
-            section == .captures ? "Library" : "Clipboard"
-        case .editor:
-            "Editor"
-        case .settings:
-            "Settings"
-        }
-    }
-
-    private var librarySidebar: some View {
-        List(selection: $section) {
-            Label("Library", systemImage: "square.grid.2x2")
-                .tag(MainSection.captures)
-            Label("Clipboard", systemImage: "clipboard")
-                .tag(MainSection.clipboard)
-        }
-        .listStyle(.sidebar)
-        .frame(maxHeight: .infinity)
-    }
-
-    private var pageHeader: some View {
-        ZStack {
-            Picker(selection: $tab) {
-                Text("Library").tag(MainTab.library)
-                Text("Editor").tag(MainTab.editor)
-                Text("Settings").tag(MainTab.settings)
-            } label: {
-                EmptyView()
-            }
-            .pickerStyle(.segmented)
-            .accessibilityLabel("Workspace")
-            .frame(width: 340)
-            .padding(3)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            HStack {
-                Spacer(minLength: 12)
-                if tab == .library, section == .captures {
-                    LibraryFilterControl(selection: $library.kindFilter)
-                }
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
-    }
 }
 
 /// One compact system menu keeps the content header quiet and makes the active filter explicit.

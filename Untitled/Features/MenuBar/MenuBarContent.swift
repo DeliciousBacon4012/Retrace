@@ -176,7 +176,6 @@ private struct ClipboardHistoryMenu: View {
             Toggle("Keep Clipboard History", isOn: $settings.keepsClipboardHistory)
             Button("Show All") {
                 UserDefaults.standard.set(MainSection.clipboard.rawValue, forKey: MainSection.storageKey)
-                UserDefaults.standard.set(MainTab.library.rawValue, forKey: MainTab.storageKey)
                 MainWindowRouter.shared.show(using: openWindow)
             }
         }

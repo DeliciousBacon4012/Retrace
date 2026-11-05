@@ -14,7 +14,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
 
     var id: String { rawValue }
 
-    /// Where the open tab is remembered, so Settings reopens on it.
+    /// The selected category is remembered so Settings reopens there.
     static let storageKey = "settingsPane"
 
     var title: String {
