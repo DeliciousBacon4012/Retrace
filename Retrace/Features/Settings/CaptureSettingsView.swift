@@ -11,7 +11,7 @@ struct CaptureSettingsView: View {
             Section {
                 Toggle("Include the pointer", isOn: $settings.includesCursor)
             } footer: {
-                Text("Recordings always show the pointer.")
+                Text("Recordings show the pointer; Settings › Recording can draw it with motion blur instead.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
