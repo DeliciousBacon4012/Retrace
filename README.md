@@ -2,14 +2,21 @@
 
 An all-in-one screen utility for macOS: screenshots, annotation, screen recording, a replay buffer, and clipboard history, in one lightweight, native app.
 
-> Early development. See [docs/STATUS.md](docs/STATUS.md) for what's been verified and [docs/FEATURES.md](docs/FEATURES.md) for what's planned.
+> Version 1.0.0. See [docs/STATUS.md](docs/STATUS.md) for what's been verified and [docs/FEATURES.md](docs/FEATURES.md) for what's planned.
+
+## Install
+
+1. Download `Retrace-1.0.0.dmg` from [Releases](https://github.com/DeliciousBacon4012/retrace/releases).
+2. Open it and drag **Retrace** onto **Applications**.
+3. Open Retrace from Applications. If macOS says it can't check the app, open System Settings › Privacy & Security and click **Open Anyway** under the message about Retrace. This happens once, because the app isn't notarized yet.
+4. The first capture asks for Screen Recording access. Allow it in System Settings, then quit and reopen Retrace.
 
 ## Requirements
 
 - macOS 26 Tahoe or later. macOS 27 gets the newer segmented tab style.
 - Xcode 27 or later to build.
 
-## Build and run
+## Build from source
 
 1. Open `Retrace.xcodeproj` in Xcode.
 2. Select the **Retrace** scheme and **My Mac**.

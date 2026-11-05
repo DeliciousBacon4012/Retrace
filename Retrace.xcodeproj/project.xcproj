@@ -48,7 +48,7 @@
         "INFOPLIST_KEY_NSHumanReadableCopyright": "Copyright © 2026 DeliciousBacon4012. MIT License.",
         "INFOPLIST_KEY_NSMicrophoneUsageDescription": "Retrace records your microphone only when you turn on microphone audio for a screen recording.",
         "LD_RUNPATH_SEARCH_PATHS": "@executable_path/../Frameworks",
-        "MARKETING_VERSION": "0.1.0",
+        "MARKETING_VERSION": "1.0.0",
         "PRODUCT_BUNDLE_IDENTIFIER": "io.github.deliciousbacon4012.Retrace",
         "PRODUCT_MODULE_NAME": "Retrace",
         "PRODUCT_NAME": "Retrace",
