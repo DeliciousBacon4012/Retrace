@@ -105,7 +105,7 @@ struct EditorToolPalette: View {
             .padding(4)
             .glassEffect(.regular.interactive(), in: .capsule)
         }
-        .animation(.smooth(duration: 0.25), value: document.tool)
+        .animation(.response, value: document.tool)
         .contextMenu {
             Picker("Toolbar Position", selection: $position) {
                 ForEach(EditorToolbarPosition.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }

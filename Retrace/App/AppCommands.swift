@@ -8,13 +8,6 @@ struct AppCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-        CommandGroup(replacing: .appSettings) {
-            Button("Settings…") {
-                MainWindowRouter.shared.showSettings(using: openWindow)
-            }
-            .keyboardShortcut(",", modifiers: .command)
-        }
-
         CommandGroup(after: .newItem) {
             Button("Open…") {
                 let panel = NSOpenPanel()
@@ -33,6 +26,14 @@ struct AppCommands: Commands {
             Button("Pin to Screen…") {
                 dependencies.pins.pinFromFile()
             }
+        }
+
+        CommandGroup(before: .toolbar) {
+            ForEach(Array(MainTab.allCases.enumerated()), id: \.element) { index, tab in
+                Button(tab.title) { MainWindowRouter.shared.show(tab, using: openWindow) }
+                    .keyboardShortcut(KeyEquivalent(Character(String(index + 1))))
+            }
+            Divider()
         }
 
         // Every capture and recording, then Save Last. Opening the clipboard's image is under File.

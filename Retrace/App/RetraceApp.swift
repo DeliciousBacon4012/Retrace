@@ -23,6 +23,12 @@ struct RetraceApp: App {
             EditorCommands(editors: dependencies.editor)
         }
 
+        Settings {
+            SettingsView()
+                .environment(dependencies)
+                .environment(dependencies.settings)
+        }
+
         MenuBarExtra {
             MenuBarContent()
                 .environment(dependencies)

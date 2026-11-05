@@ -9,6 +9,7 @@ struct MenuBarContent: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         if let remaining = dependencies.recording.countdown {
@@ -76,7 +77,7 @@ struct MenuBarContent: View {
                 MainWindowRouter.shared.show(using: openWindow)
             }
             Button("Settings…", systemImage: "gearshape") {
-                MainWindowRouter.shared.showSettings(using: openWindow)
+                MainWindowRouter.shared.showSettings(using: openSettings)
             }
             .keyboardShortcut(",")
         }

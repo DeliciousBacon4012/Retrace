@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// One persistent workspace switcher keeps the Library, Editor, and Settings in one window.
+/// The main window: Library and Editor, one two-finger swipe apart.
 struct MainView: View {
     @Environment(AppDependencies.self) private var dependencies
 
@@ -13,10 +13,14 @@ struct MainView: View {
 enum MainTab: String, CaseIterable, Identifiable {
     case library
     case editor
-    case settings
 
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .library: String(localized: "Library")
+        case .editor: String(localized: "Editor")
+        }
+    }
     static let storageKey = "mainWindowTab"
 }
 
@@ -24,13 +28,12 @@ private struct MainContent: View {
     @State var access: ScreenRecordingAccessModel
     @State private var library = LibraryViewModel()
     @AppStorage(MainTab.storageKey) private var tab: MainTab = .library
-    @AppStorage(SettingsPane.storageKey) private var settingsPane: SettingsPane = .general
 
     @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
         VStack(spacing: 0) {
-            if tab != .settings, access.screenRecording == .notGranted {
+            if access.screenRecording == .notGranted {
                 PermissionBanner(model: access)
                     .padding(.horizontal, 24)
                     .padding(.top, 14)
@@ -38,17 +41,18 @@ private struct MainContent: View {
                     .transition(.opacity)
             }
 
-            Group {
-                switch tab {
-                case .library:
-                    LibraryView(viewModel: library)
-                case .editor:
-                    EditorLandingView()
-                case .settings:
-                    MainSettingsWorkspace(selection: $settingsPane)
+            PagedTabs(selection: $tab, pages: MainTab.allCases) { page in
+                switch page {
+                case .library: LibraryView(viewModel: library)
+                case .editor: EditorLandingView()
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        // On a view that exists only for the Library, so the field leaves the toolbar with it.
+        .background {
+            if tab == .library {
+                Color.clear.searchable(text: $library.searchText, prompt: "Search Library")
+            }
         }
         .navigationTitle(tab.title)
         .toolbar {
@@ -58,23 +62,21 @@ private struct MainContent: View {
                         Text(tab.title).tag(tab)
                     }
                 }
-                .pickerStyle(.segmented)
-                .accessibilityLabel("Workspace")
-                .accessibilityHint("Switch between Library, Editor, and Settings.")
-                .frame(width: 280)
+                .tabPickerStyle()
+                .labelsHidden()
+                .fixedSize()
+                .help("Switch tabs, or swipe with two fingers")
             }
 
             if tab == .library {
                 ToolbarItem(placement: .primaryAction) {
                     LibraryFilterControl(selection: $library.selectedCategories, sortOrder: $library.sortOrder)
                 }
+                ToolbarSpacer(.fixed, placement: .primaryAction)
             }
 
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
                 CaptureMenu()
-            }
-
-            ToolbarItem(placement: .primaryAction) {
                 RecordControl()
             }
         }
@@ -90,37 +92,12 @@ private struct MainContent: View {
 
 }
 
-/// Settings categories stay in the same window and use the Editor's native segmented toolbar idiom.
-private struct MainSettingsWorkspace: View {
-    @Binding var selection: SettingsPane
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Picker(selection: $selection) {
-                ForEach(SettingsPane.allCases) { pane in
-                    Label(pane.title, systemImage: pane.symbolName)
-                        .help(pane.title)
-                        .tag(pane)
-                }
-            } label: {
-                EmptyView()
-            }
-            .pickerStyle(.segmented)
-            .labelStyle(.iconOnly)
-            .labelsHidden()
-            .accessibilityLabel("Settings Categories")
-            .frame(width: 540)
-            .padding(.top, 12)
-
-            SettingsPageContent(pane: selection)
-        }
-    }
-}
-
 /// One native filter menu contains multi-select categories and date ordering.
 private struct LibraryFilterControl: View {
     @Binding var selection: Set<LibraryViewModel.Category>
     @Binding var sortOrder: LibraryViewModel.SortOrder
+
+    private var isFiltering: Bool { selection.count < LibraryViewModel.Category.allCases.count }
 
     var body: some View {
         Menu {
@@ -137,7 +114,7 @@ private struct LibraryFilterControl: View {
                         }
                     ))
                 }
-                Button("Select All Filters") {
+                Button("Show All") {
                     selection = Set(LibraryViewModel.Category.allCases)
                 }
             }
@@ -147,20 +124,18 @@ private struct LibraryFilterControl: View {
                 }
             }
         } label: {
-            Image(systemName: "line.3.horizontal.decrease")
-                .frame(width: 32, height: 32)
-                .contentShape(.circle)
+            Label("Filter", systemImage: isFiltering ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+                .labelStyle(.iconOnly)
+                .contentTransition(.symbolEffect(.replace))
         }
-        .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .buttonStyle(.glass)
         .accessibilityLabel("Filter and Sort Library")
         .accessibilityValue(Text("\(selection.count) filters, \(sortOrder.title)"))
         .help("Filter and sort Library items")
     }
 }
 
-/// One glass capsule opens the native menu of capture modes; no split arrow or second click target.
+/// One toolbar button opens the menu of capture modes; no split arrow or second click target.
 private struct CaptureMenu: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
@@ -188,7 +163,6 @@ private struct CaptureMenu: View {
                 .labelStyle(.titleAndIcon)
         }
         .menuIndicator(.hidden)
-        .buttonStyle(.glass)
         .id(settings.captureDestinationOverridePath)
         .disabled(dependencies.capture.isCapturing)
         .accessibilityValue(Text(destinationName))
@@ -271,7 +245,7 @@ private struct RecordControl: View {
             Button("Stop Recording", systemImage: "stop.fill") {
                 recording.recorder.stop()
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.glassProminent)
             .tint(.red)
             .disabled(recording.recorder.state == .finishing)
             .help("Stop Recording")
@@ -299,7 +273,6 @@ private struct RecordControl: View {
                 .labelStyle(.titleAndIcon)
             }
             .menuIndicator(.hidden)
-            .buttonStyle(.glass)
             .id(settings.captureDestinationOverridePath)
             .help(recordHelp)
             .disabled(recording.recorder.state != .idle)

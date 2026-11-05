@@ -100,7 +100,7 @@ struct EditorInspector: View {
                                 Label("Copy Subject", systemImage: "person.crop.rectangle")
                             }
                         }
-                        .buttonStyle(.glass)
+                        .buttonStyle(.bordered)
                         .disabled(isLiftingSubject)
                         .help("Copy the foreground as a transparent image using on-device Vision. Existing redactions are included.")
 
@@ -131,13 +131,14 @@ struct EditorInspector: View {
                     Button("Reset to Default Style", systemImage: "arrow.counterclockwise") {
                         withAnimation(.response) { document.resetStyle() }
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
                 }
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .controlSize(.small)
+        .labeledContentStyle(InspectorRowStyle())
         .animation(.smooth(duration: 0.22), value: tool)
     }
 }
@@ -172,6 +173,39 @@ private struct InspectorPanelLayout: Layout {
 }
 
 /// A compact native control group sized to its contents inside the floating inspector.
+/// A label on the left and its control on the right, so every row lines up with the next.
+private struct InspectorRowStyle: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: Design.spacingS) {
+            configuration.label
+                .frame(minWidth: 72, alignment: .leading)
+            Spacer(minLength: 0)
+            configuration.content
+        }
+    }
+}
+
+/// A pop-up button in an inspector row.
+private struct InspectorPicker<Value: Hashable, Options: View>: View {
+    let title: LocalizedStringKey
+    @Binding var selection: Value
+    @ViewBuilder let options: Options
+
+    init(_ title: LocalizedStringKey, selection: Binding<Value>, @ViewBuilder options: () -> Options) {
+        self.title = title
+        _selection = selection
+        self.options = options()
+    }
+
+    var body: some View {
+        LabeledContent(title) {
+            Picker(title, selection: $selection) { options }
+                .labelsHidden()
+                .fixedSize()
+        }
+    }
+}
+
 private struct InspectorGroup<Content: View, Footer: View>: View {
     let title: LocalizedStringKey?
     let content: Content
@@ -259,11 +293,11 @@ private struct VariantSection: View {
         switch tool {
         case .arrow:
             InspectorGroup {
-                GlassSegmentedPicker("Type", selection: $document.style.route, options: ArrowRoute.allCases, name: \.title) { Image(systemName: $0.symbolName) }
-                Picker("Start", selection: $document.style.startHead) {
+                LabeledSegmentedPicker("Type", selection: $document.style.route, options: ArrowRoute.allCases, name: \.title) { Image(systemName: $0.symbolName) }
+                InspectorPicker("Start", selection: $document.style.startHead) {
                     ForEach(ArrowHead.allCases) { Text($0.title).tag($0) }
                 }
-                Picker("End", selection: $document.style.endHead) {
+                InspectorPicker("End", selection: $document.style.endHead) {
                     ForEach(ArrowHead.allCases) { Text($0.title).tag($0) }
                 }
                 Button("Swap Ends", systemImage: "arrow.left.arrow.right") {
@@ -271,35 +305,35 @@ private struct VariantSection: View {
                     document.style.startHead = document.style.endHead
                     document.style.endHead = start
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
             }
         case .shape:
             InspectorGroup {
-                GlassSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
-                GlassSegmentedPicker("Fill", selection: $document.style.fill, options: ShapeFill.allCases, name: \.title) { Text($0.title) }
+                LabeledSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
+                LabeledSegmentedPicker("Fill", selection: $document.style.fill, options: ShapeFill.allCases, name: \.title) { Text($0.title) }
             }
         case .redact:
             InspectorGroup {
-                GlassSegmentedPicker("Type", selection: $document.style.redaction, options: Redaction.allCases, name: \.title) { Text($0.title) }
-                GlassSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
+                LabeledSegmentedPicker("Type", selection: $document.style.redaction, options: Redaction.allCases, name: \.title) { Text($0.title) }
+                LabeledSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
             }
         case .spotlight:
             InspectorGroup {
-                GlassSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
+                LabeledSegmentedPicker("Shape", selection: $document.style.shape, options: ShapeKind.allCases, name: \.title) { Image(systemName: $0.symbolName) }
             }
         case .text:
             InspectorGroup {
-                GlassSegmentedPicker("Style", selection: $document.style.textStyle, options: TextStyle.allCases, name: \.title) { Text($0.title) }
-                Picker("Font", selection: $document.style.font) {
+                LabeledSegmentedPicker("Style", selection: $document.style.textStyle, options: TextStyle.allCases, name: \.title) { Text($0.title) }
+                InspectorPicker("Font", selection: $document.style.font) {
                     ForEach(TextFont.allCases) { Text($0.title).tag($0) }
                 }
-                Picker("Weight", selection: $document.style.weight) {
+                InspectorPicker("Weight", selection: $document.style.weight) {
                     ForEach(TextWeight.allCases) { Text($0.title).tag($0) }
                 }
             }
         case .counter:
             InspectorGroup {
-                GlassSegmentedPicker("Style", selection: $document.style.counterStyle, options: CounterStyle.allCases, name: \.title) { Text($0.title) }
+                LabeledSegmentedPicker("Style", selection: $document.style.counterStyle, options: CounterStyle.allCases, name: \.title) { Text($0.title) }
             }
         default:
             EmptyView()
@@ -329,8 +363,11 @@ private struct ColorSection: View {
                         }
                     }
                     .padding(.vertical, 2)
-                    ColorPicker("Custom", selection: customColor, supportsOpacity: false)
-                    Picker("Palette", selection: $palette) {
+                    LabeledContent("Custom") {
+                        ColorPicker("Custom", selection: customColor, supportsOpacity: false)
+                            .labelsHidden()
+                    }
+                    InspectorPicker("Palette", selection: $palette) {
                         ForEach(EditorPalette.allCases) { Text($0.title).tag($0) }
                     }
                     if palette == .custom {
@@ -505,7 +542,7 @@ private struct CropSection: View {
 
     var body: some View {
         InspectorGroup("Crop") {
-            Picker("Aspect Ratio", selection: Binding(get: { document.cropAspect }, set: { document.setCropAspect($0) })) {
+            InspectorPicker("Aspect Ratio", selection: Binding(get: { document.cropAspect }, set: { document.setCropAspect($0) })) {
                 Text(CropAspect.free.title).tag(CropAspect.free)
                 Text(CropAspect.original.title).tag(CropAspect.original)
                 Divider()
@@ -523,17 +560,17 @@ private struct CropSection: View {
                     Label("Smart Crop", systemImage: "viewfinder")
                 }
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.bordered)
             .disabled(isFindingSubject)
             .help("Suggest a crop around the main subject using on-device Vision.")
 
             HStack {
                 Button("Reset") { document.resetCrop() }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
                     .disabled(!document.isCropped)
                 Spacer()
                 Button("Crop", systemImage: "checkmark") { document.commitCrop() }
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.borderedProminent)
             }
         } footer: {
             Text(message ?? String(localized: "Drag the handles or move the box. Smart Crop uses on-device Vision; review its suggestion before applying. Press Return to crop, or Esc to cancel."))
@@ -565,21 +602,19 @@ private struct ArrangeSection: View {
 
     var body: some View {
         InspectorGroup("Arrange") {
-            GlassEffectContainer(spacing: 6) {
-                HStack(spacing: 6) {
-                    Button("Duplicate", systemImage: "plus.square.on.square") { document.duplicateSelection() }
-                        .help("Duplicate (⌘D)")
-                    Button("Bring to Front", systemImage: "square.3.layers.3d.top.filled") { document.bringSelectionToFront() }
-                        .help("Bring to Front (⌘])")
-                    Button("Send to Back", systemImage: "square.3.layers.3d.bottom.filled") { document.sendSelectionToBack() }
-                        .help("Send to Back (⌘[)")
-                    Spacer()
-                    Button("Delete", systemImage: "trash", role: .destructive) { document.deleteSelection() }
-                        .help("Delete (⌫)")
-                }
-                .buttonStyle(.glass)
-                .labelStyle(.iconOnly)
+            HStack(spacing: 6) {
+                Button("Duplicate", systemImage: "plus.square.on.square") { document.duplicateSelection() }
+                    .help("Duplicate (⌘D)")
+                Button("Bring to Front", systemImage: "square.3.layers.3d.top.filled") { document.bringSelectionToFront() }
+                    .help("Bring to Front (⌘])")
+                Button("Send to Back", systemImage: "square.3.layers.3d.bottom.filled") { document.sendSelectionToBack() }
+                    .help("Send to Back (⌘[)")
+                Spacer()
+                Button("Delete", systemImage: "trash", role: .destructive) { document.deleteSelection() }
+                    .help("Delete (⌫)")
             }
+            .buttonStyle(.bordered)
+            .labelStyle(.iconOnly)
         }
     }
 }
@@ -648,7 +683,7 @@ private struct AutoRedactSection: View {
                         ProgressView().controlSize(.small)
                     } else {
                         Button("Hide") { Task { await find(kind) } }
-                            .buttonStyle(.glass)
+                            .buttonStyle(.bordered)
                             .disabled(running != nil)
                     }
                 } label: {

@@ -19,7 +19,25 @@ struct LibraryView: View {
     @State private var gridInteraction = GridInteractionState()
     @State private var interactionMonitor: Any?
 
-    private let columns = [GridItem(.adaptive(minimum: 160, maximum: 320), spacing: 20)]
+    /// Pinch the grid to change this, as in Photos.
+    @AppStorage("libraryThumbnailSize") private var thumbnailSize = 160.0
+    @State private var pinchStart: Double?
+    /// The rectangle being dragged out on empty space, and what was selected before it began.
+    @State private var marquee: CGRect?
+    @State private var marqueeBase: Set<RecentItem.ID> = []
+
+    private static let thumbnailSizes = 110.0...360.0
+    private nonisolated static let gridSpace = "libraryGrid"
+    private static let gridSpacing: CGFloat = 20
+    private static let gridInset: CGFloat = 28
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: thumbnailSize, maximum: thumbnailSize * 1.6), spacing: Self.gridSpacing)]
+    }
+
+    private func columnCount(width: CGFloat) -> Int {
+        max(1, Int((width - Self.gridInset * 2 + Self.gridSpacing) / (thumbnailSize + Self.gridSpacing)))
+    }
 
     var body: some View {
         let library = dependencies.library
@@ -29,24 +47,33 @@ struct LibraryView: View {
 
         ScrollViewReader { scrollProxy in
             GeometryReader { geometry in
-                let columnCount = max(1, Int((geometry.size.width - 56 + 20) / 180))
-
                 ZStack {
                     ScrollView {
                         LazyVGrid(columns: columns, spacing: 22) {
                             ForEach(items) { item in
                                 cell(for: item)
                                     .id(item.id)
+                                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.gridSpace)) } action: {
+                                        gridInteraction.frames[item.id] = $0
+                                    }
                                     .onHover { gridInteraction.pointerItem = $0 ? item : (gridInteraction.pointerItem?.id == item.id ? nil : gridInteraction.pointerItem) }
                                     .onTapGesture { click(item, in: items) }
                                     .onDrag { itemProvider(for: item) }
                                     .contextMenu { contextMenu(for: item, in: items) }
                             }
                         }
-                        .padding(.horizontal, 28)
+                        .padding(.horizontal, Self.gridInset)
                         .padding(.vertical, 20)
+                        .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .top)
+                        .background {
+                            Color.clear
+                                .contentShape(.rect)
+                                .gesture(marqueeGesture(in: items))
+                        }
+                        .overlay(alignment: .topLeading) { marqueeOverlay }
+                        .coordinateSpace(.named(Self.gridSpace))
                     }
-                    .searchable(text: $viewModel.searchText, prompt: "Search captures")
+                    .simultaneousGesture(pinchGesture)
                     .contentShape(.rect)
                     .onTapGesture {
                         viewModel.clearSelection()
@@ -69,7 +96,7 @@ struct LibraryView: View {
                     .onAppear {
                         updateSources()
                         applyPendingFilter()
-                        gridInteraction.columnCount = columnCount
+                        gridInteraction.columnCount = columnCount(width: geometry.size.width)
                         isGridFocused = true
                         gridInteraction.isFocused = true
                         installEventMonitor(scrollProxy: scrollProxy)
@@ -101,13 +128,75 @@ struct LibraryView: View {
                 }
                 .onExitCommand { viewModel.clearSelection() }
                 .onChange(of: geometry.size.width) { _, width in
-                    gridInteraction.columnCount = max(1, Int((width - 56 + 20) / 180))
+                    gridInteraction.columnCount = columnCount(width: width)
+                }
+                .onChange(of: thumbnailSize) {
+                    gridInteraction.frames.removeAll()
+                    gridInteraction.columnCount = columnCount(width: geometry.size.width)
                 }
                 .onChange(of: isGridFocused) { _, isFocused in
                     gridInteraction.isFocused = isFocused
                 }
             }
         }
+    }
+
+    /// Drag on empty space to select, as in Finder. Shift or ⌘ adds to what's selected. Dragging
+    /// from a thumbnail still drags it out of the app.
+    private func marqueeGesture(in items: [RecentItem]) -> some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .named(Self.gridSpace))
+            .onChanged { value in
+                if marquee == nil {
+                    isGridFocused = true
+                    let adds = !NSEvent.modifierFlags.intersection([.shift, .command]).isEmpty
+                    marqueeBase = adds ? viewModel.selection : []
+                }
+                let rect = CGRect(
+                    x: min(value.startLocation.x, value.location.x),
+                    y: min(value.startLocation.y, value.location.y),
+                    width: abs(value.location.x - value.startLocation.x),
+                    height: abs(value.location.y - value.startLocation.y)
+                )
+                marquee = rect
+                let touched = items.lazy
+                    .filter { gridInteraction.frames[$0.id]?.intersects(rect) == true }
+                    .map(\.id)
+                let selection = marqueeBase.union(touched)
+                if selection != viewModel.selection { viewModel.selection = selection }
+            }
+            .onEnded { _ in
+                marquee = nil
+                marqueeBase = []
+            }
+    }
+
+    @ViewBuilder
+    private var marqueeOverlay: some View {
+        if let marquee {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.accentColor.opacity(0.14))
+                .strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 1)
+                .frame(width: marquee.width, height: marquee.height)
+                .offset(x: marquee.minX, y: marquee.minY)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// Pinch to resize the thumbnails. A tap on the trackpad marks each end of the range.
+    private var pinchGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                let start = pinchStart ?? thumbnailSize
+                pinchStart = start
+                let proposed = start * value.magnification
+                let size = min(max(proposed, Self.thumbnailSizes.lowerBound), Self.thumbnailSizes.upperBound)
+                if size != thumbnailSize {
+                    if size == Self.thumbnailSizes.lowerBound || size == Self.thumbnailSizes.upperBound { Haptics.alignment() }
+                    thumbnailSize = size
+                }
+            }
+            .onEnded { _ in pinchStart = nil }
     }
 
     @ViewBuilder
@@ -145,7 +234,7 @@ struct LibraryView: View {
             } description: {
                 Text("Choose a filter to show Library items.")
             } actions: {
-                Button("Select All Filters") { viewModel.selectedCategories = Set(LibraryViewModel.Category.allCases) }
+                Button("Show All") { viewModel.selectedCategories = Set(LibraryViewModel.Category.allCases) }
             }
         } else if isEmpty, showsSavedCaptures, library.isLoading {
             ProgressView()
@@ -417,6 +506,8 @@ struct LibraryView: View {
 
 private final class GridInteractionState {
     var pointerItem: RecentItem?
+    /// Where each visible item sits in the grid, for drag selection.
+    var frames: [RecentItem.ID: CGRect] = [:]
     var columnCount = 1
     var isFocused = false
 }

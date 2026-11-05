@@ -23,7 +23,7 @@ struct GeneralSettingsView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
-                Toggle("Open this window when Retrace starts", isOn: $settings.opensWindowAtLaunch)
+                Toggle("Open the main window when Retrace starts", isOn: $settings.opensWindowAtLaunch)
                 Toggle("Show icon in the Dock", isOn: $settings.showsDockIcon)
                 Toggle("Play sounds", isOn: $settings.playsSounds)
             } footer: {

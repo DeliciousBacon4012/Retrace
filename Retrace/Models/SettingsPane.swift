@@ -6,7 +6,6 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
     case capture
     case quickAccess
     case clipboard
-    case notifications
     case editor
     case recording
     case shortcuts
@@ -21,9 +20,8 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
         switch self {
         case .general: String(localized: "General")
         case .capture: String(localized: "Capture")
-        case .quickAccess: String(localized: "Quick Access")
+        case .quickAccess: String(localized: "Overlays")
         case .clipboard: String(localized: "Clipboard")
-        case .notifications: String(localized: "Notifications")
         case .editor: String(localized: "Editor")
         case .recording: String(localized: "Recording")
         case .shortcuts: String(localized: "Shortcuts")
@@ -37,7 +35,6 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
         case .capture: "camera.viewfinder"
         case .quickAccess: "rectangle.stack"
         case .clipboard: "clipboard"
-        case .notifications: "bell.badge"
         case .editor: "pencil.and.scribble"
         case .recording: "record.circle"
         case .shortcuts: "command"

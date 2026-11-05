@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A native segmented picker. SwiftUI provides its appearance, hit testing, keyboard
 /// navigation, and accessibility behavior.
-struct GlassSegmentedPicker<Value: Hashable, Item: View>: View {
+struct LabeledSegmentedPicker<Value: Hashable, Item: View>: View {
     private let title: LocalizedStringKey
     @Binding private var selection: Value
     private let options: [Value]

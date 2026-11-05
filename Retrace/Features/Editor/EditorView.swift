@@ -29,7 +29,7 @@ struct EditorView: View {
 
     /// Small enough for a small screenshot, and wide enough that the toolbar keeps every tool
     /// on show instead of folding them into an overflow menu.
-    static let minimumSize = CGSize(width: 820, height: 440)
+    static let minimumSize = CGSize(width: 980, height: 440)
 
     private var showsPanelInspector: Bool { showsInspector && inspectorPlacement != .window }
     private var paletteRoom: CGFloat { EditorToolPalette.thickness + Design.spacingL }
@@ -82,7 +82,7 @@ struct EditorView: View {
                     .controlSize(.small)
                     .padding(.horizontal, Design.spacingM)
                     .padding(.vertical, Design.spacingS)
-                    .background(.regularMaterial, in: Capsule())
+                    .glassEffect(.regular, in: .capsule)
                     .padding(Design.spacingL)
                     .accessibilityLabel("Saving screenshot")
             }
@@ -216,6 +216,7 @@ struct EditorView: View {
             floatX = min(max(floatX, 0), 1)
             floatY = min(max(floatY, 0), 1)
         }
+        if placement != .floating { Haptics.alignment() }
         withAnimation(.panel) {
             inspectorPlacement = placement
             dragOrigin = nil
@@ -596,6 +597,8 @@ private struct EditorNoticeView: View {
 private struct EditorStatusBar: View {
     let document: EditorDocument
 
+    @Namespace private var glass
+
     var body: some View {
         let size = document.cropRect?.size ?? document.imageSize
 
@@ -604,25 +607,27 @@ private struct EditorStatusBar: View {
                 ZoomControl(document: document)
 
                 Text(verbatim: "\(Int(size.width)) × \(Int(size.height)) px")
-                    .font(.system(.caption, design: .monospaced).weight(.medium))
+                    .font(.caption.weight(.medium).monospacedDigit())
                     .contentTransition(.numericText())
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
                     .glassEffect(.regular, in: .capsule)
+                    .glassEffectID("size", in: glass)
 
+                // These grow out of the size readout and flow back into it.
                 if document.tool == .crop {
                     Button("Cancel") { document.cancelCrop() }
                         .buttonStyle(.glass)
+                        .glassEffectID("cancel", in: glass)
                         .help("Put the crop back (Esc)")
-                        .transition(.scale(0.8).combined(with: .opacity))
                     Button("Crop", systemImage: "checkmark") { document.commitCrop() }
                         .buttonStyle(.glassProminent)
+                        .glassEffectID("crop", in: glass)
                         .help("Apply the crop (Return)")
-                        .transition(.scale(0.8).combined(with: .opacity))
                 } else if document.cropRect != nil {
                     Button("Reset Crop", systemImage: "arrow.counterclockwise") { document.resetCrop() }
                         .buttonStyle(.glass)
-                        .transition(.scale(0.8).combined(with: .opacity))
+                        .glassEffectID("reset", in: glass)
                 }
             }
         }
@@ -685,14 +690,14 @@ private struct ZoomControl: View {
 
         Button(action: revealSlider) {
             Text(Double(zoom), format: .percent.precision(.fractionLength(0)))
-                .font(.system(.callout, design: .monospaced).weight(.medium))
-                .monospacedDigit()
+                .font(.callout.weight(.medium).monospacedDigit())
                 .frame(minWidth: 48)
                 .contentTransition(.numericText(value: Double(percentage)))
                 .animation(.snappy(duration: 0.12), value: percentage)
                 .contentShape(.capsule)
         }
             .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
             .pointerStyle(.columnResize)
             .onHover { document.isPointerOverZoomControl = $0 }
             .onDisappear {
@@ -726,8 +731,7 @@ private struct ZoomControl: View {
                     .font(.headline)
                 Spacer()
                 Text(Double(zoom), format: .percent.precision(.fractionLength(0)))
-                    .font(.system(.callout, design: .monospaced).weight(.medium))
-                    .monospacedDigit()
+                    .font(.callout.weight(.medium).monospacedDigit())
                     .contentTransition(.numericText(value: Double(percentage)))
                     .animation(.snappy(duration: 0.12), value: percentage)
                     .accessibilityLabel("Zoom")
@@ -802,7 +806,7 @@ private struct ZoomControl: View {
     private func set(_ proposed: CGFloat) {
         if fitZoom < 0.1, proposed <= fitZoom * 1.001 {
             if restingStop != fitZoom {
-                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                Haptics.alignment()
                 restingStop = fitZoom
             }
             document.zoom = nil
@@ -815,7 +819,7 @@ private struct ZoomControl: View {
         let stop = stops.min { abs(log2($0 / clamped)) < abs(log2($1 / clamped)) }
         if let stop, abs(log2(stop / clamped)) < Self.catchRange {
             if restingStop != stop {
-                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                Haptics.alignment()
                 restingStop = stop
             }
             document.zoom = stop == fitZoom ? nil : stop

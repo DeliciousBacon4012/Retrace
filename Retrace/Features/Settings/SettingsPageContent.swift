@@ -1,78 +1,74 @@
 import SwiftUI
 
+/// The ⌘, window: categories in a segmented picker up top, and two-finger swipes between them.
+struct SettingsView: View {
+    @AppStorage(SettingsPane.storageKey) private var pane: SettingsPane = .general
+
+    var body: some View {
+        PagedTabs(selection: $pane, pages: SettingsPane.allCases) { pane in
+            SettingsPageContent(pane: pane)
+        }
+        // In a bar under the title, because eight tabs don't fit a Settings window's toolbar.
+        .safeAreaBar(edge: .top) {
+            Picker("Settings Category", selection: $pane) {
+                ForEach(SettingsPane.allCases) { pane in
+                    Text(pane.title).tag(pane)
+                }
+            }
+            .tabPickerStyle()
+            .labelsHidden()
+            .controlSize(.large)
+            .padding(.horizontal, Design.spacingL)
+            .padding(.vertical, Design.spacingS)
+        }
+        .frame(width: 820, height: 600)
+        .navigationTitle(pane.title)
+    }
+}
+
+/// One category, as a standard grouped form that scrolls by itself.
 struct SettingsPageContent: View {
     let pane: SettingsPane
 
     @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
-        ScrollView {
-            HStack(alignment: .top) {
-                Spacer(minLength: 0)
-                VStack(alignment: .leading, spacing: 18) {
-                    Text(pane.title)
-                        .font(.title2.weight(.semibold))
-
-                    page(for: pane)
-                }
-                .frame(maxWidth: 800, alignment: .leading)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 32)
-            .padding(.top, 24)
-            .padding(.bottom, 28)
-        }
-        .scrollIndicators(.visible)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private func page(for pane: SettingsPane) -> some View {
-        switch pane {
-        case .general:
-            Group {
+        Group {
+            switch pane {
+            case .general:
                 GeneralSettingsView(launchAtLogin: dependencies.launchAtLogin)
                 Section("About") {
                     LabeledContent("Version", value: Bundle.main.displayVersion)
                 }
-            }
-            .settingsPage()
-        case .capture:
-            Group {
+            case .capture:
                 CaptureSettingsView()
                 AfterCaptureSettingsView()
                 FilesPrivacySettingsView()
-            }
-            .settingsPage()
-        case .quickAccess:
-            QuickAccessSettingsView().settingsPage()
-        case .clipboard:
-            ClipboardSettingsView().settingsPage()
-        case .notifications:
-            NotificationsSettingsView().settingsPage()
-        case .editor:
-            EditorSettingsView().settingsPage()
-        case .recording:
-            Group {
+            case .quickAccess:
+                QuickAccessSettingsView()
+                NotificationsSettingsView()
+            case .clipboard:
+                ClipboardSettingsView()
+            case .editor:
+                EditorSettingsView()
+            case .recording:
                 RecordingSettingsView()
                 ReplayBufferSettingsView()
+            case .shortcuts:
+                ShortcutsSettingsView()
+            case .advanced:
+                AdvancedSettingsView()
             }
-            .settingsPage()
-        case .shortcuts:
-            ShortcutsSettingsView().settingsPage()
-        case .advanced:
-            AdvancedSettingsView().settingsPage()
         }
+        .settingsPage()
     }
 }
 
 extension View {
-    /// Keeps settings controls in the macOS vertical form layout without grouped card rows.
+    /// The standard grouped form System Settings uses, with switches for toggles.
     func settingsPage() -> some View {
         Form { self }
-            .formStyle(.automatic)
+            .formStyle(.grouped)
             .toggleStyle(.switch)
-            .buttonStyle(.glass)
-            .scrollContentBackground(.hidden)
     }
 }

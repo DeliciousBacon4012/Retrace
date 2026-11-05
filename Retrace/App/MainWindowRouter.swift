@@ -2,7 +2,7 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// Routes menu bar and toast actions into the main Library or Settings workspace.
+/// Routes menu bar and toast actions into the main window or Settings.
 @Observable
 final class MainWindowRouter {
     static let shared = MainWindowRouter()
@@ -33,14 +33,21 @@ final class MainWindowRouter {
         UserDefaults.standard.set(MainTab.library.rawValue, forKey: MainTab.storageKey)
     }
 
-    /// Opens the Settings tab on `pane`, or the category last used when none is given.
-    func showSettings(_ pane: SettingsPane? = nil, using openWindow: OpenWindowAction) {
+    /// Brings the main window forward on the given tab.
+    func show(_ tab: MainTab, using openWindow: OpenWindowAction) {
+        UserDefaults.standard.set(tab.rawValue, forKey: MainTab.storageKey)
+        NSApplication.shared.activate()
+        openWindow(id: WindowID.main)
+    }
+
+    /// Opens Settings on `pane`, or the category last used when none is given. The app is
+    /// activated first, since a menu bar app is often in the background.
+    func showSettings(_ pane: SettingsPane? = nil, using openSettings: OpenSettingsAction) {
         if let pane {
             UserDefaults.standard.set(pane.rawValue, forKey: SettingsPane.storageKey)
         }
-        UserDefaults.standard.set(MainTab.settings.rawValue, forKey: MainTab.storageKey)
         NSApplication.shared.activate()
-        openWindow(id: WindowID.main)
+        openSettings()
     }
 }
 

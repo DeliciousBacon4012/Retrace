@@ -553,6 +553,7 @@ final class QuickAccessHostingView: NSHostingView<QuickAccessStackView> {
         let target = model.geometry.cardSize.width + model.geometry.padding * 2 + 20
         let duration = min(max(Double((target - travelled) / velocity), 0.12), 0.4) * model.speed
         withAnimation(.timingCurve(0.15, 0.6, 0.35, 1, duration: duration)) {
+            Haptics.generic()
             model.swipeOffsets[id] = target * edge
         } completion: { [weak self] in
             self?.onSwipeAway(id)

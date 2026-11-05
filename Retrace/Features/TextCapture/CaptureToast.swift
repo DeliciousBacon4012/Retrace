@@ -166,6 +166,7 @@ private struct CaptureToastView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isShown = false
     @State private var isHovering = false
+    @Namespace private var glass
 
     var body: some View {
         GlassEffectContainer(spacing: Design.spacingS) {
@@ -214,6 +215,7 @@ private struct CaptureToastView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .glassEffect(.regular, in: shape)
+        .glassEffectID("notice", in: glass)
         .contentShape(.rect)
         .onTapGesture(perform: dismiss)
         .accessibilityElement(children: .combine)
@@ -230,19 +232,28 @@ private struct CaptureToastView: View {
         previewLines > 1 && toast.detail != nil ? AnyShape(RoundedRectangle(cornerRadius: 18)) : AnyShape(Capsule())
     }
 
-    /// Shown while the pointer is over the toast. Always laid out, so the window never resizes.
+    /// Flow out of the notice while the pointer is over the toast. Their room is always laid
+    /// out, so the window never resizes.
     private var actions: some View {
+        actionRow(isLive: false)
+            .hidden()
+            .overlay {
+                if isHovering {
+                    actionRow(isLive: true)
+                }
+            }
+            .accessibilityHidden(!isHovering)
+    }
+
+    private func actionRow(isLive: Bool) -> some View {
         HStack(spacing: Design.spacingS) {
             ForEach(toast.actions) { action in
                 Button(action.title, systemImage: action.systemImage) { perform(action) }
                     .buttonStyle(.glass)
                     .controlSize(.regular)
+                    .glassEffectID(isLive ? action.id : nil, in: glass)
             }
         }
-        .opacity(isHovering ? 1 : 0)
-        .offset(y: isHovering || reduceMotion ? 0 : -6)
-        .allowsHitTesting(isHovering)
-        .accessibilityHidden(!isHovering)
     }
 }
 
