@@ -14,6 +14,8 @@ struct PagedTabs<Page: Hashable, Content: View>: View {
     @State private var position: Page?
     /// Where a picker change is heading, so pages passed along the way don't change the selection.
     @State private var destination: Page?
+    @State private var offset: CGFloat = 0
+    @State private var pageWidth: CGFloat = 1
 
     private var pageViews: some View {
         ForEach(pages, id: \.self) { page in
@@ -44,12 +46,19 @@ struct PagedTabs<Page: Hashable, Content: View>: View {
             let isNeighbor = abs((pages.firstIndex(of: old) ?? 0) - (pages.firstIndex(of: new) ?? 0)) == 1
             withAnimation(isNeighbor && !reduceMotion ? .panel : nil) { position = new }
         }
-        .onChange(of: position) { _, new in
-            guard let new else { return }
-            if let destination {
-                if new == destination { self.destination = nil }
-            } else if new != selection {
-                selection = new
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, x in offset = x }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pageWidth = max($0, 1) }
+        // When a swipe comes to rest, the page it settled on becomes the selection, so the
+        // picker and everything that follows it catch up. Reading where the scroll stopped is
+        // what's reliable here; the scroll position binding doesn't always report a swipe.
+        .onScrollPhaseChange { _, phase in
+            guard phase == .idle else { return }
+            let index = min(max(Int((offset / pageWidth).rounded()), 0), pages.count - 1)
+            let settled = pages[index]
+            destination = nil
+            position = settled
+            if settled != selection {
+                selection = settled
                 Haptics.generic()
             }
         }

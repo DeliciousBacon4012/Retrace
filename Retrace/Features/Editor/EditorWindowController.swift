@@ -16,6 +16,8 @@ final class EditorPresenter {
     private(set) var tabSession: EditorSession?
     /// The last image closed with Cancel, kept with its marks and history so it can come back.
     private(set) var discarded: EditorSession?
+    @ObservationIgnored private var keepTimer: Timer?
+    @ObservationIgnored private var keptEditCount = -1
     /// Set by the main window, so the menu bar's commands follow the tab in front.
     @ObservationIgnored var isEditorTabInFront = false {
         didSet { followKeyWindow(NSApp?.keyWindow) }
@@ -133,7 +135,38 @@ final class EditorPresenter {
         showInTab(makeSession(document))
     }
 
-    private func showInTab(_ session: EditorSession) {
+    /// Brings back what was in the Editor tab when Retrace last quit.
+    func restoreTabSession() {
+        Task {
+            guard tabSession == nil, let (saved, image) = await EditorTabStore.load() else { return }
+            let document = EditorDocument(image: image, scale: saved.scale, fileURL: saved.fileURL, preferredSaveFolderURL: saved.preferredSaveFolderURL)
+            document.restore(saved.edits)
+            showInTab(makeSession(document), writesImage: false)
+        }
+    }
+
+    /// Writes the Editor tab's edits if they changed since the last write.
+    func keepTabSession() {
+        guard let session = tabSession, session.document.editCount != keptEditCount else { return }
+        keptEditCount = session.document.editCount
+        EditorTabStore.save(savedTab(session), image: nil)
+    }
+
+    private func savedTab(_ session: EditorSession) -> EditorTabStore.Saved {
+        EditorTabStore.Saved(
+            fileURL: session.document.fileURL,
+            preferredSaveFolderURL: session.document.preferredSaveFolderURL,
+            scale: session.document.scale,
+            edits: session.document.savedEdits
+        )
+    }
+
+    private func showInTab(_ session: EditorSession, writesImage: Bool = true) {
+        if writesImage {
+            EditorTabStore.save(savedTab(session), image: session.document.image)
+        }
+        keptEditCount = session.document.editCount
+        startKeepingTab()
         session.onClose = { [weak self] in self?.endTabSession() }
         session.onDiscard = { [weak self, weak session] in
             guard let self, let session else { return }
@@ -187,6 +220,9 @@ final class EditorPresenter {
     func moveTabSessionToWindow() {
         guard let session = tabSession else { return }
         tabSession = nil
+        keepTimer?.invalidate()
+        keepTimer = nil
+        EditorTabStore.clear()
         if active === session { active = nil }
         presentWindow(session)
     }
@@ -195,6 +231,19 @@ final class EditorPresenter {
         tabSession?.document.saveStylesNow()
         if active === tabSession { active = nil }
         tabSession = nil
+        keepTimer?.invalidate()
+        keepTimer = nil
+        EditorTabStore.clear()
+    }
+
+    /// Checks for new edits every couple of seconds; writing happens off the main thread.
+    private func startKeepingTab() {
+        guard keepTimer == nil else { return }
+        let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keepTabSession() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        keepTimer = timer
     }
 }
 

@@ -33,6 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    /// The Editor tab's latest edits are written before quitting.
+    func applicationWillTerminate(_ notification: Notification) {
+        dependencies.editor.keepTabSession()
+    }
+
     /// Keep running in the menu bar after the main window closes.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false

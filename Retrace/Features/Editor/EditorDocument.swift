@@ -257,9 +257,60 @@ final class EditorDocument {
         }
     }
 
-    private struct Snapshot: Equatable {
+    nonisolated struct Snapshot: Equatable, Codable, Sendable {
         let annotations: [Annotation]
         let cropRect: CGRect?
+    }
+
+    /// One undo step: the state it goes back to, and its name in the Edit menu.
+    nonisolated struct HistoryStep: Codable, Sendable {
+        var snapshot: Snapshot
+        var name: String
+    }
+
+    /// Everything needed to bring an image's edits back after a restart, undo history included.
+    nonisolated struct SavedEdits: Codable, Sendable {
+        var current: Snapshot
+        var undo: [HistoryStep]
+        var redo: [HistoryStep]
+        var hasUnsavedChanges: Bool
+    }
+
+    /// A copy of the undo history that can be saved. UndoManager can't be written to disk, so
+    /// this mirrors it step for step.
+    @ObservationIgnored private var undoSteps: [HistoryStep] = []
+    @ObservationIgnored private var redoSteps: [HistoryStep] = []
+    /// Bumped on any edit, so a saver can tell something changed.
+    @ObservationIgnored private(set) var editCount = 0
+
+    var savedEdits: SavedEdits {
+        SavedEdits(current: snapshot, undo: undoSteps, redo: redoSteps, hasUnsavedChanges: hasUnsavedChanges)
+    }
+
+    /// Rebuilds the edits and the whole undo and redo history from a saved copy.
+    func restore(_ saved: SavedEdits) {
+        // The timeline from the oldest state to the furthest redo; then undo back to where it was.
+        let states = saved.undo.map(\.snapshot) + [saved.current] + saved.redo.reversed().map(\.snapshot)
+        let names = saved.undo.map(\.name) + saved.redo.reversed().map(\.name)
+        apply(states[0])
+        undoManager.groupsByEvent = false
+        for index in 1..<states.count {
+            undoManager.beginUndoGrouping()
+            registerUndo(restoring: states[index - 1], named: names[index - 1])
+            undoManager.endUndoGrouping()
+            apply(states[index])
+        }
+        undoManager.groupsByEvent = true
+        undoSteps = zip(states.dropLast(), names).map { HistoryStep(snapshot: $0, name: $1) }
+        redoSteps = []
+        for _ in saved.redo { undoManager.undo() }
+        hasUnsavedChanges = saved.hasUnsavedChanges
+        historyVersion += 1
+    }
+
+    private func apply(_ snapshot: Snapshot) {
+        annotations = snapshot.annotations
+        cropRect = snapshot.cropRect
     }
 
     private enum Gesture {
@@ -1055,7 +1106,10 @@ final class EditorDocument {
     private func pushUndo(_ previous: Snapshot?, named name: String) {
         guard let previous else { return }
         registerUndo(restoring: previous, named: name)
+        undoSteps.append(HistoryStep(snapshot: previous, name: name))
+        redoSteps.removeAll()
         hasUnsavedChanges = true
+        editCount += 1
     }
 
     /// For a drag, whose change has already happened: a press that moved nothing records nothing.
@@ -1067,6 +1121,13 @@ final class EditorDocument {
     private func registerUndo(restoring previous: Snapshot, named name: String) {
         undoManager.registerUndo(withTarget: self) { document in
             let current = document.snapshot
+            // Keep the saveable copy in step with what UndoManager just did.
+            if document.undoManager.isUndoing {
+                document.undoSteps.popLast().map { _ in document.redoSteps.append(HistoryStep(snapshot: current, name: name)) }
+            } else if document.undoManager.isRedoing {
+                document.redoSteps.popLast().map { _ in document.undoSteps.append(HistoryStep(snapshot: current, name: name)) }
+            }
+            document.editCount += 1
             document.restore(previous)
             document.registerUndo(restoring: current, named: name)
         }

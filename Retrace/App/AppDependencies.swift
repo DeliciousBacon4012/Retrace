@@ -162,6 +162,7 @@ final class AppDependencies {
         replay.start()
         clipboardHistory.start()
         followContentIndexSetting()
+        editor.restoreTabSession()
         followThumbnailMemorySetting()
         memory.onPressure = { [weak self] pressure in self?.relieveMemory(pressure) }
         memory.start()

@@ -156,8 +156,11 @@ struct EditorView: View {
                 document.cancelCrop()
             } else if document.editingTextID != nil {
                 document.finishTextEditing()
-            } else {
+            } else if document.hasSelection {
                 document.select(nil)
+            } else if !document.hasUnsavedChanges {
+                // Nothing to cancel and nothing changed: Esc backs out of the editor.
+                actions.close()
             }
         }
     }
@@ -166,9 +169,8 @@ struct EditorView: View {
 
     /// The tools along the chosen edge, centered on the room the image has.
     private var toolPalette: some View {
-        let docked = showsPanelInspector && dragOrigin == nil
-        let leftInspector = docked && inspectorPlacement == .left ? dockedInspectorRoom : 0
-        let rightInspector = docked && inspectorPlacement == .right ? dockedInspectorRoom : 0
+        let leftInspector = inspectorSide == .leading ? dockedInspectorRoom : 0
+        let rightInspector = inspectorSide == .trailing ? dockedInspectorRoom : 0
         let alignment: Alignment = switch toolbarPosition {
         case .left: .leading
         case .right: .trailing
@@ -604,6 +606,8 @@ struct EditorView: View {
 /// What the editor window does with the finished image.
 struct EditorActions {
     var discard: () -> Void = {}
+    /// Leaves when there's nothing to lose.
+    var close: () -> Void = {}
     var saveAs: () -> Void = {}
     var saveCopy: (String) -> Void = { _ in }
     var copy: () -> Void

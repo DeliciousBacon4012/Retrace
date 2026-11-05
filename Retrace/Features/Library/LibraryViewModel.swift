@@ -54,6 +54,27 @@ final class LibraryViewModel {
         }
     }
 
+    @ObservationIgnored private var defaults: UserDefaults { .standard }
+    private static let categoriesKey = "libraryCategories"
+    private static let sortKey = "librarySortOrder"
+    private static let selectionKey = "librarySelection"
+    /// The first update from the folders keeps a remembered selection whose items are still
+    /// loading; later ones drop what's gone.
+    @ObservationIgnored private var hasLoadedSources = false
+
+    private static var storedCategories: Set<Category> {
+        guard let raw = UserDefaults.standard.stringArray(forKey: categoriesKey) else { return Set(Category.allCases) }
+        return Set(raw.compactMap(Category.init(rawValue:)))
+    }
+
+    private static var storedSortOrder: SortOrder {
+        UserDefaults.standard.string(forKey: sortKey).flatMap(SortOrder.init(rawValue:)) ?? .newestFirst
+    }
+
+    private static var storedSelection: Set<RecentItem.ID> {
+        Set((UserDefaults.standard.stringArray(forKey: selectionKey) ?? []).compactMap(RecentItem.ID.init(storageKey:)))
+    }
+
     /// Preference key: a single click previews with Quick Look.
     static let quickLookOnClickKey = "recentsQuickLookOnClick"
 
@@ -98,7 +119,10 @@ final class LibraryViewModel {
         clipboardEntries: [ClipboardEntry] = []
     ) {
         sourceItems = RecentItem.merged(files: files, snippets: snippets, clipboardEntries: clipboardEntries)
-        selection.formIntersection(sourceItems.map(\.id))
+        if !files.isEmpty { hasLoadedSources = true }
+        if hasLoadedSources {
+            selection.formIntersection(sourceItems.map(\.id))
+        }
         if let rangeAnchor, !sourceItems.contains(where: { $0.id == rangeAnchor }) {
             self.rangeAnchor = nil
         }

@@ -20,7 +20,7 @@ struct RecordingSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Better Performance uses the least power and space. Studio records ProRes for editing, and its files are large. Changing any setting below makes this Custom.")
+                Text("Studio records ProRes for editing, and its files are large. Better Performance uses the least power and space. Changing any setting below makes this Custom.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -136,10 +136,11 @@ nonisolated enum EditorBlurQuality: String, CaseIterable, Identifiable, Sendable
 /// Starting points for every recording setting at once. Changing any one setting by hand
 /// makes the preset read as Custom.
 nonisolated enum RecordingPreset: String, CaseIterable, Identifiable, Sendable {
-    case performance
-    case balanced
-    case highQuality
+    // Best first, like every other quality list in Retrace.
     case studio
+    case highQuality
+    case balanced
+    case performance
 
     var id: String { rawValue }
 

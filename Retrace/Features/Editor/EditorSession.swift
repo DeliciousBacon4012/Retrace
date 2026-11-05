@@ -51,6 +51,7 @@ final class EditorSession {
 
     private(set) lazy var actions = EditorActions(
         discard: { [weak self] in self?.discard() },
+        close: { [weak self] in self?.onClose?() },
         saveAs: { [weak self] in self?.saveAs() },
         saveCopy: { [weak self] path in self?.saveCopy(to: path) },
         copy: { [weak self] in self?.copyImage() },
