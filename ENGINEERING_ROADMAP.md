@@ -1,16 +1,18 @@
 # Retrace Engineering Roadmap
 
-## Current checkpoint — 2026-11-04
+## Current checkpoint — 2026-11-05
 
-- Branch: `feature/stability-and-performance`
+- Branch: feature/stability-and-performance
 - Baseline commit: `d9028354c0bc0b9a9267ead9f6f136c0519d2ae0`
-- HEAD: `c7a5097`; seven local commits ahead of `origin/main`. No push or merge occurred. Remote remains unchanged.
-- The worktree retains 41 modified tracked files and 8 untracked files for the broad app redesign, Xcode/test setup, current tests, handoff, and roadmap. No remaining changes are staged.
-- The existing `Untitled.xcodeproj`, `Untitled` application target, `UntitledTests` hosted test target, and shared `Untitled` scheme remain active. The product builds as `retrace.app`, version 0.1.0 (build 1), minimum macOS 26.0. Bundle and storage identifiers remain unchanged for continuity.
-- Xcode MCP build succeeded with no warnings; 36 tests passed. `git diff --check` passes. The product contains retrace_app icon renditions. Standalone command-line Analyze could not process the Icon Composer document, so static analysis remains unverified.
-- The handoff captures the product-name impact inventory, signing state, docs check, commits, verification, and remaining priorities. The dated notes below are historical checkpoints and retain the state recorded at those dates.
+- Source checkpoint: c630108, 21 commits ahead of origin/main. This handoff/roadmap refresh adds one docs-only commit, taking the branch to 22. No push or merge occurred; origin remains https://github.com/DeliciousBacon4012/untitled-mac.git.
+- Source and test changes are committed. The existing Untitled.xcodeproj, Untitled application target, UntitledTests hosted test target, active shared retrace scheme, and compatibility shared Untitled scheme remain in use. Product is retrace.app, version 0.1.0 (build 1), minimum macOS 26.0.
+- Xcode MCP built and launched on My Mac with no reported warnings. All 42 tests passed. git diff --check passed before this documentation refresh. The app bundle contains retrace_app icons.
+- Automatic local signing is configured with the existing Personal Team and hardened runtime; this Mac has zero valid signing identities. The built app runs locally but is not verified for distribution. App Sandbox remains disabled pending a distribution decision.
+- The original bundle/module/target and data paths remain for continuity. See ENGINEERING_HANDOFF.md for the full impact inventory and signing evidence.
+- On 2026-11-05, Apple lists macOS 27.2 as latest stable and macOS 27.3 as beta; the app stays on its macOS 26.0 deployment target and stable Xcode 27.2 toolchain. Standalone command-line Analyze still fails in actool while opening the Icon Composer document, so static analysis is unverified.
+- The detailed dated entries below are historical checkpoints. The 2026-11-05 section at the end is the current plan.
 
-## Completed
+## Earlier completed work logged 2026-11-04
 
 ### Practical XCTest foundation
 
@@ -75,25 +77,25 @@
 - Build: Xcode scheme `Untitled` succeeded on 2026-11-04.
 - Tests: deterministic generation invalidation and image-bound tests pass; actual pasteboard conversion races have not been exercised end-to-end.
 
-## Prioritized next work
+## Historical priorities before 2026-11-05
 
 1. Capture representative editor/save and capture/Quick Access traces in Instruments so remaining rendering and interaction work can be prioritized from measured costs.
 2. Review custom controls with VoiceOver and keyboard navigation; verify annotation layer actions in a live accessibility session.
 3. Verify clipboard file cleanup and source-app exclusion behavior under real pasteboard changes; the 30-day default is implemented, but exclusions cannot guarantee clipboard provenance.
 4. Decide distribution (Mac App Store, direct, or both), then assess sandboxing, signing, notarization, update delivery, and data migration. Do not implement an updater until distribution is decided.
 
-## Remaining known risks
+## Remaining known risks rechecked 2026-11-05
 
-- Twelve deterministic tests cover recording decision policies, clipboard invalidation/bounds, retention defaults, storage integrity, and original-version preservation; live ScreenCaptureKit lifecycle behavior is still unverified.
+- Forty-two deterministic tests cover redaction, storage, Library, clipboard, editor interactions, metadata, and recording policies; live ScreenCaptureKit lifecycle behavior is still unverified.
 - If ScreenCaptureKit never completes `stopCapture()`, the recorder times out and recovers to idle; a partial file may remain if the stream never releases it.
 - Clipboard exclusions use the frontmost app observed by a polling watcher and cannot guarantee source-app provenance.
 - Clipboard history remains enabled by default; new/defaulted settings expire items after 30 days, while any stored user choice is preserved. Source-app exclusions remain best-effort because macOS does not expose reliable pasteboard provenance to this watcher.
-- Annotation rendering and small originals-index JSON persistence still run synchronously. The idle Time Profiler trace was not useful for operation-level timing; representative interaction latency and energy baselines remain uncollected.
+- Annotation rendering and small originals-index JSON persistence still run synchronously. Representative interaction latency and energy baselines remain uncollected.
 - Video metadata stripping now blocks copy/Quick Access on failure, but this failure path has no movie-fixture integration test yet.
 - Annotation accessibility and feature status have code-level support and invariant tests, but still need live VoiceOver verification. Other custom controls need review.
-- App Sandbox is disabled. Distribution intent is not established.
+- App Sandbox is disabled. No trusted signing identity is present and distribution intent is not established.
 
-## Current phase
+## Historical design notes from 2026-11-04
 
 Phase 1 — Product shell and visual design. The main window has a native Library/Clipboard sidebar, a focused content area, standard Capture/Record toolbar actions, and a compact native filter menu. Settings use the standard split view and sidebar. The editor inspector is one Glass panel with standard Form controls; avoid nested card backgrounds and manually applied Glass effects on controls that already have native styling.
 
@@ -131,7 +133,7 @@ Phase 1 — Product shell and visual design. The main window has a native Librar
 - Live inspection: the Library and settings sidebar were checked in the running app; the editor's segmented controls, inspector, zoom popover, and direct zoom drag were checked in the running app.
 - Build: Xcode scheme `Untitled` succeeded on 2026-11-04 without reported errors or warnings. Tests: 12 passed, 0 failed. Xcode launched the updated app successfully.
 
-## Next work
+## Historical next work from 2026-11-04
 
 1. Continue refining the shell against default and minimum window sizes; verify settings pane balance and keyboard/VoiceOver navigation live.
 2. Complete the Library workflow through selection, Quick Look, context menus, drag, and capture-to-editor handoff without adding visual layers back.
@@ -140,7 +142,7 @@ Phase 1 — Product shell and visual design. The main window has a native Librar
 5. Capture representative editor/save and capture/Quick Access Instruments traces before further performance claims.
 6. Decide distribution (Mac App Store, direct, or both), then assess sandboxing, signing, notarization, update delivery, and data migration. Do not implement an updater until that decision is clear.
 
-## Remaining design risks
+## Historical design risks from 2026-11-04
 
 - The redesigned Library and editor have been inspected live at the current window size, but minimum-size resizing and dark appearance still need a pass after the latest simplification. VoiceOver verification remains open.
 - The Settings sidebar is native and the content uses centered width constraints, but its minimum-size balance still needs live verification.
@@ -378,7 +380,7 @@ Phase 1 — Product shell and visual design. The main window has a native Librar
 - Changed `Untitled/Features/QuickAccess/QuickAccessController.swift`, `Untitled/Features/QuickAccess/QuickAccessThumbnail.swift`, `UntitledTests/UntitledTests.swift`, and this roadmap. `git diff --check` passes. The preserved project-file change remains 37 insertions / 2 deletions; no Git index or history operation occurred.
 - Next: verify the Quick Access stack with a safe synthetic capture or when the editor document can be preserved, then record a representative capture-to-panel timing trace. Continue editor resize and VoiceOver checks afterward; manual ScreenCaptureKit lifecycle tests and the distribution decision remain open.
 
-## Latest checkpoint — 2026-11-04: retrace identity, redaction, and reliability
+## Previous checkpoint — 2026-11-04: retrace identity, redaction, and reliability
 
 - Product identity is now `retrace` in Xcode's product, executable, display name, app icon, menu-bar asset, metadata descriptions, and default filename template. The existing project path/target/scheme/module/bundle ID and `Pictures/Untitled` compatibility paths were retained; the exact impact inventory is in `ENGINEERING_HANDOFF.md`.
 - Confirmed and fixed the blur/mosaic fail-open path: preview covers requested redactions until the layer is ready; export fails closed for unavailable redaction layers. Added two pixel-level regression tests.
@@ -387,3 +389,13 @@ Phase 1 — Product shell and visual design. The main window has a native Librar
 - Xcode MCP build and launch succeeded. All 36 current XCTest tests passed; Xcode reported no warnings; `git diff --check` passed. The built product contains retrace_app icons in Assets.car and retrace_app.icns.
 - Apple documentation/release check was made on 2026-11-04: macOS 27.2 stable and macOS 27.3 beta 1 are distinguished in the handoff. The app still targets macOS 26.0.
 - Remaining: live VoiceOver and resizing checks, representative Instruments measurements, interactive clipboard and ScreenCaptureKit lifecycle checks, and review/commit of the larger existing worktree. Standalone command-line Analyze failed in actool while opening the Icon Composer document; Xcode MCP build/test succeeds, but static analysis is not claimed.
+
+## Latest checkpoint — 2026-11-05: native UI, editor, storage, and Xcode setup
+
+- Completed and committed the Library/Clipboard/Settings UI pass, configurable multi-folder storage, per-capture session destinations, Quick Access crop ratios and background thumbnail rendering, editor interaction/accessibility and asynchronous saves, custom editor colors, and ScreenCaptureKit finalization handling.
+- Source checkpoint c630108 is 21 commits ahead of origin/main; eight source commits follow the prior checkpoint. This docs refresh is a separate docs-only follow-up that takes the branch to 22 local commits. No push or merge occurred. See ENGINEERING_HANDOFF.md for all 21 source commits.
+- Xcode is open to the original Untitled.xcodeproj with shared retrace active, legacy shared Untitled retained, My Mac selected, app version 0.1.0 (build 1), and macOS 26.0 deployment target. The generated retrace product launches.
+- Xcode MCP reports 42 tests passed, no failures/skips/not-run cases, and zero warnings. Live app UI was reviewed at Library, Capture settings, Quick Access settings, and Editor settings without changing preferences or capture data.
+- Product naming and signature impact are recorded in the handoff. Automatic local signing is set with the existing Personal Team, but the machine has zero valid identities; distribution is not established. Sandbox and bundle identity remain unchanged.
+- Apple documentation was checked 2026-11-05: macOS 27.2 stable; 27.3 beta, released Nov 3, is tracked separately. The current Xcode 27.2 stable toolchain is used and no beta-only APIs were added.
+- Remaining: live VoiceOver, keyboard-only, minimum-window-size, larger-system-text and light/dark checks; permissioned ScreenCaptureKit lifecycle exercise; real pasteboard race/cleanup verification; representative Instruments traces; static analysis through a workflow that handles the icon asset; and a distribution decision.
