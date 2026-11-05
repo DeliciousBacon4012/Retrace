@@ -42,7 +42,7 @@ struct UntitledApp: App {
                 .environment(dependencies)
                 .environment(dependencies.settings)
         } label: {
-            MenuBarLabel(recording: dependencies.recording, replay: dependencies.replay, settings: dependencies.settings)
+            MenuBarLabel(recording: dependencies.recording, settings: dependencies.settings)
                 .modifier(LaunchWindowPresenter(launch: appDelegate.launch))
                 .modifier(WindowRequestPresenter())
         }

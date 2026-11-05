@@ -112,23 +112,17 @@ struct MenuBarContent: View {
     }
 }
 
-/// The menu bar icon. While recording it turns into a red record symbol, unless the time
-/// has its own item. While the replay buffer runs, it shows a rewind symbol so it's never
-/// on unnoticed.
+/// Keeps retrace's logo in the menu bar; the adjacent status item shows recording time.
 struct MenuBarLabel: View {
     let recording: RecordingCoordinator
-    let replay: ReplayCoordinator
     let settings: SettingsStore
 
     var body: some View {
-        // With the time shown in its own menu bar item, this icon doesn't need to say it too.
+        // Keep the native record symbol when someone has chosen to hide the separate timer.
         if recording.isRecording, !settings.showsRecordingTimeInMenuBar {
             Image(systemName: "record.circle.fill")
                 .symbolRenderingMode(.multicolor)
                 .accessibilityLabel("retrace, recording")
-        } else if replay.buffer.isOn {
-            Image(systemName: "gobackward")
-                .accessibilityLabel("retrace, replay buffer on")
         } else {
             Image("retrace_menubar_template")
                 .renderingMode(.template)
@@ -182,6 +176,7 @@ private struct ClipboardHistoryMenu: View {
             Toggle("Keep Clipboard History", isOn: $settings.keepsClipboardHistory)
             Button("Show All") {
                 UserDefaults.standard.set(MainSection.clipboard.rawValue, forKey: MainSection.storageKey)
+                UserDefaults.standard.set(MainTab.library.rawValue, forKey: MainTab.storageKey)
                 MainWindowRouter.shared.show(using: openWindow)
             }
         }

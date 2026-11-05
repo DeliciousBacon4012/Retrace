@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Main window shell: a small Library/Clipboard sidebar, focused content, and native capture commands.
+/// Main workspace with native Library, Editor, and Settings navigation and capture commands.
 struct MainView: View {
     @Environment(AppDependencies.self) private var dependencies
 
@@ -18,19 +18,38 @@ enum MainSection: String, Identifiable {
     static let storageKey = "mainWindowSection"
 }
 
+enum MainTab: String, Identifiable {
+    case library
+    case editor
+    case settings
+
+    var id: String { rawValue }
+    static let storageKey = "mainWindowTab"
+}
+
 private struct MainContent: View {
     @State var access: ScreenRecordingAccessModel
     @State private var library = LibraryViewModel()
     @AppStorage(MainSection.storageKey) private var section: MainSection = .captures
+    @AppStorage(MainTab.storageKey) private var tab: MainTab = .library
+    @AppStorage(SettingsPane.storageKey) private var settingsPane: SettingsPane = .general
 
     @Environment(AppDependencies.self) private var dependencies
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-        } detail: {
+        HStack(spacing: 0) {
+            if tab == .library {
+                librarySidebar
+                    .frame(width: 205)
+                Divider()
+            } else if tab == .settings {
+                SettingsCategorySidebar(selection: $settingsPane)
+                    .frame(width: 210)
+                Divider()
+            }
+
             VStack(spacing: 0) {
-                if access.screenRecording == .notGranted {
+                if tab == .library, access.screenRecording == .notGranted {
                     PermissionBanner(model: access)
                         .padding(.horizontal, 24)
                         .padding(.top, 14)
@@ -41,18 +60,27 @@ private struct MainContent: View {
                 pageHeader
 
                 Group {
-                    switch section {
-                    case .captures:
-                        LibraryView(viewModel: library)
-                    case .clipboard:
-                        ClipboardView()
+                    switch tab {
+                    case .library:
+                        switch section {
+                        case .captures:
+                            LibraryView(viewModel: library)
+                        case .clipboard:
+                            ClipboardView()
+                        }
+                    case .editor:
+                        EditorLandingView {
+                            section = .captures
+                            tab = .library
+                        }
+                    case .settings:
+                        SettingsPageContent(pane: settingsPane)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationSplitViewStyle(.balanced)
-        .navigationTitle(section == .captures ? "Library" : "Clipboard")
+        .navigationTitle(navigationTitle)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 CaptureMenu()
@@ -69,7 +97,18 @@ private struct MainContent: View {
         }
     }
 
-    private var sidebar: some View {
+    private var navigationTitle: String {
+        switch tab {
+        case .library:
+            section == .captures ? "Library" : "Clipboard"
+        case .editor:
+            "Editor"
+        case .settings:
+            "Settings"
+        }
+    }
+
+    private var librarySidebar: some View {
         List(selection: $section) {
             Label("Library", systemImage: "square.grid.2x2")
                 .tag(MainSection.captures)
@@ -77,14 +116,29 @@ private struct MainContent: View {
                 .tag(MainSection.clipboard)
         }
         .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 180, ideal: 205, max: 240)
+        .frame(maxHeight: .infinity)
     }
 
     private var pageHeader: some View {
-        HStack {
-            Spacer(minLength: 12)
-            if section == .captures {
-                LibraryFilterControl(selection: $library.kindFilter)
+        ZStack {
+            Picker(selection: $tab) {
+                Text("Library").tag(MainTab.library)
+                Text("Editor").tag(MainTab.editor)
+                Text("Settings").tag(MainTab.settings)
+            } label: {
+                EmptyView()
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("Workspace")
+            .frame(width: 340)
+            .padding(3)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            HStack {
+                Spacer(minLength: 12)
+                if tab == .library, section == .captures {
+                    LibraryFilterControl(selection: $library.kindFilter)
+                }
             }
         }
         .padding(.horizontal, 24)

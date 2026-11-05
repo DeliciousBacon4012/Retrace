@@ -1,29 +1,45 @@
 import SwiftUI
 
-/// Native settings window with a standard sidebar and one focused settings form.
+/// Native Settings scene with the same category sidebar and page content used in the workspace.
 struct SettingsView: View {
-    @Environment(AppDependencies.self) private var dependencies
     @AppStorage(SettingsPane.storageKey) private var selection: SettingsPane = .general
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selection) {
-                ForEach(SettingsPane.allCases) { pane in
-                    Label(pane.title, systemImage: pane.symbolName)
-                        .tag(pane)
-                }
-            }
-            .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 205, max: 240)
-            .navigationTitle("Settings")
-        } detail: {
-            page(for: selection)
-                .frame(maxWidth: 720)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .navigationTitle(selection.title)
+        HStack(spacing: 0) {
+            SettingsCategorySidebar(selection: $selection)
+                .frame(width: 220)
+            Divider()
+            SettingsPageContent(pane: selection)
         }
-        .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 820, minHeight: 560)
+    }
+}
+
+struct SettingsCategorySidebar: View {
+    @Binding var selection: SettingsPane
+
+    var body: some View {
+        List(selection: $selection) {
+            ForEach(SettingsPane.allCases) { pane in
+                Label(pane.title, systemImage: pane.symbolName)
+                    .tag(pane)
+            }
+        }
+        .listStyle(.sidebar)
+        .navigationTitle("Settings")
+    }
+}
+
+struct SettingsPageContent: View {
+    let pane: SettingsPane
+
+    @Environment(AppDependencies.self) private var dependencies
+
+    var body: some View {
+        page(for: pane)
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle(pane.title)
     }
 
     @ViewBuilder
