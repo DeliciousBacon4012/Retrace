@@ -33,13 +33,7 @@ final class FileCaptureStorage: CaptureStoring {
 
     /// Adds " 2", " 3", and so on until the name is free, so nothing is overwritten.
     private func uniqueURL(in folder: URL, baseName: String, fileExtension: String) -> URL {
-        var candidate = folder.appendingPathComponent(baseName).appendingPathExtension(fileExtension)
-        var counter = 2
-        while fileManager.fileExists(atPath: candidate.path) {
-            candidate = folder.appendingPathComponent("\(baseName) \(counter)").appendingPathExtension(fileExtension)
-            counter += 1
-        }
-        return candidate
+        CaptureURLReservationRegistry.shared.uniqueURL(in: folder, baseName: baseName, fileExtension: fileExtension)
     }
 }
 
