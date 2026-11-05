@@ -2,8 +2,8 @@ import Foundation
 import Observation
 import OSLog
 
-/// Every snippet Capture Text copied, newest first, kept between launches up to the
-/// number set in Settings › Advanced.
+/// Every snippet Capture Text copied, newest first, kept between launches for as long as
+/// Settings › Clipboard says.
 ///
 /// It's stored as JSON in Retrace's Application Support folder, never in the save folder:
 /// copied text can be private, and it isn't a file anyone chose to save.
@@ -19,7 +19,7 @@ final class TextHistory {
         self.settings = settings
         self.fileURL = fileURL
         load()
-        followLimit()
+        followRetention()
     }
 
     /// Application Support/<bundle ID>/Text History.json, so a development build keeps its own.
@@ -32,12 +32,12 @@ final class TextHistory {
     /// Keeps `text` as the newest snippet. The same text captured again moves to the top
     /// instead of appearing twice.
     func add(_ text: String) {
-        guard settings.textHistoryLimit > 0,
+        guard settings.keepsTextHistory,
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return }
         snippets.removeAll { $0.text == text }
         snippets.insert(TextSnippet(id: UUID(), text: text, date: .now), at: 0)
-        trimToLimit()
+        applyRetention()
         save()
     }
 
@@ -52,28 +52,35 @@ final class TextHistory {
         save()
     }
 
-    // MARK: Limit
+    // MARK: Retention
 
-    /// Lowering the limit, or turning history off, removes the oldest snippets right away.
-    private func followLimit() {
+    /// A shorter limit applies right away, as it does for clipboard history. Turning history
+    /// off pauses it and keeps what's there.
+    private func followRetention() {
         withObservationTracking {
-            _ = settings.textHistoryLimit
+            _ = settings.textHistoryRetention
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if self.trimToLimit() { self.save() }
-                self.followLimit()
+                if self.applyRetention() { self.save() }
+                self.followRetention()
             }
         }
     }
 
-    /// Returns whether anything was removed.
+    /// Removes what the limit no longer keeps. Returns whether anything went.
     @discardableResult
-    private func trimToLimit() -> Bool {
-        let limit = max(settings.textHistoryLimit, 0)
-        guard snippets.count > limit else { return false }
-        snippets.removeLast(snippets.count - limit)
-        return true
+    private func applyRetention() -> Bool {
+        let retention = settings.textHistoryRetention
+        let before = snippets.count
+        if let age = retention.maximumAge {
+            let cutoff = Date.now.addingTimeInterval(-age)
+            snippets.removeAll { $0.date < cutoff }
+        }
+        if let count = retention.maximumCount, snippets.count > count {
+            snippets.removeLast(snippets.count - count)
+        }
+        return snippets.count != before
     }
 
     // MARK: Storage
@@ -83,7 +90,7 @@ final class TextHistory {
         do {
             let decoded = try JSONDecoder().decode([TextSnippet].self, from: Data(contentsOf: fileURL))
             snippets = decoded.sorted { $0.date > $1.date }
-            if trimToLimit() { save() }
+            if applyRetention() { save() }
         } catch {
             Log.app.error("Text history was unreadable and starts empty: \(error.localizedDescription, privacy: .public)")
         }

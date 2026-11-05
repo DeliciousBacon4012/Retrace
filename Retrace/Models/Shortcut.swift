@@ -54,6 +54,11 @@ nonisolated struct Shortcut: Codable, Hashable, Sendable {
         return KeyEquivalent(character)
     }
 
+    /// The key equivalent for an AppKit menu item, when the key types a character.
+    var menuKeyEquivalent: String? {
+        keyEquivalent.map { String($0.character) }
+    }
+
     var eventModifiers: SwiftUI.EventModifiers {
         var result: SwiftUI.EventModifiers = []
         if modifierFlags.contains(.command) { result.insert(.command) }

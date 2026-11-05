@@ -49,10 +49,10 @@ final class SettingsStore {
     var plainTextApp = Defaults.plainTextApp { didSet { save(plainTextApp.rawValue, .plainTextApp) } }
     /// Whether recognized text is copied with one line break between Vision's text lines.
     var keepsOCRLineBreaks = Defaults.keepsOCRLineBreaks { didSet { save(keepsOCRLineBreaks, .keepsOCRLineBreaks) } }
-    /// How many captured text snippets to keep. Zero keeps none.
-    var textHistoryLimit = Defaults.textHistoryLimit { didSet { save(textHistoryLimit, .textHistoryLimit) } }
-    /// The choices offered in Settings › Advanced.
-    static let textHistoryLimits = [0, 25, 50, 100, 250]
+    /// Whether text from Capture Text is kept in Library and the menu bar.
+    var keepsTextHistory = Defaults.keepsTextHistory { didSet { save(keepsTextHistory, .keepsTextHistory) } }
+    /// How long captured text is kept, with the same choices as clipboard history.
+    var textHistoryRetention = Defaults.textHistoryRetention { didSet { save(textHistoryRetention.rawValue, .textHistoryRetention) } }
     /// How much memory Library and the Capture page may use for thumbnails, in megabytes.
     var thumbnailMemoryMB = Defaults.thumbnailMemoryMB { didSet { save(thumbnailMemoryMB, .thumbnailMemoryMB) } }
     static let thumbnailMemoryChoices = [64, 128, 256]
@@ -91,8 +91,13 @@ final class SettingsStore {
     var recordsSystemAudio = Defaults.recordsSystemAudio { didSet { save(recordsSystemAudio, .recordsSystemAudio) } }
     var recordsMicrophone = Defaults.recordsMicrophone { didSet { save(recordsMicrophone, .recordsMicrophone) } }
     var showsClicks = Defaults.showsClicks { didSet { save(showsClicks, .showsClicks) } }
+    /// Whether Retrace's own windows appear in recordings and the replay buffer. Its recording
+    /// controls never do.
+    var showsRetraceInRecordings = Defaults.showsRetraceInRecordings { didSet { save(showsRetraceInRecordings, .showsRetraceInRecordings) } }
     /// Reads Library images on this Mac so search and Find Similar can use them.
     var indexesLibraryContent = Defaults.indexesLibraryContent { didSet { save(indexesLibraryContent, .indexesLibraryContent) } }
+    /// Whether moments the interface stalls for 100 ms or more are written to the log.
+    var logsSlowMoments = Defaults.logsSlowMoments { didSet { save(logsSlowMoments, .logsSlowMoments) } }
     var videoColor = Defaults.videoColor { didSet { save(videoColor.rawValue, .videoColor) } }
     var videoQuality = Defaults.videoQuality { didSet { save(videoQuality.rawValue, .videoQuality) } }
     var videoEncoder = Defaults.videoEncoder { didSet { save(videoEncoder.rawValue, .videoEncoder) } }
@@ -303,10 +308,11 @@ final class SettingsStore {
         toastPreviewLines = min(max(value(.toastPreviewLines, default: Defaults.toastPreviewLines), 1), 5)
         plainTextApp = PlainTextApp(rawValue: value(.plainTextApp, default: "")) ?? Defaults.plainTextApp
         keepsOCRLineBreaks = value(.keepsOCRLineBreaks, default: Defaults.keepsOCRLineBreaks)
-        let limit = value(.textHistoryLimit, default: Defaults.textHistoryLimit)
-        textHistoryLimit = Self.textHistoryLimits.contains(limit) ? limit : Defaults.textHistoryLimit
+        migrateTextHistoryLimit()
+        keepsTextHistory = value(.keepsTextHistory, default: Defaults.keepsTextHistory)
+        textHistoryRetention = HistoryRetention(rawValue: value(.textHistoryRetention, default: "")) ?? Defaults.textHistoryRetention
         keepsClipboardHistory = value(.keepsClipboardHistory, default: Defaults.keepsClipboardHistory)
-        clipboardRetention = ClipboardRetention(rawValue: value(.clipboardRetention, default: "")) ?? Defaults.clipboardRetention
+        clipboardRetention = HistoryRetention(rawValue: value(.clipboardRetention, default: "")) ?? Defaults.clipboardRetention
         clipboardExcludedApps = value(.clipboardExcludedApps, default: Defaults.clipboardExcludedApps)
         if !defaults.bool(forKey: "trimmedFormerExcludedApps") {
             defaults.set(true, forKey: "trimmedFormerExcludedApps")
@@ -341,6 +347,8 @@ final class SettingsStore {
         recordsMicrophone = value(.recordsMicrophone, default: Defaults.recordsMicrophone)
         showsClicks = value(.showsClicks, default: Defaults.showsClicks)
         indexesLibraryContent = value(.indexesLibraryContent, default: Defaults.indexesLibraryContent)
+        logsSlowMoments = value(.logsSlowMoments, default: Defaults.logsSlowMoments)
+        showsRetraceInRecordings = value(.showsRetraceInRecordings, default: Defaults.showsRetraceInRecordings)
         hidesNoticesWhileRecording = value(.hidesNoticesWhileRecording, default: Defaults.hidesNoticesWhileRecording)
         defaultReplaySeconds = max(0, value(.defaultReplaySeconds, default: Defaults.defaultReplaySeconds))
         videoColor = VideoColor(rawValue: value(.videoColor, default: "")) ?? Defaults.videoColor
@@ -411,11 +419,38 @@ final class SettingsStore {
 
     /// Reads a stored value, falling back to the default when it is missing or has the wrong type.
     private func value<Value>(_ key: Key, default fallback: Value) -> Value {
-        defaults.object(forKey: key.rawValue) as? Value ?? fallback
+        let stored = defaults.object(forKey: key.rawValue)
+        // Launch arguments such as `-keepsClipboardHistory 0` arrive as text. UserDefaults
+        // reads those as numbers and switches, so test copies get the value they asked for.
+        if stored is String {
+            if Value.self == Bool.self { return defaults.bool(forKey: key.rawValue) as! Value }
+            if Value.self == Int.self { return defaults.integer(forKey: key.rawValue) as! Value }
+            if Value.self == Double.self { return defaults.double(forKey: key.rawValue) as! Value }
+        }
+        return stored as? Value ?? fallback
     }
 
     private func save(_ value: Any, _ key: Key) {
         defaults.set(value, forKey: key.rawValue)
+    }
+
+    /// Text history used to be a count, with zero meaning off. Carries a stored count over to
+    /// the toggle and the nearest choice that keeps at least as much, once.
+    private func migrateTextHistoryLimit() {
+        let legacyKey = "textHistoryLimit"
+        guard let limit = defaults.object(forKey: legacyKey) as? Int else { return }
+        defaults.removeObject(forKey: legacyKey)
+        if limit <= 0 {
+            save(false, .keepsTextHistory)
+        } else {
+            let retention: HistoryRetention = switch limit {
+            case ...50: .items50
+            case ...100: .items100
+            case ...250: .items250
+            default: .items500
+            }
+            save(retention.rawValue, .textHistoryRetention)
+        }
     }
 
     private static func supportedChoice<Value: Equatable>(_ value: Value, in choices: [Value], fallback: Value) -> Value {
@@ -451,7 +486,8 @@ private extension SettingsStore {
         case toastPreviewLines
         case plainTextApp
         case keepsOCRLineBreaks
-        case textHistoryLimit
+        case keepsTextHistory
+        case textHistoryRetention
         case thumbnailMemoryMB
         case keepsClipboardHistory
         case clipboardRetention
@@ -470,6 +506,8 @@ private extension SettingsStore {
         case recordsMicrophone
         case showsClicks
         case indexesLibraryContent
+        case logsSlowMoments
+        case showsRetraceInRecordings
         case hidesNoticesWhileRecording
         case defaultReplaySeconds
         case videoColor
@@ -515,10 +553,11 @@ private extension SettingsStore {
         static let toastPreviewLines = 2
         static let plainTextApp = PlainTextApp.textEdit
         static let keepsOCRLineBreaks = true
-        static let textHistoryLimit = 50
+        static let keepsTextHistory = true
+        static let textHistoryRetention = HistoryRetention.forever
         static let thumbnailMemoryMB = 64
         static let keepsClipboardHistory = true
-        static let clipboardRetention = ClipboardRetention.forever
+        static let clipboardRetention = HistoryRetention.forever
         /// Password managers and wallets. Most also mark what they copy as private, which is
         /// always skipped; this catches the ones that don't.
         static let clipboardExcludedApps = [
@@ -546,6 +585,12 @@ private extension SettingsStore {
         static let recordsMicrophone = false
         static let showsClicks = false
         static let indexesLibraryContent = true
+        static let showsRetraceInRecordings = true
+        #if DEBUG
+        static let logsSlowMoments = true
+        #else
+        static let logsSlowMoments = false
+        #endif
         static let hidesNoticesWhileRecording = true
         static let defaultReplaySeconds = 0
         static let videoColor = VideoColor.automatic

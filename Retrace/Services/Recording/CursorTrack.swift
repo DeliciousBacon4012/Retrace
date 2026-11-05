@@ -54,17 +54,24 @@ nonisolated struct CursorTrack: Sendable {
 /// finished.
 final class CursorTracker {
     private static let samplesPerSecond = 120.0
-    /// Looking the cursor's image up is slower than reading its position, and it rarely changes.
-    private static let imageCheckInterval = 6
+    /// Asking macOS for the cursor's image is slow, and doing it often makes the real pointer
+    /// flicker, so it's looked up a few times a second, only while the pointer rests and no
+    /// button is down, and at least once a second regardless.
+    private static let imageCheckInterval = 30
+    private static let imageCheckLongest = 120
 
     private let area: CGRect
     private let pixelsPerPoint: CGFloat
     private var track = CursorTrack()
     private var timer: Timer?
-    private var startedAt: TimeInterval?
+    /// When the movie's first frame was written, in system uptime. Samples are kept in uptime
+    /// until then, so the delay before the recorder says it started can be taken back out.
+    private var movieStart: TimeInterval?
     private var tick = 0
+    private var ticksSinceImageCheck = 0
+    private var lastLocation: CGPoint?
     private var currentImage: Int?
-    private var imageIDs: [Data: Int] = [:]
+    private var imageIDs: [Int: Int] = [:]
 
     /// - Parameter area: The recorded part of the screen, in global screen points.
     init(area: CGRect, pixelsPerPoint: CGFloat) {
@@ -72,8 +79,10 @@ final class CursorTracker {
         self.pixelsPerPoint = pixelsPerPoint
     }
 
+    /// Starts following the pointer. Call it before the recording starts, so nothing is missed.
     func start() {
-        startedAt = ProcessInfo.processInfo.systemUptime
+        guard timer == nil else { return }
+        updateImage()
         sample()
         let timer = Timer(timeInterval: 1 / Self.samplesPerSecond, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.sample() }
@@ -83,19 +92,37 @@ final class CursorTracker {
         self.timer = timer
     }
 
+    /// Lines the samples up with the movie: `uptime` is when its first frame was written.
+    func movieBegan(atUptime uptime: TimeInterval) {
+        movieStart = uptime
+    }
+
+    /// Stops and returns the track, timed from the movie's first frame.
     func stop() -> CursorTrack {
         timer?.invalidate()
         timer = nil
-        return track
+        let origin = movieStart ?? track.samples.first?.time ?? 0
+        var result = track
+        result.samples = track.samples.compactMap { sample in
+            var sample = sample
+            sample.time -= origin
+            // Only the last moment before the first frame matters, for blending into it.
+            return sample.time >= -0.25 ? sample : nil
+        }
+        return result
     }
 
     private func sample() {
-        guard let startedAt else { return }
-        if tick % Self.imageCheckInterval == 0 { updateImage() }
         tick += 1
+        ticksSinceImageCheck += 1
         let location = NSEvent.mouseLocation
+        let isResting = location == lastLocation && NSEvent.pressedMouseButtons == 0
+        lastLocation = location
+        if (isResting && ticksSinceImageCheck >= Self.imageCheckInterval) || ticksSinceImageCheck >= Self.imageCheckLongest {
+            updateImage()
+        }
         track.samples.append(CursorTrack.Sample(
-            time: ProcessInfo.processInfo.systemUptime - startedAt,
+            time: ProcessInfo.processInfo.systemUptime,
             position: CGPoint(
                 x: (location.x - area.minX) * pixelsPerPoint,
                 y: (location.y - area.minY) * pixelsPerPoint
@@ -105,15 +132,22 @@ final class CursorTracker {
     }
 
     private func updateImage() {
-        guard let cursor = NSCursor.currentSystem,
-              let data = cursor.image.tiffRepresentation
-        else { return }
-        if let known = imageIDs[data] {
+        ticksSinceImageCheck = 0
+        guard let cursor = NSCursor.currentSystem else { return }
+        var rect = CGRect(origin: .zero, size: cursor.image.size)
+        guard let image = cursor.image.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return }
+        // Cheaper than encoding the image to compare it: its pixels' hash, size, and hot spot.
+        var hasher = Hasher()
+        hasher.combine(image.dataProvider?.data.map { $0 as Data })
+        hasher.combine(image.width)
+        hasher.combine(image.height)
+        hasher.combine(cursor.hotSpot.x)
+        hasher.combine(cursor.hotSpot.y)
+        let key = hasher.finalize()
+        if let known = imageIDs[key] {
             currentImage = known
             return
         }
-        var rect = CGRect(origin: .zero, size: cursor.image.size)
-        guard let image = cursor.image.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return }
         let size = CGSize(width: cursor.image.size.width * pixelsPerPoint, height: cursor.image.size.height * pixelsPerPoint)
         track.images.append(CursorTrack.Image(
             image: image,
@@ -123,7 +157,7 @@ final class CursorTracker {
                 y: size.height - cursor.hotSpot.y * pixelsPerPoint
             )
         ))
-        imageIDs[data] = track.images.count - 1
+        imageIDs[key] = track.images.count - 1
         currentImage = track.images.count - 1
     }
 }

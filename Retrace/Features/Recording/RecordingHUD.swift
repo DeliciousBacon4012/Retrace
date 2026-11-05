@@ -2,12 +2,18 @@ import AppKit
 import SwiftUI
 
 /// Floating controls shown while recording, plus an outline around the recorded area.
-/// Retrace's own windows are left out of recordings, so neither shows up in the movie.
+/// Both are left out of the movie, even when Retrace's other windows are recorded, so the
+/// coordinator shows them before the recording starts and passes their windows along.
 final class RecordingHUDController {
     var onStop: (() -> Void)?
 
     private var panel: NSPanel?
     private var frame: NSPanel?
+
+    /// The controls' windows, for the recording to leave out.
+    var windowIDs: Set<CGWindowID> {
+        Set([panel, frame].compactMap { $0.map { CGWindowID($0.windowNumber) } })
+    }
 
     func show(recorder: ScreenRecorder, on screen: NSScreen?, framing area: CGRect?) {
         hide()

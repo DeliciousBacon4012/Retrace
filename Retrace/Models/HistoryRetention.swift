@@ -1,7 +1,8 @@
 import Foundation
 
-/// How long clipboard history keeps what you copy. Forever unless you choose otherwise.
-nonisolated enum ClipboardRetention: String, CaseIterable, Identifiable, Sendable {
+/// How long clipboard history and captured-text history keep things. Forever unless you
+/// choose otherwise; both offer the same choices, in the same order.
+nonisolated enum HistoryRetention: String, CaseIterable, Identifiable, Sendable {
     case forever
     case week
     case twoWeeks

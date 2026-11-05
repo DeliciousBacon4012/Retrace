@@ -48,7 +48,7 @@ final class ReplayBuffer: NSObject {
         }
     }
 
-    func start(seconds: Int, sizeLimitGB: Int, framesPerSecond: Int, codec: VideoCodec, quality: VideoQuality = .balanced, encoder: VideoEncoderChoice = .automatic, usesFullResolution: Bool = false, color: VideoColor = .automatic, queueDepth: Int = 6, includesAudio: Bool) async throws {
+    func start(seconds: Int, sizeLimitGB: Int, framesPerSecond: Int, codec: VideoCodec, quality: VideoQuality = .balanced, encoder: VideoEncoderChoice = .automatic, usesFullResolution: Bool = false, color: VideoColor = .automatic, queueDepth: Int = 6, showsOwnWindows: Bool = true, includesAudio: Bool) async throws {
         guard state == .off else { return }
         let token = generation.begin()
         guard ScreenAccess.isGranted else { throw CaptureError.permissionDenied }
@@ -62,9 +62,7 @@ final class ReplayBuffer: NSObject {
             guard let display = content.displays.first(where: { $0.displayID == displayID }) ?? content.displays.first else {
                 throw CaptureError.displayNotFound
             }
-            let ownProcess = ProcessInfo.processInfo.processIdentifier
-            let ownApps = content.applications.filter { $0.processID == ownProcess }
-            let filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
+            let filter = OwnWindows.filter(for: display, in: content, showsOwnWindows: showsOwnWindows, hiding: [])
 
             let scale = usesFullResolution ? Int(NSScreen.screens.first { $0.displayID == display.displayID }?.backingScaleFactor ?? 2) : 1
             let width = display.width * scale / 2 * 2

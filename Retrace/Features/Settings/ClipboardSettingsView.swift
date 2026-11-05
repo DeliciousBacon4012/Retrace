@@ -2,11 +2,13 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Clipboard history: whether it runs, how long it keeps things, and which apps it ignores.
+/// Clipboard history and captured-text history: whether each runs, how long it keeps things,
+/// and which apps clipboard history ignores. Both histories offer the same choices.
 struct ClipboardSettingsView: View {
     @Environment(AppDependencies.self) private var dependencies
     @Environment(SettingsStore.self) private var settings
     @State private var isConfirmingClear = false
+    @State private var isConfirmingClearText = false
 
     var body: some View {
         @Bindable var settings = settings
@@ -14,14 +16,8 @@ struct ClipboardSettingsView: View {
         Group {
             Section {
                 Toggle("Keep clipboard history", isOn: $settings.keepsClipboardHistory)
-                Picker("Keep items", selection: $settings.clipboardRetention) {
-                    Text(ClipboardRetention.forever.title).tag(ClipboardRetention.forever)
-                    Divider()
-                    ForEach(ClipboardRetention.allCases.filter(\.isTimeLimit)) { Text($0.title).tag($0) }
-                    Divider()
-                    ForEach(ClipboardRetention.allCases.filter { $0.maximumCount != nil }) { Text($0.title).tag($0) }
-                }
-                .disabled(!settings.keepsClipboardHistory)
+                HistoryRetentionPicker(selection: $settings.clipboardRetention)
+                    .disabled(!settings.keepsClipboardHistory)
                 LabeledContent("Saved items") {
                     Text(dependencies.clipboardHistory.entries.count, format: .number)
                         .monospacedDigit()
@@ -34,9 +30,32 @@ struct ClipboardSettingsView: View {
                         Text("Everything in clipboard history is deleted. This can't be undone.")
                     }
             } header: {
-                Text("History")
+                Text("Clipboard History")
             } footer: {
-                Text("Text and images you copy in any app stay on this Mac only and are kept until you remove them. Choosing a limit removes older items right away.")
+                Text("Text and images you copy in any app stay on this Mac only. Choosing a shorter limit removes older items right away.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Keep captured text", isOn: $settings.keepsTextHistory)
+                HistoryRetentionPicker(selection: $settings.textHistoryRetention)
+                    .disabled(!settings.keepsTextHistory)
+                LabeledContent("Saved snippets") {
+                    Text(dependencies.textHistory.snippets.count, format: .number)
+                        .monospacedDigit()
+                }
+                Button("Clear Captured Text…") { isConfirmingClearText = true }
+                    .disabled(dependencies.textHistory.snippets.isEmpty)
+                    .confirmationDialog("Clear captured text?", isPresented: $isConfirmingClearText) {
+                        Button("Clear", role: .destructive) { dependencies.textHistory.removeAll() }
+                    } message: {
+                        Text("Every saved snippet is removed from Library and the menu bar. Your clipboard isn't affected.")
+                    }
+            } header: {
+                Text("Captured Text")
+            } footer: {
+                Text("Text from Capture Text, kept in Retrace's own folder rather than your save folder. Turning it off pauses it and keeps what's saved.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -68,6 +87,22 @@ struct ClipboardSettingsView: View {
         let ids = panel.urls.compactMap { Bundle(url: $0)?.bundleIdentifier }
         for id in ids where !settings.clipboardExcludedApps.contains(id) {
             settings.clipboardExcludedApps.append(id)
+        }
+    }
+}
+
+/// How long a history keeps things: forever, then time limits from shortest to longest, then
+/// counts from fewest to most. Clipboard history and captured text share it.
+struct HistoryRetentionPicker: View {
+    @Binding var selection: HistoryRetention
+
+    var body: some View {
+        Picker("Keep items", selection: $selection) {
+            Text(HistoryRetention.forever.title).tag(HistoryRetention.forever)
+            Divider()
+            ForEach(HistoryRetention.allCases.filter(\.isTimeLimit)) { Text($0.title).tag($0) }
+            Divider()
+            ForEach(HistoryRetention.allCases.filter { $0.maximumCount != nil }) { Text($0.title).tag($0) }
         }
     }
 }

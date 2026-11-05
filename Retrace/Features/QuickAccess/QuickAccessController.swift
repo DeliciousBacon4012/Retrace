@@ -527,6 +527,57 @@ final class QuickAccessHostingView: NSHostingView<QuickAccessStackView> {
         }
     }
 
+    // MARK: Two-finger swipe
+
+    /// A two-finger swipe on the trackpad flicks a thumbnail away, like dragging it does.
+    private var scrollSwipe: (id: UUID, pull: CGFloat)?
+
+    override func scrollWheel(with event: NSEvent) {
+        guard event.hasPreciseScrollingDeltas, let model else {
+            super.scrollWheel(with: event)
+            return
+        }
+        // The fling after the fingers lift is ignored; the thumbnail has its own momentum.
+        guard event.momentumPhase.isEmpty else { return }
+        switch event.phase {
+        case .began:
+            guard abs(event.scrollingDeltaX) >= abs(event.scrollingDeltaY),
+                  let id = model.cardID(at: topLeftPoint(for: event), in: bounds.size)
+            else {
+                super.scrollWheel(with: event)
+                return
+            }
+            scrollSwipe = (id, 0)
+            samples = []
+            onSwipeBegan(id)
+            fallthrough
+        case .changed:
+            guard var swipe = scrollSwipe else {
+                super.scrollWheel(with: event)
+                return
+            }
+            // Natural scrolling reports content movement, which follows the fingers.
+            let direction: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+            swipe.pull += event.scrollingDeltaX * direction
+            scrollSwipe = swipe
+            track(swipe.pull)
+            let toward = swipe.pull * edge
+            model.swipeOffsets[swipe.id] = toward > 0 ? swipe.pull : swipe.pull * 0.2
+        case .ended, .cancelled:
+            guard let swipe = scrollSwipe else { return }
+            scrollSwipe = nil
+            let travelled = (model.swipeOffsets[swipe.id] ?? 0) * edge
+            let velocity = currentVelocity() * edge
+            if travelled > model.geometry.cardSize.width * 0.3 || velocity > 600 {
+                throwAway(swipe.id, from: travelled, velocity: max(velocity, 900))
+            } else {
+                springBack(swipe.id)
+            }
+        default:
+            super.scrollWheel(with: event)
+        }
+    }
+
     // MARK: Swipe physics
 
     private func topLeftPoint(for event: NSEvent) -> CGPoint {

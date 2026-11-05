@@ -56,7 +56,17 @@ struct RecordingSettingsView: View {
 
             Section {
                 Toggle("Show clicks", isOn: $settings.showsClicks)
-                Toggle("Motion blur on the cursor", isOn: $settings.cursorBlurEnabled)
+                Toggle(isOn: $settings.cursorBlurEnabled) {
+                    HStack(spacing: Design.spacingS) {
+                        Text("Motion blur on the cursor")
+                        Text("Experimental")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(.quaternary, in: .capsule)
+                    }
+                }
                 if settings.cursorBlurEnabled {
                     Picker("Blur mode", selection: $settings.cursorBlurMode) {
                         ForEach(CursorBlurMode.allCases) { Text($0.title).tag($0) }
@@ -77,7 +87,7 @@ struct RecordingSettingsView: View {
             } header: {
                 Text("Cursor")
             } footer: {
-                Text("Motion blur draws the cursor after you stop, and applies to screen and area recordings. Fast blurs along its direction of travel. Quality follows its true path. 50% matches a film camera's 180° shutter.")
+                Text("Motion blur hides the live cursor and draws it again after you stop, so saving takes longer. It applies to screen and area recordings. Fast blurs along its direction of travel. Quality follows its true path. 50% matches a film camera's 180° shutter.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -95,9 +105,10 @@ struct RecordingSettingsView: View {
                 }
                 .capsuleSegmentedStyle()
                 Toggle("Show time in the menu bar", isOn: $settings.showsRecordingTimeInMenuBar)
+                Toggle("Show Retrace's windows in recordings", isOn: $settings.showsRetraceInRecordings)
                 Toggle("Hide Retrace's notices while recording", isOn: $settings.hidesNoticesWhileRecording)
             } footer: {
-                Text("The countdown appears in the menu bar; click it to cancel. While recording, a red dot and the time so far appear there; click them to stop. Retrace's notices never appear in the movie. To quiet other apps, turn on a Focus in Control Center.")
+                Text("The countdown appears in the menu bar; click it to cancel. While recording, a red dot and the time so far appear there; click them for recording options. The recording controls and outline never appear in the movie; Retrace's other windows do unless you turn that off, and it applies to the replay buffer too. To quiet other apps, turn on a Focus in Control Center.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

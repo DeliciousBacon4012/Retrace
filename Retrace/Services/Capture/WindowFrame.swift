@@ -12,7 +12,7 @@ nonisolated enum WindowBackground: String, CaseIterable, Identifiable, Sendable 
 
     var title: String {
         switch self {
-        case .transparent: String(localized: "None")
+        case .transparent: String(localized: "Transparent")
         case .white: String(localized: "White")
         case .gray: String(localized: "Gray")
         case .black: String(localized: "Black")

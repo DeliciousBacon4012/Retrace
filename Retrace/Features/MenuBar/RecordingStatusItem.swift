@@ -25,10 +25,12 @@ nonisolated enum RecordingTimerLogic {
     }
 }
 
-/// Shows a red dot and elapsed time beside Retrace's menu bar icon.
-/// Clicking stops a regular recording, cancels its countdown, or turns off the replay buffer.
-final class RecordingStatusItem: NSObject {
-    var onClick: (() -> Void)?
+/// Shows a red dot and elapsed time beside Retrace's menu bar icon. Clicking opens a short
+/// menu for what's running: what it is, and how to save, discard, or stop it. The menu is
+/// built fresh each time it opens, so it always matches the moment.
+final class RecordingStatusItem: NSObject, NSMenuDelegate {
+    /// Fills the menu when it opens.
+    var buildMenu: ((NSMenu) -> Void)?
 
     private var item: NSStatusItem?
     private var timer: Timer?
@@ -69,8 +71,8 @@ final class RecordingStatusItem: NSObject {
         timer = nil
         let button = makeItem()
         button.image = nil
-        button.toolTip = String(localized: "Cancel Countdown")
-        button.setAccessibilityLabel(String(localized: "Recording starts in \(remaining). Click to cancel."))
+        button.toolTip = String(localized: "Recording Options")
+        button.setAccessibilityLabel(String(localized: "Recording starts in \(remaining)"))
         setTitle(remaining.formatted())
     }
 
@@ -87,9 +89,12 @@ final class RecordingStatusItem: NSObject {
         if let button = item?.button { return button }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.item = item
+        let menu = NSMenu()
+        // Items say for themselves whether they apply.
+        menu.autoenablesItems = false
+        menu.delegate = self
+        item.menu = menu
         guard let button = item.button else { return NSStatusBarButton() }
-        button.target = self
-        button.action = #selector(clicked)
         button.imagePosition = .imageLeading
         return button
     }
@@ -115,8 +120,9 @@ final class RecordingStatusItem: NSObject {
         button.attributedTitle = NSAttributedString(string: title, attributes: [.font: font])
     }
 
-    @objc private func clicked() {
-        onClick?()
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        buildMenu?(menu)
     }
 
     private static func formatted(seconds: Int) -> String {
@@ -135,4 +141,45 @@ final class RecordingStatusItem: NSObject {
 
     private static let dot = makeDot(alpha: 1)
     private static let dimDot = makeDot(alpha: 0.55)
+}
+
+extension NSMenuItem {
+    /// A menu item that runs a closure, with an optional symbol and the shortcut it shares
+    /// with the rest of Retrace.
+    static func action(_ title: String, systemImage: String? = nil, shortcut: Shortcut? = nil, handler: @escaping () -> Void) -> NSMenuItem {
+        let action = MenuAction(handler)
+        let item = NSMenuItem(title: title, action: #selector(MenuAction.run), keyEquivalent: shortcut?.menuKeyEquivalent ?? "")
+        // The target is weak, so the item keeps its action alive.
+        item.target = action
+        item.representedObject = action
+        if let shortcut, item.keyEquivalent.isEmpty == false {
+            item.keyEquivalentModifierMask = shortcut.modifierFlags
+        }
+        if let systemImage {
+            item.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: nil)
+        }
+        return item
+    }
+
+    /// A line of information that can't be chosen.
+    static func note(_ title: String, systemImage: String? = nil) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        if let systemImage {
+            item.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: nil)
+        }
+        return item
+    }
+}
+
+private final class MenuAction: NSObject {
+    private let handler: () -> Void
+
+    init(_ handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    @objc func run() {
+        handler()
+    }
 }

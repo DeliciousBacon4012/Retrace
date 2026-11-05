@@ -133,6 +133,14 @@ final class AppDependencies {
         )
     }
 
+    /// Forgets everything the content index learned and reads the Library again.
+    func rebuildContentIndex() {
+        contentIndex.removeAll()
+        if settings.indexesLibraryContent {
+            contentIndex.update(with: library.items)
+        }
+    }
+
     /// Keeps the Library's content index in step with its files and with Settings.
     private func followContentIndexSetting() {
         let (enabled, items) = withObservationTracking {
@@ -164,6 +172,7 @@ final class AppDependencies {
         followContentIndexSetting()
         editor.restoreTabSession()
         followThumbnailMemorySetting()
+        followSlowMomentsSetting()
         memory.onPressure = { [weak self] pressure in self?.relieveMemory(pressure) }
         memory.start()
         TextRecognizer.prepare()
@@ -176,6 +185,14 @@ final class AppDependencies {
         ThumbnailCache.shared.removeAll()
         if pressure == .critical {
             editor.dropSpareCaches()
+        }
+    }
+
+    private func followSlowMomentsSetting() {
+        withObservationTracking {
+            HangDetector.setEnabled(settings.logsSlowMoments)
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.followSlowMomentsSetting() }
         }
     }
 

@@ -12,6 +12,10 @@ final class MainWindowRouter {
     /// Counts requests from code that can't open windows itself, such as a toast's button.
     /// `WindowRequestPresenter` opens the window for each one.
     private(set) var openRequests = 0
+    /// Counts requests to open Settings from code with no `openSettings` at hand, such as an
+    /// AppKit menu. `WindowRequestPresenter` opens Settings for each one.
+    private(set) var settingsRequests = 0
+    @ObservationIgnored private var requestedPane: SettingsPane?
 
     /// Brings the main window forward, opening it if needed. The app is activated too,
     /// since a menu bar app is often in the background.
@@ -46,6 +50,12 @@ final class MainWindowRouter {
         openRequests += 1
     }
 
+    /// Like `showSettings(_:using:)`, for code with no `openSettings` at hand.
+    func requestSettings(_ pane: SettingsPane? = nil) {
+        requestedPane = pane
+        settingsRequests += 1
+    }
+
     /// Opens Settings on `pane`, or the category last used when none is given. The app is
     /// activated first, since a menu bar app is often in the background.
     func showSettings(_ pane: SettingsPane? = nil, using openSettings: OpenSettingsAction) {
@@ -55,16 +65,26 @@ final class MainWindowRouter {
         NSApplication.shared.activate()
         openSettings()
     }
+
+    fileprivate func openRequestedSettings(using openSettings: OpenSettingsAction) {
+        showSettings(requestedPane, using: openSettings)
+        requestedPane = nil
+    }
 }
 
 /// Opens the main window whenever `MainWindowRouter.request` asks. It sits on the menu bar
 /// icon, which exists for as long as the app runs.
 struct WindowRequestPresenter: ViewModifier {
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     func body(content: Content) -> some View {
-        content.onChange(of: MainWindowRouter.shared.openRequests) {
-            MainWindowRouter.shared.show(using: openWindow)
-        }
+        content
+            .onChange(of: MainWindowRouter.shared.openRequests) {
+                MainWindowRouter.shared.show(using: openWindow)
+            }
+            .onChange(of: MainWindowRouter.shared.settingsRequests) {
+                MainWindowRouter.shared.openRequestedSettings(using: openSettings)
+            }
     }
 }

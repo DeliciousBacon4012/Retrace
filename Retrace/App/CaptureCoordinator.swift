@@ -237,7 +237,7 @@ final class CaptureCoordinator {
                 clipboard.copy(text: copied)
             },
         ]
-        if settings.textHistoryLimit > 0 {
+        if settings.keepsTextHistory {
             actions.append(.init(title: String(localized: "Show in Library"), systemImage: "clock") {
                 MainWindowRouter.shared.request(libraryCategories: [.capturedText])
             })

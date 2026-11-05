@@ -21,6 +21,10 @@ nonisolated struct RecordingOptions: Sendable {
     var color: VideoColor = .automatic
     var queueDepth: Int = 6
     var showsClicks: Bool = false
+    /// Whether Retrace's own windows appear in the movie.
+    var showsOwnWindows: Bool = true
+    /// Windows always left out, such as the recording controls.
+    var hiddenWindowIDs: Set<CGWindowID> = []
 }
 
 /// Records the screen to a movie file using ScreenCaptureKit's built-in recording output.
@@ -37,8 +41,9 @@ final class ScreenRecorder: NSObject {
 
     /// Called once per recording with the finished file, or the reason it failed.
     @ObservationIgnored var onFinish: ((Result<URL, any Error>) -> Void)?
-    /// Called when the movie's first frame is written, with no delay beyond a hop to the main actor.
-    @ObservationIgnored var onRecordingBegan: (() -> Void)?
+    /// Called when the movie's first frame is written, with the system uptime at that moment,
+    /// read before the hop to the main actor.
+    @ObservationIgnored var onRecordingBegan: ((TimeInterval) -> Void)?
 
     @ObservationIgnored private var stream: SCStream?
     @ObservationIgnored private var recordingOutput: SCRecordingOutput?
@@ -350,9 +355,7 @@ final class ScreenRecorder: NSObject {
             guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
                 throw CaptureError.displayNotFound
             }
-            let ownProcess = ProcessInfo.processInfo.processIdentifier
-            let ownApps = content.applications.filter { $0.processID == ownProcess }
-            filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
+            filter = OwnWindows.filter(for: display, in: content, showsOwnWindows: options.showsOwnWindows, hiding: options.hiddenWindowIDs)
             if let rect {
                 configuration.sourceRect = rect
                 size = rect.size
@@ -371,6 +374,21 @@ final class ScreenRecorder: NSObject {
         configuration.width = max(2, Int((size.width * options.scale).rounded()) / 2 * 2)
         configuration.height = max(2, Int((size.height * options.scale).rounded()) / 2 * 2)
         return (filter, configuration)
+    }
+}
+
+/// Decides which of Retrace's windows a display recording shows.
+nonisolated enum OwnWindows {
+    /// Leaving out windows one by one keeps new Retrace windows in the recording as they open;
+    /// leaving out the app hides all of them.
+    static func filter(for display: SCDisplay, in content: SCShareableContent, showsOwnWindows: Bool, hiding hidden: Set<CGWindowID>) -> SCContentFilter {
+        if showsOwnWindows {
+            let excluded = content.windows.filter { hidden.contains($0.windowID) }
+            return SCContentFilter(display: display, excludingWindows: excluded)
+        }
+        let ownProcess = ProcessInfo.processInfo.processIdentifier
+        let ownApps = content.applications.filter { $0.processID == ownProcess }
+        return SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
     }
 }
 
@@ -415,7 +433,8 @@ nonisolated enum RecordingOutputValidation {
 
 extension ScreenRecorder: SCRecordingOutputDelegate, SCStreamDelegate {
     nonisolated func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {
-        Task { @MainActor in self.onRecordingBegan?() }
+        let uptime = ProcessInfo.processInfo.systemUptime
+        Task { @MainActor in self.onRecordingBegan?(uptime) }
     }
 
     nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {

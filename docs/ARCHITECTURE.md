@@ -5,7 +5,7 @@ Retrace/
   App/         Entry point, scenes, commands, dependency container, coordinators
   Features/    One folder per screen or panel: views and view models
   Models/      Plain value types
-  Services/    System access behind protocols, plus storage and recording
+  Services/    System access behind protocols, plus storage, recording, and diagnostics
   Components/  Reusable views
   Resources/   Assets and the Icon Composer app icon
   Support/     Design constants, logging, small AppKit helpers
@@ -19,7 +19,8 @@ Views lay things out, view models hold state, and services do the work behind pr
 - **Main window:** Library and Editor tabs (`Features/Main`).
 - **Settings:** the ⌘, scene, with categories in a segmented picker (`Features/Settings`).
 - **Editor:** `EditorSession` is one open image. `EditorPresenter` shows it in the Editor tab or in a window of its own (`EditorWindowController`), and can move it from tab to window. In the tab, its tools join the main window's real toolbar while the tab is in front.
-- **Floating panels:** the capture overlay, Quick Access thumbnails, toasts, recording HUD, and pins are nonactivating `NSPanel`s hosting SwiftUI. They're excluded from captures.
+- **Floating panels:** the capture overlay, display picker, Quick Access thumbnails, toasts, recording HUD, and pins are nonactivating `NSPanel`s hosting SwiftUI. Screenshots leave them out. Recordings and the replay buffer show Retrace's windows unless Settings says otherwise (`OwnWindows`), but always leave out the recording HUD and outline.
+- **Recording menu bar item:** `RecordingStatusItem` shows the dot and time; clicking opens a menu that `RecordingCoordinator` fills for the countdown, the recording, or the buffer.
 - **Menu bar extra:** the app's main entry point; it can run with no window open.
 
 ## Capture flow
@@ -29,5 +30,5 @@ Views lay things out, view models hold state, and services do the work behind pr
 ## Stored data
 
 - Preferences: `SettingsStore` over `UserDefaults`, with values validated on load.
-- Application Support/<bundle ID>/: `Clipboard/`, `Originals/`, `Library/CaptureSources.json`, `Text History.json`. Development builds get their own folder through their own bundle ID.
+- Application Support/<bundle ID>/: `Clipboard/`, `Originals/`, `Library/CaptureSources.json`, `Library/ContentIndex.json`, `Text History.json`, `Editor Tab/`. Development builds get their own folder through their own bundle ID.
 - Captures: Pictures/Retrace by default, plus any folders added in Settings.

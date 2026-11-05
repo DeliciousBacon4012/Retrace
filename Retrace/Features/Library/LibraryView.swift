@@ -356,10 +356,10 @@ struct LibraryView: View {
             ContentUnavailableView {
                 Label("No Text Yet", systemImage: "text.viewfinder")
             } description: {
-                if dependencies.settings.textHistoryLimit > 0 {
+                if dependencies.settings.keepsTextHistory {
                     Text("Text you copy with Capture Text appears here.")
                 } else {
-                    Text("Text history is off. Turn it on in Settings › Advanced.")
+                    Text("Text history is off. Turn it on in Settings › Clipboard.")
                 }
             }
         } else if isEmpty, viewModel.selectedCategories == [.clipboard], !dependencies.settings.keepsClipboardHistory {

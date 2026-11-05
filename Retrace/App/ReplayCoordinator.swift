@@ -125,7 +125,8 @@ final class ReplayCoordinator {
                 encoder: settings.videoEncoder,
                 fullResolution: settings.replayUsesFullResolution,
                 color: settings.videoColor,
-                queueDepth: settings.captureQueueDepth
+                queueDepth: settings.captureQueueDepth,
+                showsOwnWindows: settings.showsRetraceInRecordings
             )
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -147,6 +148,7 @@ final class ReplayCoordinator {
                     usesFullResolution: wanted.fullResolution,
                     color: wanted.color,
                     queueDepth: wanted.queueDepth,
+                    showsOwnWindows: wanted.showsOwnWindows,
                     includesAudio: wanted.audio
                 )
             } catch is CancellationError {

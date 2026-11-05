@@ -62,7 +62,7 @@ struct MenuBarContent: View {
         }
 
         Section {
-            if settings.textHistoryLimit > 0 {
+            if settings.keepsTextHistory {
                 RecentTextMenu()
             }
             ClipboardHistoryMenu()

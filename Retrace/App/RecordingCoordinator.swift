@@ -17,16 +17,14 @@ final class RecordingCoordinator {
     @ObservationIgnored private let quickAccess: QuickAccessController
     @ObservationIgnored private let toasts: CaptureToastController
     @ObservationIgnored private let overlay = SelectionOverlay()
+    @ObservationIgnored private let displayPicker = DisplayPicker()
     @ObservationIgnored private let hud = RecordingHUDController()
     @ObservationIgnored private let statusItem = RecordingStatusItem()
     @ObservationIgnored private var countdownTask: Task<Bool, Never>?
-    @ObservationIgnored private var statusItemAction: StatusItemAction?
-
-    private enum StatusItemAction {
-        case cancelCountdown
-        case stopRecording
-        case stopReplayBuffer
-    }
+    /// What the running recording shows, for the menu bar item's menu.
+    @ObservationIgnored private var recordingDescription: String?
+    /// Set when the countdown should end early and the recording start right away.
+    @ObservationIgnored private var startsNow = false
 
     /// Seconds left before a recording starts, while its countdown runs.
     private(set) var countdown: Int?
@@ -47,8 +45,8 @@ final class RecordingCoordinator {
         self.clipboard = clipboard
         self.quickAccess = quickAccess
         self.toasts = toasts
-        recorder.onRecordingBegan = { [weak self] in
-            self?.cursorTracker?.start()
+        recorder.onRecordingBegan = { [weak self] uptime in
+            self?.cursorTracker?.movieBegan(atUptime: uptime)
         }
         recorder.onFinish = { [weak self] result in
             self?.finish(result)
@@ -56,18 +54,8 @@ final class RecordingCoordinator {
         hud.onStop = { [weak self] in
             self?.recorder.stop()
         }
-        statusItem.onClick = { [weak self] in
-            guard let self else { return }
-            switch statusItemAction {
-            case .cancelCountdown:
-                cancelCountdown()
-            case .stopRecording:
-                recorder.stop()
-            case .stopReplayBuffer:
-                replay.setEnabled(false)
-            case nil:
-                break
-            }
+        statusItem.buildMenu = { [weak self] menu in
+            self?.fillStatusMenu(menu)
         }
         followRecorderState()
     }
@@ -88,30 +76,25 @@ final class RecordingCoordinator {
             }
         }
         if let remaining {
-            statusItemAction = .cancelCountdown
             statusItem.showCountdown(remaining)
         } else if case .recording(let since) = state {
             if showsTime {
-                statusItemAction = .stopRecording
                 statusItem.showElapsed(
                     since: since,
-                    toolTip: String(localized: "Stop Recording"),
-                    accessibilityLabel: String(localized: "Stop Recording")
+                    toolTip: String(localized: "Recording Options"),
+                    accessibilityLabel: String(localized: "Recording")
                 )
             } else {
-                statusItemAction = nil
                 statusItem.hide()
             }
         } else if let replayStartedAt {
-            statusItemAction = .stopReplayBuffer
             statusItem.showElapsed(
                 since: replayStartedAt,
                 maximumDuration: replayLimit,
-                toolTip: String(localized: "Turn Off Replay Buffer"),
+                toolTip: String(localized: "Replay Buffer Options"),
                 accessibilityLabel: String(localized: "Replay Buffer")
             )
         } else {
-            statusItemAction = nil
             statusItem.hide()
         }
     }
@@ -162,6 +145,11 @@ final class RecordingCoordinator {
             recorder.stop()
             return
         }
+        // A second press while choosing a display backs out, as Escape does.
+        if displayPicker.isPicking {
+            displayPicker.cancel()
+            return
+        }
         guard !isPreparing, !isFinishing else { return }
         var allowed = permissions.screenRecordingStatus == .granted
         if !allowed { allowed = await permissions.confirmScreenRecordingAccess() == .granted }
@@ -178,6 +166,11 @@ final class RecordingCoordinator {
 
         guard let picked = await pickTarget(mode) else { return }
         let (target, screen, area) = picked
+        recordingDescription = switch mode {
+        case .screen: screen.map { String(localized: "Recording \($0.localizedName)") } ?? String(localized: "Recording the screen")
+        case .area: area.map { String(localized: "Recording an area, \(Int($0.width)) × \(Int($0.height))") } ?? String(localized: "Recording an area")
+        case .window: String(localized: "Recording a window")
+        }
         guard await runCountdown(settings.recordingCountdownSeconds) else { return }
         do {
             let url = try await storage.reserveURL(template: settings.filenameTemplate, date: .now, fileExtension: "mov", in: folder ?? settings.saveFolderURL)
@@ -186,7 +179,7 @@ final class RecordingCoordinator {
             let trackedArea: CGRect? = if settings.cursorBlurEnabled, case .display = target { area ?? screen?.frame } else { nil }
             cursorTracker = trackedArea.map { CursorTracker(area: $0, pixelsPerPoint: scale) }
             finishCodec = settings.videoCodec
-            let options = RecordingOptions(
+            var options = RecordingOptions(
                 codec: settings.videoCodec,
                 framesPerSecond: settings.framesPerSecond,
                 showsCursor: cursorTracker == nil,
@@ -195,18 +188,29 @@ final class RecordingCoordinator {
                 scale: scale,
                 color: settings.videoColor,
                 queueDepth: settings.captureQueueDepth,
-                showsClicks: settings.showsClicks
+                showsClicks: settings.showsClicks,
+                showsOwnWindows: settings.showsRetraceInRecordings
             )
+            // The controls go up first, so the recording knows which windows to leave out.
+            hud.show(recorder: recorder, on: screen, framing: area)
+            options.hiddenWindowIDs = hud.windowIDs
             // The buffer steps aside for the recording and starts over once it's saved.
             replay.isSuspendedForRecording = true
+            // The pointer is followed from before the first frame, then lined up with it.
+            cursorTracker?.start()
             try await recorder.start(target, options: options, to: url)
             if settings.playsSounds { CaptureSound.play() }
-            hud.show(recorder: recorder, on: screen, framing: area)
         } catch is CancellationError {
             // A stop request during recorder startup is an expected cancellation, not an error.
+            _ = cursorTracker?.stop()
+            cursorTracker = nil
+            hud.hide()
             replay.isSuspendedForRecording = false
             return
         } catch {
+            _ = cursorTracker?.stop()
+            cursorTracker = nil
+            hud.hide()
             replay.isSuspendedForRecording = false
             Log.capture.error("Recording couldn't start: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
@@ -214,6 +218,13 @@ final class RecordingCoordinator {
     }
 
     func cancelCountdown() {
+        countdownTask?.cancel()
+    }
+
+    /// Ends the countdown early and starts recording.
+    func startNow() {
+        guard countdownTask != nil else { return }
+        startsNow = true
         countdownTask?.cancel()
     }
 
@@ -232,7 +243,8 @@ final class RecordingCoordinator {
             return true
         }
         countdownTask = task
-        let finished = await task.value
+        let finished = await task.value || startsNow
+        startsNow = false
         countdownTask = nil
         countdown = nil
         return finished
@@ -242,7 +254,9 @@ final class RecordingCoordinator {
     private func pickTarget(_ mode: CaptureMode) async -> (RecordingTarget, NSScreen?, CGRect?)? {
         switch mode {
         case .screen:
-            guard let screen = NSScreen.underPointer, let displayID = screen.displayID else { return nil }
+            // With more than one display, the person points at the one they mean.
+            let chosen = NSScreen.screens.count > 1 ? await displayPicker.pick() : NSScreen.underPointer
+            guard let screen = chosen, let displayID = screen.displayID else { return nil }
             return (.display(displayID, rect: nil), screen, nil)
         case .area:
             guard case .area(let rect, let screen)? = await overlay.select(.area),
@@ -253,6 +267,73 @@ final class RecordingCoordinator {
             guard case .window(let window)? = await overlay.select(.window(WindowList.onScreenWindows())) else { return nil }
             let screen = NSScreen.screens.first { $0.frame.intersects(window.frame) } ?? NSScreen.main
             return (.window(window.id), screen, nil)
+        }
+    }
+
+    // MARK: Menu bar item
+
+    /// The menu under the red dot: what's running, then only the actions that apply to it.
+    private func fillStatusMenu(_ menu: NSMenu) {
+        let shortcuts = settings.shortcuts
+        if let countdown {
+            menu.addItem(.sectionHeader(title: String(localized: "Recording starts in \(countdown)")))
+            menu.addItem(NSMenuItem.action(String(localized: "Start Now"), systemImage: "record.circle") { [weak self] in
+                self?.startNow()
+            })
+            menu.addItem(NSMenuItem.action(String(localized: "Cancel"), systemImage: "xmark.circle") { [weak self] in
+                self?.cancelCountdown()
+            })
+        } else if case .recording(let since) = recorder.state {
+            menu.addItem(.sectionHeader(title: recordingDescription ?? String(localized: "Recording")))
+            let elapsed = Duration.seconds(Int(Date.now.timeIntervalSince(since))).formatted(.time(pattern: .minuteSecond))
+            menu.addItem(.note(String(localized: "\(elapsed) so far"), systemImage: "clock"))
+            menu.addItem(.note(audioDescription, systemImage: settings.recordsMicrophone ? "mic" : "speaker.wave.2"))
+            menu.addItem(.separator())
+            menu.addItem(NSMenuItem.action(String(localized: "Stop and Save"), systemImage: "stop.circle", shortcut: shortcuts["saveRecording"]) { [weak self] in
+                self?.stopAndSave()
+            })
+            menu.addItem(NSMenuItem.action(String(localized: "Discard Recording"), systemImage: "trash", shortcut: shortcuts["recordScreenOrDiscard"]) { [weak self] in
+                guard let self, recorder.isActive else { return }
+                discardsWhenStopped = true
+                recorder.stop()
+            })
+        } else if recorder.state == .finishing || isFinishing {
+            menu.addItem(.sectionHeader(title: String(localized: "Saving Recording…")))
+        } else if replay.buffer.isOn {
+            let length = SaveLastMenu.title(for: settings.replayBufferSeconds)
+            menu.addItem(.sectionHeader(title: String(localized: "Replay Buffer")))
+            menu.addItem(.note(String(localized: "Keeping the last \(length)"), systemImage: "arrow.trianglehead.counterclockwise"))
+            menu.addItem(.separator())
+            let isSaving = replay.buffer.state == .saving
+            for seconds in settings.saveLastDurations {
+                let item = NSMenuItem.action(String(localized: "Save Last \(SaveLastMenu.title(for: seconds))"), shortcut: shortcuts[QuickAction.saveLast(seconds).id]) { [weak self] in
+                    Task { await self?.replay.saveClip(lastSeconds: seconds) }
+                }
+                item.isEnabled = !isSaving && seconds <= settings.replayBufferSeconds
+                menu.addItem(item)
+            }
+            let entire = NSMenuItem.action(String(localized: "Save Entire Buffer"), systemImage: "gobackward", shortcut: shortcuts["saveReplay"]) { [weak self] in
+                Task { await self?.replay.saveClip() }
+            }
+            entire.isEnabled = !isSaving
+            menu.addItem(entire)
+            menu.addItem(.separator())
+            menu.addItem(NSMenuItem.action(String(localized: "Turn Off Replay Buffer"), systemImage: "stop.circle", shortcut: shortcuts["toggleReplay"]) { [weak self] in
+                self?.replay.setEnabled(false)
+            })
+        }
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem.action(String(localized: "Recording Settings…"), systemImage: "gearshape") {
+            MainWindowRouter.shared.requestSettings(.recording)
+        })
+    }
+
+    private var audioDescription: String {
+        switch (settings.recordsSystemAudio, settings.recordsMicrophone) {
+        case (true, true): String(localized: "System audio and microphone")
+        case (true, false): String(localized: "System audio, no microphone")
+        case (false, true): String(localized: "Microphone, no system audio")
+        case (false, false): String(localized: "No audio")
         }
     }
 

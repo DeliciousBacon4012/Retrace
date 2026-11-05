@@ -17,7 +17,7 @@ All unit tests pass, including the move from the old Untitled data locations usi
 
 Main-thread stalls, measured with the debug hang detector on 2026-11-05: none over 100 ms while switching tabs, scrolling, drag-selecting, indexing the Library in the background, or drawing marks on, blurring, and copying a 5120 × 2880 image. Launch had one stall of about 250 ms. Debug builds logged 130 to 300 ms when switching to a full Library or opening a new editor window; these are unoptimized builds, and Release should be faster, but that hasn't been measured. Window resizing, real captures, and recordings weren't measured.
 
-Checked on 2026-11-05 in the test copy: Settings word tabs and capsule pickers, every Settings page, Cancel and Reopen Canceled Image, the canvas moving aside for a floating inspector, and the inspector's header and buttons.
+Checked on 2026-11-05 in the test copy: Settings word tabs and capsule pickers, every Settings page, Cancel and Reopen Canceled Image, the canvas moving aside for a floating inspector, and the inspector's header and buttons. Later the same day: the Editor tab and its undo history coming back after a restart (also a unit test), the reworked Advanced page (errors since launch, slow moments, logs, data folder, index rebuild), captured text under Settings › Clipboard with the clipboard's retention choices, Settings reopening on the last page, and opening Settings in about 120 ms instead of 700 now that its pages build one per frame. `leaks` on the exercised test copy found only system App Intents connections, none of Retrace's objects.
 
 ## Needs a person with a trackpad and a signed build
 
@@ -30,7 +30,11 @@ Checked on 2026-11-05 in the test copy: Settings word tabs and capsule pickers, 
 - The window highlight gliding between windows, and toasts dropping straight in
 - Glass morphing on toast actions and the crop buttons; not yet seen moving
 - Quick Access thumbnails, toasts, the recording HUD, and pins, since they need a real capture
-- Cursor motion blur and the quality re-encode in a real recording. Their rendering is tested on generated movies only, and how closely the cursor lines up with the video needs a real look
+- Cursor motion blur (marked Experimental) and the quality re-encode in a real recording. Rendering is tested on generated movies only. The tracker now asks macOS for the cursor image a few times a second, only while the pointer rests, which should end the flicker seen during recordings, and its samples are lined up with the movie's first frame; both need a real recording to confirm
+- The display picker with more than one display, its glow, keys, and VoiceOver label
+- The recording menu under the menu bar dot: countdown (Start Now, Cancel), recording (Stop and Save, Discard), and buffer (Save Last, Save Entire Buffer, Turn Off)
+- Retrace's windows appearing in recordings and the buffer while the recording controls stay out
+- Flicking a thumbnail away with two fingers
 - Encoder, ProRes, color, 120 fps, and replay settings in a real recording
 - Search inside images and Find Similar on your own captures
 - Translate in the Library's right-click menu

@@ -38,7 +38,7 @@ final class ClipboardHistoryTests: XCTestCase {
     }
 
     @MainActor
-    func testClipboardRetentionDefaultsToThirtyDaysAndHonorsStoredChoice() throws {
+    func testHistoryRetentionDefaultsToThirtyDaysAndHonorsStoredChoice() throws {
         let suiteName = "RetraceTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
