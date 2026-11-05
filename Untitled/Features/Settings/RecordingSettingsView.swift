@@ -13,8 +13,9 @@ struct RecordingSettingsView: View {
                     ForEach(VideoCodec.allCases) { Text($0.title).tag($0) }
                 }
                 Picker("Frame rate", selection: $settings.framesPerSecond) {
-                    Text("30 fps").tag(30)
-                    Text("60 fps").tag(60)
+                    ForEach(SettingsStore.frameRateChoices, id: \.self) { rate in
+                        Text("\(rate) fps").tag(rate)
+                    }
                 }
             }
 
@@ -25,9 +26,9 @@ struct RecordingSettingsView: View {
 
             Section {
                 Picker("Countdown", selection: $settings.recordingCountdownSeconds) {
-                    Text("Off").tag(0)
-                    Text("3 s").tag(3)
-                    Text("5 s").tag(5)
+                    ForEach(SettingsStore.recordingCountdownChoices, id: \.self) { seconds in
+                        Text(seconds == 0 ? "Off" : "\(seconds) s").tag(seconds)
+                    }
                 }
                 .pickerStyle(.segmented)
                 Toggle("Show time in the menu bar", isOn: $settings.showsRecordingTimeInMenuBar)

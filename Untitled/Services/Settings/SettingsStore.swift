@@ -152,6 +152,13 @@ final class SettingsStore {
         storedToastSeconds[kind.rawValue] ?? kind.defaultSeconds
     }
 
+    static let imageQualityChoices = 0.3...1.0
+    static let frameRateChoices = [30, 60]
+    static let recordingCountdownChoices = [0, 3, 5]
+    static let overlayAutoCloseChoices = [0, 5, 10, 30, 60]
+    static let replayBufferDurationChoices = [15, 30, 60, 120, 300, 600]
+    static let replayDiskLimitChoices = [1, 2, 4, 8, 16]
+
     func setToastSeconds(_ seconds: Int, for kind: ToastKind) {
         storedToastSeconds[kind.rawValue] = seconds == kind.defaultSeconds ? nil : seconds
     }
@@ -185,7 +192,11 @@ final class SettingsStore {
         windowPadding = min(max(value(.windowPadding, default: Defaults.windowPadding), 0), 200)
         windowBackground = WindowBackground(rawValue: value(.windowBackground, default: "")) ?? Defaults.windowBackground
         overlayCorner = OverlayCorner(rawValue: value(.overlayCorner, default: "")) ?? Defaults.overlayCorner
-        overlayAutoCloseSeconds = value(.overlayAutoCloseSeconds, default: Defaults.overlayAutoCloseSeconds)
+        overlayAutoCloseSeconds = Self.supportedChoice(
+            value(.overlayAutoCloseSeconds, default: Defaults.overlayAutoCloseSeconds),
+            in: Self.overlayAutoCloseChoices,
+            fallback: Defaults.overlayAutoCloseSeconds
+        )
         overlaySpeed = OverlaySpeed(rawValue: value(.overlaySpeed, default: "")) ?? Defaults.overlaySpeed
         quickAccessLayout = QuickAccessLayout(rawValue: value(.quickAccessLayout, default: "")) ?? Defaults.quickAccessLayout
         quickAccessSize = QuickAccessSize(rawValue: value(.quickAccessSize, default: "")) ?? Defaults.quickAccessSize
@@ -207,21 +218,40 @@ final class SettingsStore {
         }
         imageFormat = ImageFormat(rawValue: value(.imageFormat, default: "")) ?? Defaults.imageFormat
         downscalesRetina = value(.downscalesRetina, default: Defaults.downscalesRetina)
-        imageQuality = value(.imageQuality, default: Defaults.imageQuality)
+        let storedImageQuality = value(.imageQuality, default: Defaults.imageQuality)
+        imageQuality = storedImageQuality.isFinite
+            ? min(max(storedImageQuality, Self.imageQualityChoices.lowerBound), Self.imageQualityChoices.upperBound)
+            : Defaults.imageQuality
         stripsMetadata = value(.stripsMetadata, default: Defaults.stripsMetadata)
         stripsVideoMetadata = value(.stripsVideoMetadata, default: Defaults.stripsVideoMetadata)
         saveFolderPath = value(.saveFolderPath, default: Defaults.saveFolderPath)
         filenameTemplate = value(.filenameTemplate, default: Defaults.filenameTemplate)
         videoCodec = VideoCodec(rawValue: value(.videoCodec, default: "")) ?? Defaults.videoCodec
-        framesPerSecond = value(.framesPerSecond, default: Defaults.framesPerSecond)
+        framesPerSecond = Self.supportedChoice(
+            value(.framesPerSecond, default: Defaults.framesPerSecond),
+            in: Self.frameRateChoices,
+            fallback: Defaults.framesPerSecond
+        )
         recordsSystemAudio = value(.recordsSystemAudio, default: Defaults.recordsSystemAudio)
         recordsMicrophone = value(.recordsMicrophone, default: Defaults.recordsMicrophone)
         showsClicks = value(.showsClicks, default: Defaults.showsClicks)
         showsRecordingTimeInMenuBar = value(.showsRecordingTimeInMenuBar, default: Defaults.showsRecordingTimeInMenuBar)
-        recordingCountdownSeconds = value(.recordingCountdownSeconds, default: Defaults.recordingCountdownSeconds)
+        recordingCountdownSeconds = Self.supportedChoice(
+            value(.recordingCountdownSeconds, default: Defaults.recordingCountdownSeconds),
+            in: Self.recordingCountdownChoices,
+            fallback: Defaults.recordingCountdownSeconds
+        )
         replayBufferEnabled = value(.replayBufferEnabled, default: Defaults.replayBufferEnabled)
-        replayBufferSeconds = value(.replayBufferSeconds, default: Defaults.replayBufferSeconds)
-        replayDiskLimitGB = value(.replayDiskLimitGB, default: Defaults.replayDiskLimitGB)
+        replayBufferSeconds = Self.supportedChoice(
+            value(.replayBufferSeconds, default: Defaults.replayBufferSeconds),
+            in: Self.replayBufferDurationChoices,
+            fallback: Defaults.replayBufferSeconds
+        )
+        replayDiskLimitGB = Self.supportedChoice(
+            value(.replayDiskLimitGB, default: Defaults.replayDiskLimitGB),
+            in: Self.replayDiskLimitChoices,
+            fallback: Defaults.replayDiskLimitGB
+        )
         saveLastDurations = Self.cleaned(value(.saveLastDurations, default: Defaults.saveLastDurations))
         shortcuts = loadShortcuts()
     }
@@ -263,6 +293,10 @@ final class SettingsStore {
 
     private func save(_ value: Any, _ key: Key) {
         defaults.set(value, forKey: key.rawValue)
+    }
+
+    private static func supportedChoice<Value: Equatable>(_ value: Value, in choices: [Value], fallback: Value) -> Value {
+        choices.contains(value) ? value : fallback
     }
 }
 

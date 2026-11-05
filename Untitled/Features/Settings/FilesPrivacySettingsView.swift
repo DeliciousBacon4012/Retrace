@@ -52,7 +52,7 @@ struct FilesPrivacySettingsView: View {
                 if settings.imageFormat.isLossy {
                     LabeledContent("Quality") {
                         HStack {
-                            Slider(value: $settings.imageQuality, in: 0.3...1, step: 0.05) {
+                            Slider(value: $settings.imageQuality, in: SettingsStore.imageQualityChoices, step: 0.05) {
                                 Text("Quality")
                             } minimumValueLabel: {
                                 Image(systemName: "tortoise").accessibilityLabel("Smaller files")

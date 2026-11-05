@@ -56,11 +56,12 @@ struct QuickAccessSettingsView: View {
                 .pickerStyle(.segmented)
 
                 Picker("Close automatically", selection: $settings.overlayAutoCloseSeconds) {
-                    Text("Never").tag(0)
-                    Text("After 5 seconds").tag(5)
-                    Text("After 10 seconds").tag(10)
-                    Text("After 30 seconds").tag(30)
-                    Text("After 1 minute").tag(60)
+                    ForEach(SettingsStore.overlayAutoCloseChoices, id: \.self) { seconds in
+                        let title = seconds == 0
+                            ? String(localized: "Never")
+                            : String(localized: "After \(seconds) seconds")
+                        Text(title).tag(seconds)
+                    }
                 }
             } header: {
                 Text("Timing")
