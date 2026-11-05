@@ -154,9 +154,24 @@ final class InspectorWindowController: NSObject, NSWindowDelegate {
     var isShown: Bool { panel != nil }
 
     /// Shows the panel, with its top left corner near `point` (screen coordinates) if given.
-    func show(document: EditorDocument, near point: NSPoint?) {
-        let panel = panel ?? makePanel(document: document)
+    func show(
+        document: EditorDocument,
+        near point: NSPoint?,
+        onLiftSubject: @escaping () -> Void,
+        isLiftingSubject: Bool
+    ) {
+        let panel = panel ?? makePanel(
+            document: document,
+            onLiftSubject: onLiftSubject,
+            isLiftingSubject: isLiftingSubject
+        )
         self.panel = panel
+        panel.contentView = NSHostingView(rootView: EditorInspector(
+            document: document,
+            chrome: .window,
+            onLiftSubject: onLiftSubject,
+            isLiftingSubject: isLiftingSubject
+        ))
         if let point {
             panel.setFrameTopLeftPoint(NSPoint(x: point.x - EditorInspector.width / 2, y: point.y + 12))
         }
@@ -175,7 +190,11 @@ final class InspectorWindowController: NSObject, NSWindowDelegate {
         onClose?()
     }
 
-    private func makePanel(document: EditorDocument) -> NSPanel {
+    private func makePanel(
+        document: EditorDocument,
+        onLiftSubject: @escaping () -> Void,
+        isLiftingSubject: Bool
+    ) -> NSPanel {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: EditorInspector.width, height: 560),
             styleMask: [.titled, .closable, .resizable, .utilityWindow],
@@ -189,7 +208,12 @@ final class InspectorWindowController: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.contentMinSize = NSSize(width: EditorInspector.width, height: 240)
         panel.contentMaxSize = NSSize(width: EditorInspector.width, height: .greatestFiniteMagnitude)
-        panel.contentView = NSHostingView(rootView: EditorInspector(document: document, chrome: .window))
+        panel.contentView = NSHostingView(rootView: EditorInspector(
+            document: document,
+            chrome: .window,
+            onLiftSubject: onLiftSubject,
+            isLiftingSubject: isLiftingSubject
+        ))
         panel.delegate = self
         panel.center()
         return panel

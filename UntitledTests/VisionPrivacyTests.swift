@@ -1,8 +1,58 @@
 import CoreGraphics
+import CoreImage
 import XCTest
 @testable import Untitled
 
 final class VisionPrivacyTests: XCTestCase {
+    func testForegroundMaskCompositesTheBackgroundAsTransparent() throws {
+        let sourceContext = try XCTUnwrap(CGContext(
+            data: nil,
+            width: 2,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        sourceContext.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        sourceContext.fill(CGRect(x: 0, y: 0, width: 2, height: 1))
+
+        let maskContext = try XCTUnwrap(CGContext(
+            data: nil,
+            width: 2,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ))
+        maskContext.setFillColor(gray: 1, alpha: 1)
+        maskContext.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        maskContext.setFillColor(gray: 0, alpha: 1)
+        maskContext.fill(CGRect(x: 1, y: 0, width: 1, height: 1))
+
+        let subject = try TextRecognizer.composeForeground(
+            try XCTUnwrap(sourceContext.makeImage()),
+            mask: CIImage(cgImage: try XCTUnwrap(maskContext.makeImage()))
+        )
+        var pixels = [UInt8](repeating: 0, count: 8)
+        try pixels.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(
+                data: buffer.baseAddress,
+                width: 2,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 8,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(subject, in: CGRect(x: 0, y: 0, width: 2, height: 1))
+        }
+
+        XCTAssertGreaterThan(pixels[3], 240, "The foreground pixel stays opaque.")
+        XCTAssertLessThan(pixels[7], 10, "The background pixel becomes transparent.")
+    }
+
     func testPeopleRedactionRequestReturnsNoAreasForBlankImage() async throws {
         let image = try makeBlankImage()
 

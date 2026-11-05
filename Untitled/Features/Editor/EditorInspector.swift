@@ -16,6 +16,8 @@ struct EditorInspector: View {
 
     @Bindable var document: EditorDocument
     let chrome: Chrome
+    let onLiftSubject: () -> Void
+    let isLiftingSubject: Bool
 
     nonisolated static let width: CGFloat = 280
     private static let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -69,8 +71,24 @@ struct EditorInspector: View {
                 }
             case .select:
                 InspectorGroup {
-                    Text("Click a mark to change it. Drag its handles to reshape it, or drag the mark to move it. Drag across marks, Shift-click, or press ⌘A to select several.")
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Click a mark to change it. Drag its handles to reshape it, or drag the mark to move it. Drag across marks, Shift-click, or press ⌘A to select several.")
+                            .foregroundStyle(.secondary)
+
+                        Button(action: onLiftSubject) {
+                            if isLiftingSubject {
+                                HStack(spacing: 7) {
+                                    ProgressView().controlSize(.small)
+                                    Text("Finding subject…")
+                                }
+                            } else {
+                                Label("Copy Subject", systemImage: "person.crop.rectangle")
+                            }
+                        }
+                        .buttonStyle(.glass)
+                        .disabled(isLiftingSubject)
+                        .help("Copy the foreground as a transparent image using on-device Vision. Existing redactions are included.")
+                    }
                 }
             case .crop:
                 CropSection(document: document)
@@ -686,7 +704,9 @@ private enum EditorInspectorPreview {
                 chrome: .panel(
                     grip: InspectorGrip(placement: .constant(.right), onDrag: { _ in }, onDrop: { _ in }),
                     maxHeight: maxHeight
-                )
+                ),
+                onLiftSubject: {},
+                isLiftingSubject: false
             )
             .padding(.top, 12)
         }

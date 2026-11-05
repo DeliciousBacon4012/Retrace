@@ -132,6 +132,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
 
         let actions = EditorActions(
             copy: { [weak self] in self?.copyImage() },
+            copyImage: { [weak self] image in
+                guard let self else { return }
+                let size = NSSize(
+                    width: CGFloat(image.width) / self.editorDocument.scale,
+                    height: CGFloat(image.height) / self.editorDocument.scale
+                )
+                self.clipboard.copy(NSImage(cgImage: image, size: size))
+            },
             save: { [weak self] in self?.save() },
             done: { [weak self] in self?.finish() },
             render: { [weak self] in self?.renderOrWarn() },

@@ -1,4 +1,6 @@
 import CoreGraphics
+import CoreImage
+import CoreImage.CIFilterBuiltins
 import CoreText
 import Foundation
 import os
@@ -67,9 +69,15 @@ nonisolated enum SensitiveKind: String, CaseIterable, Identifiable, Sendable {
 nonisolated enum TextRecognizer {
     enum RecognitionError: LocalizedError {
         case timedOut
+        case imageTooLarge
+        case maskRenderingFailed
 
         var errorDescription: String? {
-            String(localized: "Reading the text took too long.")
+            switch self {
+            case .timedOut: String(localized: "Image analysis took too long.")
+            case .imageTooLarge: String(localized: "This image is too large to analyze safely.")
+            case .maskRenderingFailed: String(localized: "The subject mask couldn't be rendered.")
+            }
         }
     }
 
@@ -78,6 +86,9 @@ nonisolated enum TextRecognizer {
     /// Seconds a call may wait, counting any work ahead of it. The first read by a new build of
     /// the app, or after an OS update, makes Vision set up its models: about 45 seconds when measured.
     private static let timeLimit: TimeInterval = 120
+    private static let maximumImageDimension = 16_384
+    private static let maximumImagePixels = 40_000_000
+    private static let ciContext = CIContext(options: [.cacheIntermediates: false])
 
     /// Sets up Vision's models ahead of the first read. The system keeps them for this build of
     /// the app, so later launches take a moment. Text has to be drawn: a blank image never gets
@@ -98,7 +109,8 @@ nonisolated enum TextRecognizer {
 
     /// Reads every line of text and every QR code or barcode.
     static func recognize(_ image: CGImage) async throws -> RecognizedContent {
-        try await run {
+        try validateImageSize(image)
+        return try await run {
             let text = textRequest(correctsLanguage: true)
             let codes = VNDetectBarcodesRequest()
             try VNImageRequestHandler(cgImage: image, options: [:]).perform([text, codes])
@@ -119,11 +131,12 @@ nonisolated enum TextRecognizer {
     /// Where each line of text sits, with a box for every word, for snapping marks to text.
     /// In image pixels with the origin at the top left.
     static func textLayout(in image: CGImage) async throws -> [TextLine] {
-        try await run {
+        try validateImageSize(image)
+        let lines: [TextLine] = try await run {
             let size = CGSize(width: image.width, height: image.height)
             let request = textRequest(correctsLanguage: false)
             try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
-            return (request.results ?? []).compactMap { observation in
+            return (request.results ?? []).compactMap { observation -> TextLine? in
                 guard let candidate = observation.topCandidates(1).first else { return nil }
                 let line = pixelRect(observation.boundingBox, in: size)
                 var words: [CGRect] = []
@@ -137,11 +150,13 @@ nonisolated enum TextRecognizer {
                 return TextLine(rect: line, words: words)
             }
         }
+        return lines
     }
 
     /// Areas worth hiding before sharing, in image pixels with the origin at the top left.
     static func sensitiveAreas(in image: CGImage, kinds: Set<SensitiveKind>) async throws -> [CGRect] {
-        try await run {
+        try validateImageSize(image)
+        return try await run {
             let size = CGSize(width: image.width, height: image.height)
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
             var areas: [CGRect] = []
@@ -194,7 +209,8 @@ nonisolated enum TextRecognizer {
     /// Suggests a crop around the most visually salient region, in top-left image pixels.
     /// Returns nil when Vision can't identify a useful region smaller than the full image.
     static func attentionCrop(in image: CGImage) async throws -> CGRect? {
-        try await run {
+        try validateImageSize(image)
+        let crop: CGRect? = try await run {
             let request = VNGenerateAttentionBasedSaliencyImageRequest()
             try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
             guard let observation = request.results?.first,
@@ -215,6 +231,52 @@ nonisolated enum TextRecognizer {
             else { return nil }
             return padded
         }
+        return crop
+    }
+
+    /// Isolates all detected foreground instances with a transparent background.
+    static func liftedSubject(in image: CGImage) async throws -> CGImage? {
+        try validateImageSize(image)
+        return try await run {
+            let handler = VNImageRequestHandler(cgImage: image, options: [:])
+            let request = VNGenerateForegroundInstanceMaskRequest()
+            try handler.perform([request])
+            guard let observation = request.results?.first else { return nil }
+            // Apple documents allInstances as excluding the background already.
+            let instances = observation.allInstances
+            guard !instances.isEmpty else { return nil }
+
+            let maskBuffer = try observation.generateScaledMaskForImage(forInstances: instances, from: handler)
+            return try composeForeground(image, mask: CIImage(cvPixelBuffer: maskBuffer))
+        }
+    }
+
+    /// Composites a grayscale mask over a transparent background, scaled to source pixels.
+    /// Kept separate so alpha behavior can be verified without relying on Vision's model output.
+    static func composeForeground(_ image: CGImage, mask: CIImage) throws -> CGImage {
+        try validateImageSize(image)
+        let input = CIImage(cgImage: image)
+        let maskBounds = mask.extent
+        guard maskBounds.width.isFinite, maskBounds.height.isFinite,
+              maskBounds.width > 0, maskBounds.height > 0
+        else { throw RecognitionError.maskRenderingFailed }
+
+        let normalizedMask = mask.transformed(by: CGAffineTransform(translationX: -maskBounds.minX, y: -maskBounds.minY))
+        let scaledMask = normalizedMask
+            .transformed(by: CGAffineTransform(
+                scaleX: input.extent.width / maskBounds.width,
+                y: input.extent.height / maskBounds.height
+            ))
+            .cropped(to: input.extent)
+        let clear = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0)).cropped(to: input.extent)
+        let blend = CIFilter.blendWithMask()
+        blend.inputImage = input
+        blend.backgroundImage = clear
+        blend.maskImage = scaledMask
+        guard let output = blend.outputImage?.cropped(to: input.extent),
+              let result = ciContext.createCGImage(output, from: input.extent)
+        else { throw RecognitionError.maskRenderingFailed }
+        return result
     }
 
     /// Emails, phone numbers, and card-like numbers in a line of text.
@@ -242,6 +304,13 @@ nonisolated enum TextRecognizer {
     }
 
     // MARK: Helpers
+
+    private static func validateImageSize(_ image: CGImage) throws {
+        guard image.width > 0, image.height > 0,
+              image.width <= maximumImageDimension, image.height <= maximumImageDimension,
+              image.width <= maximumImagePixels / image.height
+        else { throw RecognitionError.imageTooLarge }
+    }
 
     private static func textRequest(correctsLanguage: Bool) -> VNRecognizeTextRequest {
         let request = VNRecognizeTextRequest()

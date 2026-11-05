@@ -23,6 +23,7 @@ struct EditorView: View {
     @State private var exportItem: ExportItem?
     @State private var notice: EditorNotice?
     @State private var isReadingText = false
+    @State private var isLiftingSubject = false
     @FocusState private var isCanvasFocused: Bool
 
     /// Small enough for a small screenshot, and wide enough that the toolbar keeps every tool
@@ -56,7 +57,12 @@ struct EditorView: View {
 
             if showsPanelInspector {
                 let origin = dragOrigin ?? inspectorOrigin
-                EditorInspector(document: document, chrome: .panel(grip: grip, maxHeight: contentSize.height - origin.y - Design.spacingL))
+                EditorInspector(
+                    document: document,
+                    chrome: .panel(grip: grip, maxHeight: contentSize.height - origin.y - Design.spacingL),
+                    onLiftSubject: liftSubject,
+                    isLiftingSubject: isLiftingSubject
+                )
                     .offset(x: origin.x, y: origin.y)
                     .transition(.move(edge: inspectorPlacement == .left ? .leading : .trailing).combined(with: .opacity))
             }
@@ -81,6 +87,7 @@ struct EditorView: View {
         .animation(.panel, value: toolbarPosition)
         .onChange(of: showsInspector, initial: true) { syncInspectorWindow(near: nil) }
         .onChange(of: inspectorPlacement) { syncInspectorWindow(near: nil) }
+        .onChange(of: isLiftingSubject) { syncInspectorWindow(near: nil) }
         .onDisappear { inspectorWindow.close() }
         .background { shortcutButtons }
         .frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height)
@@ -213,7 +220,12 @@ struct EditorView: View {
     private func syncInspectorWindow(near point: NSPoint?) {
         if showsInspector, inspectorPlacement == .window {
             inspectorWindow.onClose = { inspectorPlacement = .right }
-            inspectorWindow.show(document: document, near: point)
+            inspectorWindow.show(
+                document: document,
+                near: point,
+                onLiftSubject: liftSubject,
+                isLiftingSubject: isLiftingSubject
+            )
         } else {
             inspectorWindow.close()
         }
@@ -416,6 +428,25 @@ struct EditorView: View {
         }
     }
 
+    /// Copies a foreground cutout from the fully rendered image so existing redactions remain applied.
+    private func liftSubject() {
+        guard !isLiftingSubject, let rendered = actions.render() else { return }
+        isLiftingSubject = true
+        Task { @MainActor in
+            defer { isLiftingSubject = false }
+            do {
+                guard let subject = try await TextRecognizer.liftedSubject(in: rendered) else {
+                    notice = EditorNotice(symbolName: "person.crop.rectangle", title: String(localized: "No clear subject found"))
+                    return
+                }
+                actions.copyImage(subject)
+                notice = EditorNotice(symbolName: "doc.on.clipboard", title: String(localized: "Copied subject with transparent background"))
+            } catch {
+                ErrorPresenter.present(error)
+            }
+        }
+    }
+
     /// The area in the rendered image's pixels, with a little room around it so letters cut
     /// by the edge of the drag still read. The rendered image starts at the crop's corner.
     private static func region(_ area: CGRect, croppedTo crop: CGRect?, in image: CGImage) -> CGRect? {
@@ -517,6 +548,7 @@ struct EditorView: View {
 /// What the editor window does with the finished image.
 struct EditorActions {
     var copy: () -> Void
+    var copyImage: (CGImage) -> Void
     var save: () -> Void
     var done: () -> Void
     /// The finished image, for exporting.
