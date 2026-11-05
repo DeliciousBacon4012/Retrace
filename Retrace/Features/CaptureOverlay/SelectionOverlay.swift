@@ -112,12 +112,20 @@ private final class OverlayView: NSView {
     private var dragStart: CGPoint?
     private var dragCurrent: CGPoint?
     private var hoveredWindow: WindowCandidate?
+    /// The window highlight, as a layer so it can glide and reshape from window to window.
+    private let highlight = CAShapeLayer()
 
     init(mode: SelectionOverlay.Mode, screen: NSScreen, onFinish: @escaping (ScreenSelection?) -> Void) {
         self.mode = mode
         self.screen = screen
         self.onFinish = onFinish
         super.init(frame: CGRect(origin: .zero, size: screen.frame.size))
+        wantsLayer = true
+        highlight.fillColor = NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor
+        highlight.strokeColor = NSColor.controlAccentColor.cgColor
+        highlight.lineWidth = 2
+        highlight.opacity = 0
+        layer?.addSublayer(highlight)
         addTrackingArea(NSTrackingArea(
             rect: .zero,
             options: [.mouseMoved, .activeAlways, .inVisibleRect, .cursorUpdate],
@@ -216,8 +224,38 @@ private final class OverlayView: NSView {
         let hovered = candidates.first { $0.frame.contains(location) }
         if hovered?.id != hoveredWindow?.id {
             hoveredWindow = hovered
-            needsDisplay = true
+            moveHighlight()
         }
+    }
+
+    /// Glides the highlight to the window under the pointer, reshaping as it goes, and fades it
+    /// in or out. With Reduce Motion it moves at once.
+    private func moveHighlight() {
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let target: CGPath? = hoveredWindow.flatMap { window in
+            let rect = window.frame.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY)
+            guard rect.intersects(bounds) else { return nil }
+            return CGPath(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerWidth: 12, cornerHeight: 12, transform: nil)
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(reduceMotion)
+        if let target {
+            if highlight.opacity > 0, !reduceMotion {
+                let spring = CASpringAnimation(keyPath: "path")
+                spring.fromValue = highlight.presentation()?.path ?? highlight.path
+                spring.toValue = target
+                spring.damping = 26
+                spring.stiffness = 320
+                spring.mass = 1
+                spring.duration = spring.settlingDuration
+                highlight.add(spring, forKey: "path")
+            }
+            highlight.path = target
+            highlight.opacity = 1
+        } else {
+            highlight.opacity = 0
+        }
+        CATransaction.commit()
     }
 
     // MARK: Drawing
@@ -251,20 +289,10 @@ private final class OverlayView: NSView {
         drawLabel(label, below: rect)
     }
 
+    /// The light dim under the highlight layer, which draws the window itself.
     private func drawWindowHighlight() {
         NSColor.black.withAlphaComponent(0.12).setFill()
         bounds.fill()
-
-        guard let hoveredWindow else { return }
-        let rect = hoveredWindow.frame.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY)
-        guard rect.intersects(bounds) else { return }
-
-        let shape = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
-        NSColor.controlAccentColor.withAlphaComponent(0.25).setFill()
-        shape.fill()
-        shape.lineWidth = 2
-        NSColor.controlAccentColor.setStroke()
-        shape.stroke()
     }
 
     private func drawLabel(_ text: String, below rect: CGRect) {

@@ -182,7 +182,9 @@ private struct CaptureToastView: View {
                 }
             }
         }
-        .scaleEffect(isShown || reduceMotion ? 1 : 0.85, anchor: .top)
+        // Grows from the middle of its top edge, or from the corner it sits in, so it drops
+        // straight in rather than sliding from an angle.
+        .scaleEffect(isShown || reduceMotion ? 1 : 0.85, anchor: alignment == .trailing ? .topTrailing : .top)
         .offset(y: isShown || reduceMotion ? 0 : -16)
         .opacity(isShown ? 1 : 0)
         .padding(10)

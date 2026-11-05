@@ -59,16 +59,19 @@ struct PermissionBanner: View {
     }
 
     private var details: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Design.spacingM) {
             Text("If macOS offers to quit and reopen, Later is fine: Retrace notices on its own.")
             if !CodeSigningInfo.hasTeamIdentifier {
                 Text("This build is signed only to run locally, so macOS forgets the permission each time it's rebuilt. In Xcode, choose a Team under Signing & Capabilities.")
                     .foregroundStyle(.secondary)
             }
             Button("Open System Settings") { model.openScreenRecordingSettings() }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .fixedSize(horizontal: false, vertical: true)
         .frame(width: 300, alignment: .leading)
-        .padding()
+        .padding(Design.spacingL)
+        .capsuleControls()
     }
 }

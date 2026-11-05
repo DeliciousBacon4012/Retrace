@@ -574,7 +574,8 @@ private struct MarkSelectionOverlay: View {
             }
         }
         .frame(width: layout.viewSize.width, height: layout.viewSize.height, alignment: .topLeading)
-        .transition(.opacity)
+        // Handles appear where the mark is, at once, instead of flying in from the old spot.
+        .transaction { $0.animation = nil }
     }
 }
 
