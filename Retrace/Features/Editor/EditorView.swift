@@ -63,9 +63,9 @@ struct EditorView: View {
     private var canvasInsets: EdgeInsets {
         EdgeInsets(
             top: 0,
-            leading: (toolbarPosition == .left ? paletteRoom : 0) + (inspectorSide == .leading ? dockedInspectorRoom : 0),
+            leading: inspectorSide == .leading ? dockedInspectorRoom : 0,
             bottom: toolbarPosition == .bottom ? paletteRoom : 0,
-            trailing: (toolbarPosition == .right ? paletteRoom : 0) + (inspectorSide == .trailing ? dockedInspectorRoom : 0)
+            trailing: inspectorSide == .trailing ? dockedInspectorRoom : 0
         )
     }
 
@@ -167,27 +167,17 @@ struct EditorView: View {
 
     // MARK: Panels
 
-    /// The tools along the chosen edge, centered on the room the image has.
+    /// The tools along the bottom, centered between any docked inspector and the other edge.
     private var toolPalette: some View {
-        let leftInspector = inspectorSide == .leading ? dockedInspectorRoom : 0
-        let rightInspector = inspectorSide == .trailing ? dockedInspectorRoom : 0
-        let alignment: Alignment = switch toolbarPosition {
-        case .left: .leading
-        case .right: .trailing
-        default: .bottom
-        }
-        return EditorToolPalette(
+        EditorToolPalette(
             document: document,
-            axis: toolbarPosition == .bottom ? .horizontal : .vertical,
             symbol: symbol(for:),
             position: $toolbarPosition
         )
-        // Along a side, the tools keep the edge and a docked inspector moves in beside them;
-        // along the bottom, they center between the docked panels.
-        .padding(.leading, Design.spacingL + (toolbarPosition == .bottom ? leftInspector : 0))
-        .padding(.trailing, Design.spacingL + (toolbarPosition == .bottom ? rightInspector : 0))
+        .padding(.leading, Design.spacingL + (inspectorSide == .leading ? dockedInspectorRoom : 0))
+        .padding(.trailing, Design.spacingL + (inspectorSide == .trailing ? dockedInspectorRoom : 0))
         .padding(.vertical, Design.spacingL)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .transition(.opacity.combined(with: .scale(0.9)))
     }
 
@@ -196,14 +186,13 @@ struct EditorView: View {
         let margin = Design.spacingL
         switch inspectorPlacement {
         case .left:
-            return CGPoint(x: margin + (toolbarPosition == .left ? paletteRoom : 0), y: margin)
+            return CGPoint(x: margin, y: margin)
         case .floating:
             let roomX = max(contentSize.width - EditorInspector.width - margin * 2, 0)
             let roomY = max(contentSize.height - 200 - margin * 2, 0)
             return CGPoint(x: margin + roomX * min(max(floatX, 0), 1), y: margin + roomY * min(max(floatY, 0), 1))
         case .right, .window:
-            let palette = toolbarPosition == .right ? paletteRoom : 0
-            return CGPoint(x: contentSize.width - EditorInspector.width - margin - palette, y: margin)
+            return CGPoint(x: contentSize.width - EditorInspector.width - margin, y: margin)
         }
     }
 

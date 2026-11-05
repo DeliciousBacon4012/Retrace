@@ -28,10 +28,11 @@ struct EditorSettingsView: View {
                 }
                 .disabled(!showsInspector)
                 Picker("Tools", selection: $toolbarPosition) {
-                    ForEach(EditorToolbarPosition.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
+                    ForEach(EditorToolbarPosition.allCases) { Text($0.title).tag($0) }
                 }
+                .capsuleSegmentedStyle()
             } footer: {
-                Text("Drag the inspector by the dots on top: drop it at a side to dock it, or outside the window to give it its own. Right-click the tools to move them to another edge. When opening after each screenshot is off, you can still open one from Quick Access or Library.")
+                Text("Drag the inspector by the dots on top: drop it at a side to dock it, or outside the window to give it its own. Right-click the tools to move them between the toolbar and the bottom of the image. When opening after each screenshot is off, you can still open one from Quick Access or Library.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

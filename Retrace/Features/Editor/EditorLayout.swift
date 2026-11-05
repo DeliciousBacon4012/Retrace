@@ -27,8 +27,6 @@ nonisolated enum InspectorPlacement: String, CaseIterable, Identifiable, Sendabl
 nonisolated enum EditorToolbarPosition: String, CaseIterable, Identifiable, Sendable {
     case top
     case bottom
-    case left
-    case right
 
     static let storageKey = "editorToolbarPosition"
     var id: String { rawValue }
@@ -37,8 +35,6 @@ nonisolated enum EditorToolbarPosition: String, CaseIterable, Identifiable, Send
         switch self {
         case .top: String(localized: "Top")
         case .bottom: String(localized: "Bottom")
-        case .left: String(localized: "Left")
-        case .right: String(localized: "Right")
         }
     }
 
@@ -46,8 +42,6 @@ nonisolated enum EditorToolbarPosition: String, CaseIterable, Identifiable, Send
         switch self {
         case .top: "rectangle.tophalf.inset.filled"
         case .bottom: "rectangle.bottomhalf.inset.filled"
-        case .left: "rectangle.lefthalf.inset.filled"
-        case .right: "rectangle.righthalf.inset.filled"
         }
     }
 }
@@ -83,59 +77,37 @@ struct InspectorGrip: View {
     }
 }
 
-/// The tools on a glass bar along one edge of the editor, for when they aren't in the
-/// window's toolbar. The chosen tool's highlight slides from tool to tool.
+/// The tools along the bottom of the editor, for when they aren't in the window's toolbar:
+/// the same native segmented picker as the toolbar, floating on a glass capsule.
 struct EditorToolPalette: View {
     @Bindable var document: EditorDocument
-    let axis: Axis
     let symbol: (EditorTool) -> String
     @Binding var position: EditorToolbarPosition
-    @Namespace private var highlight
 
     static let thickness: CGFloat = 40
 
     var body: some View {
-        let layout = axis == .vertical ? AnyLayout(VStackLayout(spacing: 2)) : AnyLayout(HStackLayout(spacing: 2))
-        GlassEffectContainer {
-            layout {
-                ForEach(EditorTool.allCases) { tool in
-                    button(for: tool)
-                }
+        Picker("Tool", selection: $document.tool) {
+            ForEach(EditorTool.allCases) { tool in
+                Label(tool.title, systemImage: symbol(tool))
+                    .help("\(tool.title) (\(String(tool.key).uppercased()))")
+                    .tag(tool)
             }
-            .padding(4)
-            .glassEffect(.regular.interactive(), in: .capsule)
         }
-        .animation(.response, value: document.tool)
+        .pickerStyle(.segmented)
+        .labelStyle(.iconOnly)
+        .labelsHidden()
+        .controlSize(.large)
+        .fixedSize()
+        .padding(.horizontal, 6)
+        .frame(height: Self.thickness)
+        .glassEffect(.regular, in: .capsule)
         .contextMenu {
             Picker("Toolbar Position", selection: $position) {
                 ForEach(EditorToolbarPosition.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
             }
             .pickerStyle(.inline)
         }
-    }
-
-    private func button(for tool: EditorTool) -> some View {
-        let isSelected = tool == document.tool
-        return Button {
-            document.tool = tool
-        } label: {
-            Image(systemName: symbol(tool))
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: Self.thickness - 8, height: Self.thickness - 8)
-                .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-                .background {
-                    if isSelected {
-                        Circle()
-                            .fill(Color.accentColor)
-                            .matchedGeometryEffect(id: "tool", in: highlight)
-                    }
-                }
-                .contentShape(.circle)
-        }
-        .buttonStyle(.plain)
-        .help("\(tool.title) (\(String(tool.key).uppercased()))")
-        .accessibilityLabel(tool.title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
