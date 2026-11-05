@@ -8,20 +8,24 @@ struct SettingsView: View {
         PagedTabs(selection: $pane, pages: SettingsPane.allCases) { pane in
             SettingsPageContent(pane: pane)
         }
-        // In a bar under the title, because eight tabs don't fit a Settings window's toolbar.
+        // Icons with the current category's name in the title bar, as System Settings names its
+        // panes. Each icon's tooltip and VoiceOver label give its name.
         .safeAreaBar(edge: .top) {
             Picker("Settings Category", selection: $pane) {
                 ForEach(SettingsPane.allCases) { pane in
-                    Text(pane.title).tag(pane)
+                    Label(pane.title, systemImage: pane.symbolName)
+                        .help(pane.title)
+                        .tag(pane)
                 }
             }
             .tabPickerStyle()
+            .labelStyle(.iconOnly)
             .labelsHidden()
-            .controlSize(.large)
-            .padding(.horizontal, Design.spacingL)
+            .fixedSize()
             .padding(.vertical, Design.spacingS)
+            .frame(maxWidth: .infinity)
         }
-        .frame(width: 820, height: 600)
+        .frame(width: 680, height: 600)
         .navigationTitle(pane.title)
     }
 }

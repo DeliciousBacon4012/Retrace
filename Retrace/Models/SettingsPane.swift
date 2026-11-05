@@ -20,7 +20,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Identifiable, Hashable, Sen
         switch self {
         case .general: String(localized: "General")
         case .capture: String(localized: "Capture")
-        case .quickAccess: String(localized: "Overlays")
+        case .quickAccess: String(localized: "Quick Access")
         case .clipboard: String(localized: "Clipboard")
         case .editor: String(localized: "Editor")
         case .recording: String(localized: "Recording")

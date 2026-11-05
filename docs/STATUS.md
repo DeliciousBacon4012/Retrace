@@ -8,7 +8,7 @@ Run on macOS 27 with an unsigned development build, which has no Screen Recordin
 
 - Library and Editor tabs, the tab picker, and search appearing only on the Library tab
 - Drag on empty space to select several thumbnails
-- Settings window with all eight categories on one line and their pages
+- Settings window with category icons along the top and their pages
 - Opening an image in an editor window, with the whole toolbar visible at the minimum width
 - Inspector rows lining up
 
