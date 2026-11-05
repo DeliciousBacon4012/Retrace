@@ -23,9 +23,10 @@ nonisolated enum MetadataAudit {
         if imageCount > 1 {
             found.append("extra images")
         }
-        if let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] {
-            found += leftovers(inProperties: properties)
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] else {
+            throw AuditError.unreadableImageData
         }
+        found += leftovers(inProperties: properties)
         if let metadata = CGImageSourceCopyMetadataAtIndex(source, 0, nil) {
             found += leftovers(inXMP: metadata)
         }
