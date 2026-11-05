@@ -12,7 +12,6 @@ struct EditorSettingsView: View {
     @AppStorage(EditorDocument.highlighterSnapsKey) private var snapsToText = true
     @AppStorage("editorShowsInspector") private var showsInspector = true
     @AppStorage(InspectorPlacement.storageKey) private var inspectorPlacement: InspectorPlacement = .right
-    @AppStorage(EditorToolbarPosition.storageKey) private var toolbarPosition: EditorToolbarPosition = .top
     @State private var confirmsReset = false
     @State private var editsCustomPalette = false
 
@@ -27,12 +26,8 @@ struct EditorSettingsView: View {
                     ForEach(InspectorPlacement.allCases) { Text($0.title).tag($0) }
                 }
                 .disabled(!showsInspector)
-                Picker("Tools", selection: $toolbarPosition) {
-                    ForEach(EditorToolbarPosition.allCases) { Text($0.title).tag($0) }
-                }
-                .capsuleSegmentedStyle()
             } footer: {
-                Text("Drag the inspector by the dots on top: drop it at a side to dock it, or outside the window to give it its own. Right-click the tools to move them between the toolbar and the bottom of the image. When opening after each screenshot is off, you can still open one from Quick Access or Library.")
+                Text("Drag the inspector by the dots on top: drop it at a side to dock it, or outside the window to give it its own. When opening after each screenshot is off, you can still open one from Quick Access or Library.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -23,29 +23,6 @@ nonisolated enum InspectorPlacement: String, CaseIterable, Identifiable, Sendabl
     }
 }
 
-/// Where the editor's tools sit: in the window's toolbar, or on a glass bar along an edge.
-nonisolated enum EditorToolbarPosition: String, CaseIterable, Identifiable, Sendable {
-    case top
-    case bottom
-
-    static let storageKey = "editorToolbarPosition"
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .top: String(localized: "Top")
-        case .bottom: String(localized: "Bottom")
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .top: "rectangle.tophalf.inset.filled"
-        case .bottom: "rectangle.bottomhalf.inset.filled"
-        }
-    }
-}
-
 /// The three dots on top of the inspector: drag them to float the inspector, drop it at
 /// either side to dock it, or drop it outside the window to give it a window of its own.
 struct InspectorGrip: View {
@@ -74,41 +51,6 @@ struct InspectorGrip: View {
             }
             .help("Drag to move the inspector. Drop it at a side to dock it, or outside the window to give it its own.")
             .accessibilityLabel("Move Inspector")
-    }
-}
-
-/// The tools along the bottom of the editor, for when they aren't in the window's toolbar.
-/// macOS has no bottom toolbar, so this is the toolbar's picker style outside it: the native
-/// tab-style segmented picker on the same glass capsule the toolbar gives its items.
-struct EditorToolPalette: View {
-    @Bindable var document: EditorDocument
-    let symbol: (EditorTool) -> String
-    @Binding var position: EditorToolbarPosition
-
-    static let thickness: CGFloat = 40
-
-    var body: some View {
-        Picker("Tool", selection: $document.tool) {
-            ForEach(EditorTool.allCases) { tool in
-                Label(tool.title, systemImage: symbol(tool))
-                    .help("\(tool.title) (\(String(tool.key).uppercased()))")
-                    .tag(tool)
-            }
-        }
-        .tabPickerStyle()
-        .labelStyle(.iconOnly)
-        .labelsHidden()
-        .controlSize(.large)
-        .fixedSize()
-        .padding(.horizontal, 6)
-        .frame(height: Self.thickness)
-        .glassEffect(.regular, in: .capsule)
-        .contextMenu {
-            Picker("Toolbar Position", selection: $position) {
-                ForEach(EditorToolbarPosition.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
-            }
-            .pickerStyle(.inline)
-        }
     }
 }
 

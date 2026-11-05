@@ -65,7 +65,7 @@
 - [~] Redaction that truly removes what's underneath
 - [~] Photoshop-style crop: handles already on the image, locked aspect ratios, Enter to apply
 - [~] Floating glass inspector with three dots to drag it, or as its own window
-- [x] Tools in the toolbar or along the bottom (sides dropped: macOS segmented pickers only run horizontally), inspector on either side, remembered
+- [x] Tools in the window toolbar (other positions dropped by request), inspector on either side, remembered
 - [~] Glass menus and controls in the inspector, with a well-placed scrollbar
 - [~] Copy Text from an area in the editor
 - [~] Open from Clipboard into the editor

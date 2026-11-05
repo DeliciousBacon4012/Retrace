@@ -20,7 +20,6 @@ struct EditorView: View {
 
     @AppStorage("editorShowsInspector") private var showsInspector = true
     @AppStorage(InspectorPlacement.storageKey) private var inspectorPlacement: InspectorPlacement = .right
-    @AppStorage(EditorToolbarPosition.storageKey) private var toolbarPosition: EditorToolbarPosition = .top
     /// Where a floating inspector was dropped, as fractions of the room it can move in.
     @AppStorage("editorInspectorFloatX") private var floatX = 0.5
     @AppStorage("editorInspectorFloatY") private var floatY = 0.0
@@ -43,7 +42,6 @@ struct EditorView: View {
     static let minimumSize = CGSize(width: 980, height: 440)
 
     private var showsPanelInspector: Bool { showsInspector && inspectorPlacement != .window }
-    private var paletteRoom: CGFloat { EditorToolPalette.thickness + Design.spacingL }
     private var dockedInspectorRoom: CGFloat { EditorInspector.width + Design.spacingL }
 
     /// Room kept clear on each side for docked panels, so they never cover the image. The
@@ -64,7 +62,7 @@ struct EditorView: View {
         EdgeInsets(
             top: 0,
             leading: inspectorSide == .leading ? dockedInspectorRoom : 0,
-            bottom: toolbarPosition == .bottom ? paletteRoom : 0,
+            bottom: 0,
             trailing: inspectorSide == .trailing ? dockedInspectorRoom : 0
         )
     }
@@ -73,10 +71,6 @@ struct EditorView: View {
         ZStack(alignment: .topLeading) {
             canvas
                 .padding(canvasInsets)
-
-            if toolbarPosition != .top {
-                toolPalette
-            }
 
             if showsPanelInspector {
                 let origin = dragOrigin ?? inspectorOrigin
@@ -112,7 +106,6 @@ struct EditorView: View {
         .animation(.panel, value: showsInspector)
         .animation(.panel, value: inspectorPlacement)
         .animation(.panel, value: inspectorSide)
-        .animation(.panel, value: toolbarPosition)
         .onChange(of: showsInspector, initial: true) { syncInspectorWindow(near: nil) }
         .onChange(of: inspectorPlacement) { syncInspectorWindow(near: nil) }
         .onChange(of: isLiftingSubject) { syncInspectorWindow(near: nil) }
@@ -166,20 +159,6 @@ struct EditorView: View {
     }
 
     // MARK: Panels
-
-    /// The tools along the bottom, centered between any docked inspector and the other edge.
-    private var toolPalette: some View {
-        EditorToolPalette(
-            document: document,
-            symbol: symbol(for:),
-            position: $toolbarPosition
-        )
-        .padding(.leading, Design.spacingL + (inspectorSide == .leading ? dockedInspectorRoom : 0))
-        .padding(.trailing, Design.spacingL + (inspectorSide == .trailing ? dockedInspectorRoom : 0))
-        .padding(.vertical, Design.spacingL)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .transition(.opacity.combined(with: .scale(0.9)))
-    }
 
     /// The inspector's top left corner when it isn't being dragged.
     private var inspectorOrigin: CGPoint {
@@ -262,9 +241,6 @@ struct EditorView: View {
 
     @ViewBuilder
     private var layoutMenu: some View {
-        Picker("Toolbar Position", selection: $toolbarPosition) {
-            ForEach(EditorToolbarPosition.allCases) { Label($0.title, systemImage: $0.symbolName).tag($0) }
-        }
         Picker("Inspector", selection: $inspectorPlacement) {
             ForEach(InspectorPlacement.allCases) { Text($0.title).tag($0) }
         }
@@ -345,19 +321,17 @@ struct EditorView: View {
                 .help("Redo (⇧⌘Z)")
         }
 
-        if toolbarPosition == .top {
-            ToolbarItem(placement: .principal) {
-                Picker("Tool", selection: $document.tool) {
-                    ForEach(EditorTool.allCases) { tool in
-                        Label(tool.title, systemImage: symbol(for: tool))
-                            .help("\(tool.title) (\(String(tool.key).uppercased()))")
-                            .tag(tool)
-                    }
+        ToolbarItem(placement: .principal) {
+            Picker("Tool", selection: $document.tool) {
+                ForEach(EditorTool.allCases) { tool in
+                    Label(tool.title, systemImage: symbol(for: tool))
+                        .help("\(tool.title) (\(String(tool.key).uppercased()))")
+                        .tag(tool)
                 }
-                .pickerStyle(.segmented)
-                .labelStyle(.iconOnly)
-                .contextMenu { layoutMenu }
             }
+            .pickerStyle(.segmented)
+            .labelStyle(.iconOnly)
+            .contextMenu { layoutMenu }
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
