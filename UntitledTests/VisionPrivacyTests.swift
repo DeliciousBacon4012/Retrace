@@ -1,9 +1,21 @@
 import CoreGraphics
 import CoreImage
+import CoreText
 import XCTest
 @testable import Untitled
 
 final class VisionPrivacyTests: XCTestCase {
+    func testVisionRecognizesTextFromAHighContrastImage() async throws {
+        let image = try makeTextImage()
+
+        let content = try await TextRecognizer.recognize(image)
+
+        XCTAssertTrue(
+            content.lines.contains { $0.text.localizedCaseInsensitiveContains("RETRACE") },
+            "Vision should recognize the high-contrast sample text."
+        )
+    }
+
     func testForegroundMaskCompositesTheBackgroundAsTransparent() throws {
         let sourceContext = try XCTUnwrap(CGContext(
             data: nil,
@@ -84,6 +96,28 @@ final class VisionPrivacyTests: XCTestCase {
         ))
         context.setFillColor(CGColor(gray: 1, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: 240, height: 160))
+        return try XCTUnwrap(context.makeImage())
+    }
+
+    private func makeTextImage() throws -> CGImage {
+        let context = try XCTUnwrap(CGContext(
+            data: nil,
+            width: 900,
+            height: 200,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 900, height: 200))
+        let attributes: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName("Helvetica" as CFString, 48, nil),
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 0, alpha: 1),
+        ]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "RETRACE OCR CHECK 123", attributes: attributes))
+        context.textPosition = CGPoint(x: 24, y: 76)
+        CTLineDraw(line, context)
         return try XCTUnwrap(context.makeImage())
     }
 }
