@@ -5,7 +5,7 @@ import OSLog
 /// Finds and removes descriptive metadata in finished movies, such as a location, the
 /// device or app that made them, or a title.
 ///
-/// Movies Untitled writes normally carry none, so the check costs only a read of the
+/// Movies retrace writes normally carry none, so the check costs only a read of the
 /// movie's header. Only when it finds something is the movie rewritten, copying its
 /// samples without re-encoding.
 nonisolated enum VideoMetadata {
@@ -19,21 +19,38 @@ nonisolated enum VideoMetadata {
         return found
     }
 
+    enum RemovalError: LocalizedError {
+        case metadataRemains([String])
+        case failed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .metadataRemains(let identifiers):
+                String(localized: "Some video metadata could not be removed: \(identifiers.joined(separator: ", ")).")
+            case .failed(let reason):
+                String(localized: "Video metadata could not be removed: \(reason)")
+            }
+        }
+    }
+
     /// Rewrites the movie at `url` without metadata if it has any. The original is replaced
     /// only after the new copy is complete, so a failure leaves the recording as it was.
-    static func removeAll(from url: URL) async {
+    static func removeAll(from url: URL) async throws {
         do {
             let found = try await items(in: url)
             guard !found.isEmpty else { return }
             try await rewrite(url)
             let left = try await items(in: url)
-            if left.isEmpty {
-                Log.capture.info("Removed \(found.count) metadata items from a movie")
-            } else {
+            guard left.isEmpty else {
                 Log.capture.error("A movie still has metadata: \(left.joined(separator: ", "), privacy: .public)")
+                throw RemovalError.metadataRemains(left)
             }
+            Log.capture.info("Removed \(found.count) metadata items from a movie")
+        } catch let error as RemovalError {
+            throw error
         } catch {
             Log.capture.error("Couldn't remove a movie's metadata: \(error.localizedDescription, privacy: .public)")
+            throw RemovalError.failed(error.localizedDescription)
         }
     }
 

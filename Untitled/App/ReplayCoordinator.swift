@@ -39,15 +39,23 @@ final class ReplayCoordinator {
 
     /// Saves the buffered clip to the save folder and shows it in Quick Access: all of it,
     /// or with `lastSeconds`, just that much from the end.
-    func saveClip(lastSeconds: Int? = nil) async {
+    func saveClip(lastSeconds: Int? = nil, to folder: URL? = nil) async {
         guard buffer.isOn else {
             ErrorPresenter.present(ReplayError.notRunning, recovery: String(localized: "Turn it on from the Capture page or the menu bar, then save a replay any time."))
             return
         }
         do {
-            let url = try storage.reserveURL(template: settings.filenameTemplate + " Replay", date: .now, fileExtension: "mov", in: settings.saveFolderURL)
+            let url = try await storage.reserveURL(template: settings.filenameTemplate + " Replay", date: .now, fileExtension: "mov", in: folder ?? settings.saveFolderURL)
             let saved = try await buffer.save(to: url, lastSeconds: lastSeconds.map(Double.init))
-            if settings.stripsVideoMetadata { await VideoMetadata.removeAll(from: url) }
+            if settings.stripsVideoMetadata {
+                do {
+                    try await VideoMetadata.removeAll(from: url)
+                } catch {
+                    Log.capture.error("Couldn't secure a replay's metadata: \(error.localizedDescription, privacy: .public)")
+                    ErrorPresenter.present(error, recovery: String(localized: "The replay remains in its save folder. retrace did not copy it or open it in Quick Access. Review the file before sharing."))
+                    return
+                }
+            }
             if settings.playsSounds { CaptureSound.play() }
             Log.capture.info("Saved a replay")
             if let lastSeconds, saved < Double(lastSeconds) - 0.5 {
@@ -66,6 +74,15 @@ final class ReplayCoordinator {
                 capture.fileURL = url
                 capture.isVideo = true
                 quickAccess.show(capture)
+            } else {
+                Log.capture.error("Replay was saved, but its preview frame couldn't be created")
+                toasts.show(.init(
+                    kind: .recordingSaved,
+                    symbolName: "gobackward",
+                    title: String(localized: "Replay saved"),
+                    detail: url.lastPathComponent,
+                    actions: .forMovie(at: url, clipboard: clipboard)
+                ))
             }
         } catch {
             Log.capture.error("Saving a replay failed: \(error.localizedDescription, privacy: .public)")

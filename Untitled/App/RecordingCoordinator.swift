@@ -80,7 +80,7 @@ final class RecordingCoordinator {
     @ObservationIgnored private var isPreparing = false
 
     /// Starts a recording, or stops the one in progress. During the countdown, cancels it.
-    func toggle(_ mode: CaptureMode) async {
+    func toggle(_ mode: CaptureMode, savingTo folder: URL? = nil) async {
         if countdown != nil {
             cancelCountdown()
             return
@@ -105,7 +105,7 @@ final class RecordingCoordinator {
         let (target, screen, area) = picked
         guard await runCountdown(settings.recordingCountdownSeconds) else { return }
         do {
-            let url = try storage.reserveURL(template: settings.filenameTemplate, date: .now, fileExtension: "mov", in: settings.saveFolderURL)
+            let url = try await storage.reserveURL(template: settings.filenameTemplate, date: .now, fileExtension: "mov", in: folder ?? settings.saveFolderURL)
             let scale = settings.downscalesRetina ? 1 : (screen?.backingScaleFactor ?? 2)
             let options = RecordingOptions(
                 codec: settings.videoCodec,
@@ -118,6 +118,9 @@ final class RecordingCoordinator {
             try await recorder.start(target, options: options, to: url)
             if settings.playsSounds { CaptureSound.play() }
             hud.show(recorder: recorder, on: screen, framing: area)
+        } catch is CancellationError {
+            // A stop request during recorder startup is an expected cancellation, not an error.
+            return
         } catch {
             Log.capture.error("Recording couldn't start: \(error.localizedDescription, privacy: .public)")
             ErrorPresenter.present(error)
@@ -182,13 +185,31 @@ final class RecordingCoordinator {
             if settings.playsSounds { CaptureSound.play() }
             Task {
                 // Clean the file before it's copied or shown, so nothing hands out the original.
-                if settings.stripsVideoMetadata { await VideoMetadata.removeAll(from: url) }
+                if settings.stripsVideoMetadata {
+                    do {
+                        try await VideoMetadata.removeAll(from: url)
+                    } catch {
+                        Log.capture.error("Couldn't secure a recording's metadata: \(error.localizedDescription, privacy: .public)")
+                        ErrorPresenter.present(error, recovery: String(localized: "The recording remains in its save folder. retrace did not copy it or open it in Quick Access. Review the file before sharing."))
+                        return
+                    }
+                }
                 if settings.copiesToClipboard { clipboard.copyFile(at: url) }
                 guard settings.showsQuickAccess else {
                     toasts.show(.init(kind: .recordingSaved, symbolName: "record.circle", title: String(localized: "Recording saved"), detail: url.lastPathComponent, actions: .forMovie(at: url, clipboard: clipboard)))
                     return
                 }
-                guard let poster = await Self.posterFrame(for: url) else { return }
+                guard let poster = await Self.posterFrame(for: url) else {
+                    Log.capture.error("Recording was saved, but its preview frame couldn't be created")
+                    toasts.show(.init(
+                        kind: .recordingSaved,
+                        symbolName: "record.circle",
+                        title: String(localized: "Recording saved"),
+                        detail: url.lastPathComponent,
+                        actions: .forMovie(at: url, clipboard: clipboard)
+                    ))
+                    return
+                }
                 var capture = CapturedImage(image: poster, scale: 2, date: .now)
                 capture.fileURL = url
                 capture.isVideo = true
