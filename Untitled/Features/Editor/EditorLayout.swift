@@ -157,11 +157,19 @@ final class InspectorWindowController: NSObject, NSWindowDelegate {
     func show(
         document: EditorDocument,
         near point: NSPoint?,
+        extractedText: String?,
+        onCopyText: @escaping (String) -> Void,
+        onCopyImage: @escaping () -> Void,
+        imageTransfer: @escaping () -> EditorImageTransfer,
         onLiftSubject: @escaping () -> Void,
         isLiftingSubject: Bool
     ) {
         let panel = panel ?? makePanel(
             document: document,
+            extractedText: extractedText,
+            onCopyText: onCopyText,
+            onCopyImage: onCopyImage,
+            imageTransfer: imageTransfer,
             onLiftSubject: onLiftSubject,
             isLiftingSubject: isLiftingSubject
         )
@@ -169,6 +177,10 @@ final class InspectorWindowController: NSObject, NSWindowDelegate {
         panel.contentView = NSHostingView(rootView: EditorInspector(
             document: document,
             chrome: .window,
+            extractedText: extractedText,
+            onCopyText: onCopyText,
+            onCopyImage: onCopyImage,
+            imageTransfer: imageTransfer,
             onLiftSubject: onLiftSubject,
             isLiftingSubject: isLiftingSubject
         ))
@@ -192,6 +204,10 @@ final class InspectorWindowController: NSObject, NSWindowDelegate {
 
     private func makePanel(
         document: EditorDocument,
+        extractedText: String?,
+        onCopyText: @escaping (String) -> Void,
+        onCopyImage: @escaping () -> Void,
+        imageTransfer: @escaping () -> EditorImageTransfer,
         onLiftSubject: @escaping () -> Void,
         isLiftingSubject: Bool
     ) -> NSPanel {
@@ -211,6 +227,10 @@ final class InspectorWindowController: NSObject, NSWindowDelegate {
         panel.contentView = NSHostingView(rootView: EditorInspector(
             document: document,
             chrome: .window,
+            extractedText: extractedText,
+            onCopyText: onCopyText,
+            onCopyImage: onCopyImage,
+            imageTransfer: imageTransfer,
             onLiftSubject: onLiftSubject,
             isLiftingSubject: isLiftingSubject
         ))

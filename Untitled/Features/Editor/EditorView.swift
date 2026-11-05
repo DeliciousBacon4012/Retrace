@@ -24,6 +24,7 @@ struct EditorView: View {
     @State private var notice: EditorNotice?
     @State private var isReadingText = false
     @State private var isLiftingSubject = false
+    @State private var extractedText: String?
     @FocusState private var isCanvasFocused: Bool
 
     /// Small enough for a small screenshot, and wide enough that the toolbar keeps every tool
@@ -60,6 +61,10 @@ struct EditorView: View {
                 EditorInspector(
                     document: document,
                     chrome: .panel(grip: grip, maxHeight: contentSize.height - origin.y - Design.spacingL),
+                    extractedText: extractedText,
+                    onCopyText: actions.copyText,
+                    onCopyImage: actions.copy,
+                    imageTransfer: { EditorImageTransfer(image: actions.render()) },
                     onLiftSubject: liftSubject,
                     isLiftingSubject: isLiftingSubject
                 )
@@ -88,6 +93,7 @@ struct EditorView: View {
         .onChange(of: showsInspector, initial: true) { syncInspectorWindow(near: nil) }
         .onChange(of: inspectorPlacement) { syncInspectorWindow(near: nil) }
         .onChange(of: isLiftingSubject) { syncInspectorWindow(near: nil) }
+        .onChange(of: extractedText) { syncInspectorWindow(near: nil) }
         .onDisappear { inspectorWindow.close() }
         .background { shortcutButtons }
         .frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height)
@@ -223,6 +229,10 @@ struct EditorView: View {
             inspectorWindow.show(
                 document: document,
                 near: point,
+                extractedText: extractedText,
+                onCopyText: actions.copyText,
+                onCopyImage: actions.copy,
+                imageTransfer: { EditorImageTransfer(image: actions.render()) },
                 onLiftSubject: liftSubject,
                 isLiftingSubject: isLiftingSubject
             )
@@ -396,6 +406,7 @@ struct EditorView: View {
     /// the clipboard. Marks count: text under a redaction is never read.
     private func copyText(in area: CGRect? = nil) async {
         guard !isReadingText, let rendered = actions.render() else { return }
+        extractedText = nil
         var image = rendered
         if let area {
             guard let region = Self.region(area, croppedTo: document.cropRect, in: rendered),
@@ -415,6 +426,7 @@ struct EditorView: View {
                 notice = EditorNotice(symbolName: "text.magnifyingglass", title: String(localized: "No text found"))
                 return
             }
+            extractedText = text
             actions.copyText(text)
             let count = content.lines.count
             let title = switch count {

@@ -16,6 +16,10 @@ struct EditorInspector: View {
 
     @Bindable var document: EditorDocument
     let chrome: Chrome
+    let extractedText: String?
+    let onCopyText: (String) -> Void
+    let onCopyImage: () -> Void
+    let imageTransfer: () -> EditorImageTransfer
     let onLiftSubject: () -> Void
     let isLiftingSubject: Bool
 
@@ -72,8 +76,19 @@ struct EditorInspector: View {
             case .select:
                 InspectorGroup {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Click a mark to change it. Drag its handles to reshape it, or drag the mark to move it. Drag across marks, Shift-click, or press ⌘A to select several.")
-                            .foregroundStyle(.secondary)
+                        if let extractedText {
+                            Button("Copy or Drag Text", systemImage: "text.viewfinder") {
+                                onCopyText(extractedText)
+                            }
+                            .draggable(extractedText)
+                            .help("Copy the last OCR result again, or drag it to another app.")
+                        }
+
+                        Button("Copy or Drag Image", systemImage: "photo") {
+                            onCopyImage()
+                        }
+                        .draggable(imageTransfer())
+                        .help("Copy the edited image, or drag a redaction-safe PNG to another app.")
 
                         Button(action: onLiftSubject) {
                             if isLiftingSubject {
@@ -88,6 +103,9 @@ struct EditorInspector: View {
                         .buttonStyle(.glass)
                         .disabled(isLiftingSubject)
                         .help("Copy the foreground as a transparent image using on-device Vision. Existing redactions are included.")
+
+                        Text("Select a mark to edit it. Drag the mark or its handles to adjust it. Shift-click or ⌘A selects several.")
+                            .foregroundStyle(.secondary)
                     }
                 }
             case .crop:
@@ -705,6 +723,10 @@ private enum EditorInspectorPreview {
                     grip: InspectorGrip(placement: .constant(.right), onDrag: { _ in }, onDrop: { _ in }),
                     maxHeight: maxHeight
                 ),
+                extractedText: nil,
+                onCopyText: { _ in },
+                onCopyImage: {},
+                imageTransfer: { EditorImageTransfer(image: nil) },
                 onLiftSubject: {},
                 isLiftingSubject: false
             )
