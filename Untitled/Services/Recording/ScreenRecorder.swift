@@ -40,14 +40,44 @@ final class ScreenRecorder: NSObject {
     @ObservationIgnored private var outputURL: URL?
     /// Identifies the current recording, so late callbacks from an earlier one are ignored.
     @ObservationIgnored private var recordingID: UUID?
+    @ObservationIgnored private var stopRequested = false
+    @ObservationIgnored private var streamDidStop = false
+    @ObservationIgnored private var stopTask: Task<Void, Never>?
+    @ObservationIgnored private var outputCompletion: OutputCompletion?
+    @ObservationIgnored private var outputCompletionContinuation: CheckedContinuation<OutputCompletion, Never>?
+    @ObservationIgnored private var finalizationTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored private var stopCaptureFinished = false
+    @ObservationIgnored private var stopCaptureError: (any Error)?
+
+    private enum OutputCompletion {
+        case finished
+        case failed(any Error)
+        case timedOut
+    }
+
+    private static let finalizationTimeout: Duration = .seconds(60)
 
     var isActive: Bool { state != .idle }
 
     func start(_ target: RecordingTarget, options: RecordingOptions, to url: URL) async throws {
         guard state == .idle else { return }
+        let id = UUID()
+        recordingID = id
+        outputURL = url
+        stopRequested = false
+        streamDidStop = false
+        stopTask = nil
+        outputCompletion = nil
+        outputCompletionContinuation = nil
+        finalizationTimeoutTask = nil
+        stopCaptureFinished = false
+        stopCaptureError = nil
         state = .starting
         do {
+            try Task.checkCancellation()
             let (filter, configuration) = try await Self.makeStream(for: target, options: options)
+            try Task.checkCancellation()
+            try checkStartIsCurrent(id)
 
             let outputConfiguration = SCRecordingOutputConfiguration()
             outputConfiguration.outputURL = url
@@ -57,43 +87,226 @@ final class ScreenRecorder: NSObject {
 
             let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
             try stream.addRecordingOutput(output)
-            try await stream.startCapture()
-
             self.stream = stream
             recordingOutput = output
-            outputURL = url
-            recordingID = UUID()
+            try checkStartIsCurrent(id)
+            // Keep ScreenCaptureKit startup alive long enough to honor a stop/cancellation
+            // request immediately after the framework reports whether startup succeeded.
+            let captureStart = Task { try await stream.startCapture() }
+            try await captureStart.value
+
+            guard recordingID == id else { throw CancellationError() }
+            if RecordingStartupPolicy.shouldStopAfterStart(
+                stopRequested: stopRequested,
+                taskCancelled: Task.isCancelled,
+                outputAlreadyCompleted: outputCompletion != nil
+            ) {
+                state = .finishing
+                await stopAndFinalize(id: id, stream: stream, output: output, url: url, stopStream: !streamDidStop)
+                throw CancellationError()
+            }
             state = .recording(since: .now)
             Log.capture.info("Recording started")
         } catch {
-            state = .idle
+            let shouldSuppressError = stopRequested || error is CancellationError || Task.isCancelled
+            if recordingID == id {
+                cleanupFailedStart(id: id, url: url)
+            }
+            if shouldSuppressError {
+                throw CancellationError()
+            }
             throw error
         }
     }
 
     /// Stops recording. The finished file arrives through `onFinish`.
     func stop() {
-        guard case .recording = state, let stream, let id = recordingID else { return }
-        state = .finishing
-        Task {
-            do {
-                try await stream.stopCapture()
-            } catch {
-                Log.capture.error("Stopping the stream failed: \(error.localizedDescription, privacy: .public)")
+        guard let id = recordingID else { return }
+        switch state {
+        case .idle, .finishing:
+            return
+        case .starting:
+            stopRequested = true
+            // If startCapture is already running, start() performs the stop as soon as it returns.
+            return
+        case .recording:
+            guard let stream, let output = recordingOutput, let url = outputURL else { return }
+            state = .finishing
+            stopTask = Task { @MainActor [weak self] in
+                await self?.stopAndFinalize(id: id, stream: stream, output: output, url: url, stopStream: true)
             }
-            // Give the recording output a moment to report; then finish with whatever was written.
-            try? await Task.sleep(for: .seconds(4))
-            finish(id: id, error: nil)
         }
     }
 
-    private func finish(id: UUID?, error: (any Error)?) {
-        guard let id, id == recordingID else { return }
+    private func checkStartIsCurrent(_ id: UUID) throws {
+        guard recordingID == id,
+              !RecordingStartupPolicy.shouldCancelBeforeStartCapture(
+                  stopRequested: stopRequested,
+                  taskCancelled: Task.isCancelled
+              ) else {
+            throw CancellationError()
+        }
+    }
+
+    private func stopAndFinalize(
+        id: UUID,
+        stream: SCStream,
+        output: SCRecordingOutput,
+        url: URL,
+        stopStream: Bool
+    ) async {
+        guard recordingID == id else { return }
+
+        stopCaptureFinished = !stopStream
+        stopCaptureError = nil
+        let completionTask = Task { @MainActor [weak self] in
+            await self?.waitForFinalization(id: id) ?? .timedOut
+        }
+        if stopStream {
+            Task { @MainActor [weak self] in
+                do {
+                    try await stream.stopCapture()
+                    self?.completeStopCapture(id: id, error: nil, url: url)
+                } catch {
+                    Log.capture.error("Stopping the stream failed: \(error.localizedDescription, privacy: .public)")
+                    self?.completeStopCapture(id: id, error: error, url: url)
+                }
+            }
+        }
+        let completion = await completionTask.value
+        switch completion {
+        case .finished:
+            let exists = FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
+            let byteCount = (try? FileManager.default.attributesOfItem(atPath: url.path(percentEncoded: false)))?[.size] as? NSNumber
+            guard RecordingOutputValidation.isUsable(
+                fileExists: exists,
+                byteCount: byteCount?.intValue,
+                duration: output.recordedDuration
+            ) else {
+                removePartialFile(at: url)
+                finish(id: id, error: RecordingError.nothingRecorded)
+                return
+            }
+            finish(id: id, error: nil)
+        case .failed(let error):
+            removePartialFile(at: url)
+            finish(id: id, error: error)
+        case .timedOut:
+            // If stopCapture itself has not returned, ScreenCaptureKit may still own the file.
+            // The stop task removes it later if the stream eventually stops.
+            if stopCaptureFinished { removePartialFile(at: url) }
+            finish(id: id, error: RecordingError.finalizationTimedOut)
+        }
+    }
+
+    private func waitForFinalization(id: UUID) async -> OutputCompletion {
+        guard recordingID == id else { return .failed(CancellationError()) }
+        return await withCheckedContinuation { continuation in
+            // Latch the delegate event too, because it may arrive before this waiter runs.
+            outputCompletionContinuation = continuation
+            finalizationTimeoutTask = Task { @MainActor [weak self] in
+                do {
+                    try await Task.sleep(for: Self.finalizationTimeout)
+                } catch {
+                    return
+                }
+                self?.timeOutFinalization(id: id)
+            }
+            resumeFinalizationIfReady(id: id)
+        }
+    }
+
+    private func completeOutput(id: UUID, with completion: OutputCompletion) {
+        guard recordingID == id, outputCompletion == nil else { return }
+        outputCompletion = completion
+        resumeFinalizationIfReady(id: id)
+    }
+
+    private func completeStopCapture(id: UUID, error: (any Error)?, url: URL) {
+        guard recordingID == id else {
+            if error == nil, outputURL != url {
+                // The recording timed out but the stream eventually stopped. Remove its
+                // incomplete file unless a newer session now owns that path.
+                removePartialFile(at: url)
+            }
+            return
+        }
+        guard !stopCaptureFinished else { return }
+        stopCaptureFinished = true
+        stopCaptureError = error
+        resumeFinalizationIfReady(id: id)
+    }
+
+    private func timeOutFinalization(id: UUID) {
+        guard recordingID == id, outputCompletionContinuation != nil else { return }
+        outputCompletion = .timedOut
+        finalizationTimeoutTask = nil
+        let continuation = outputCompletionContinuation
+        outputCompletionContinuation = nil
+        continuation?.resume(returning: .timedOut)
+    }
+
+    private func resumeFinalizationIfReady(id: UUID) {
+        guard recordingID == id, let outputCompletion else { return }
+        let result: OutputCompletion
+        if case .timedOut = outputCompletion {
+            result = .timedOut
+        } else {
+            guard stopCaptureFinished else { return }
+            if let stopCaptureError {
+                result = .failed(stopCaptureError)
+            } else {
+                result = outputCompletion
+            }
+        }
+        finalizationTimeoutTask?.cancel()
+        finalizationTimeoutTask = nil
+        let continuation = outputCompletionContinuation
+        outputCompletionContinuation = nil
+        continuation?.resume(returning: result)
+    }
+
+    private func cleanupFailedStart(id: UUID, url: URL) {
+        guard recordingID == id else { return }
+        let outputWasAttached = recordingOutput != nil
+        finalizationTimeoutTask?.cancel()
+        finalizationTimeoutTask = nil
+        outputCompletionContinuation?.resume(returning: .failed(CancellationError()))
+        outputCompletionContinuation = nil
+        self.stream = nil
+        recordingOutput = nil
+        outputURL = nil
         recordingID = nil
+        stopRequested = false
+        streamDidStop = false
+        stopTask = nil
+        outputCompletion = nil
+        stopCaptureFinished = false
+        stopCaptureError = nil
+        state = .idle
+        if outputWasAttached { removePartialFile(at: url) }
+    }
+
+    private func removePartialFile(at url: URL) {
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    private func finish(id: UUID, error: (any Error)?) {
+        guard id == recordingID else { return }
+        finalizationTimeoutTask?.cancel()
+        finalizationTimeoutTask = nil
+        outputCompletionContinuation = nil
         let url = outputURL
+        recordingID = nil
         stream = nil
         recordingOutput = nil
         outputURL = nil
+        stopRequested = false
+        streamDidStop = false
+        stopTask = nil
+        outputCompletion = nil
+        stopCaptureFinished = false
+        stopCaptureError = nil
         state = .idle
 
         if let error {
@@ -152,31 +365,90 @@ final class ScreenRecorder: NSObject {
 
 nonisolated enum RecordingError: LocalizedError {
     case nothingRecorded
+    case finalizationTimedOut
 
     var errorDescription: String? {
-        String(localized: "The recording stopped before anything was captured.")
+        switch self {
+        case .nothingRecorded:
+            String(localized: "The recording stopped before anything was captured.")
+        case .finalizationTimedOut:
+            String(localized: "The recording couldn't be finalized in time. Try recording again.")
+        }
+    }
+}
+
+/// Pure state decisions shared by the recorder and its XCTest coverage.
+nonisolated enum RecordingStartupPolicy {
+    static func shouldCancelBeforeStartCapture(stopRequested: Bool, taskCancelled: Bool) -> Bool {
+        stopRequested || taskCancelled
+    }
+
+    static func shouldStopAfterStart(
+        stopRequested: Bool,
+        taskCancelled: Bool,
+        outputAlreadyCompleted: Bool
+    ) -> Bool {
+        stopRequested || taskCancelled || outputAlreadyCompleted
+    }
+}
+
+/// Rejects missing, empty, or zero-duration movies after ScreenCaptureKit reports finalization.
+nonisolated enum RecordingOutputValidation {
+    static func isUsable(fileExists: Bool, byteCount: Int?, duration: CMTime) -> Bool {
+        fileExists
+            && (byteCount ?? 0) > 0
+            && duration.isNumeric
+            && CMTimeCompare(duration, .zero) > 0
     }
 }
 
 extension ScreenRecorder: SCRecordingOutputDelegate, SCStreamDelegate {
     nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
-        Task { @MainActor in self.finish(id: self.recordingID, error: nil) }
+        let outputID = ObjectIdentifier(recordingOutput)
+        Task { @MainActor in
+            guard self.recordingOutput.map(ObjectIdentifier.init) == outputID,
+                  let id = self.recordingID else { return }
+            self.completeOutput(id: id, with: .finished)
+            self.finalizeIfRecording(id: id)
+        }
     }
 
     nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: any Error) {
-        Task { @MainActor in self.finish(id: self.recordingID, error: error) }
+        let outputID = ObjectIdentifier(recordingOutput)
+        Task { @MainActor in
+            guard self.recordingOutput.map(ObjectIdentifier.init) == outputID,
+                  let id = self.recordingID else { return }
+            self.completeOutput(id: id, with: .failed(error))
+            self.finalizeIfRecording(id: id)
+        }
+    }
+
+    private func finalizeIfRecording(id: UUID) {
+        guard recordingID == id, case .recording = state,
+              let stream, let output = recordingOutput, let url = outputURL else { return }
+        state = .finishing
+        stopTask = Task { @MainActor [weak self] in
+            await self?.stopAndFinalize(id: id, stream: stream, output: output, url: url, stopStream: true)
+        }
     }
 
     /// Called when macOS stops the stream, such as from the screen-sharing menu bar item.
     nonisolated func stream(_ stream: SCStream, didStopWithError error: any Error) {
-        Task { @MainActor in
+        let streamID = ObjectIdentifier(stream)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
             Log.capture.info("Stream stopped by the system: \(error.localizedDescription, privacy: .public)")
-            let id = self.recordingID
-            if case .recording = self.state {
-                self.state = .finishing
+            guard self.stream.map(ObjectIdentifier.init) == streamID,
+                  let id = self.recordingID,
+                  let stream = self.stream,
+                  let output = self.recordingOutput, let url = self.outputURL else { return }
+            self.stopRequested = true
+            self.streamDidStop = true
+            guard case .recording = self.state else { return }
+            self.state = .finishing
+            self.stopTask = Task { @MainActor [weak self] in
+                await self?.stopAndFinalize(id: id, stream: stream, output: output, url: url, stopStream: false)
             }
-            try? await Task.sleep(for: .seconds(2))
-            self.finish(id: id, error: nil)
         }
     }
 }
