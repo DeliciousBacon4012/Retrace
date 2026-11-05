@@ -109,8 +109,8 @@ struct LibraryView: View {
                         viewModel.contentIndexDidChange()
                     }
                     .onAppear {
-                        viewModel.contentMatcher = { [index = dependencies.contentIndex] url, query in
-                            index.matches(url, query: query)
+                        viewModel.contentSearch = { [index = dependencies.contentIndex] query in
+                            await index.search(query)
                         }
                         updateSources()
                         applyPendingFilter()
@@ -256,8 +256,9 @@ struct LibraryView: View {
 
     private func findSimilar(to file: LibraryItem) {
         let urls = dependencies.library.items.filter { $0.kind == .image }.map(\.url)
-        withAnimation(.panel) {
-            viewModel.similarResults = dependencies.contentIndex.similar(to: file.url, among: urls)
+        Task {
+            let results = await dependencies.contentIndex.similar(to: file.url, among: urls)
+            withAnimation(.panel) { viewModel.similarResults = results }
         }
     }
 
@@ -296,7 +297,7 @@ struct LibraryView: View {
         case .file(let file):
             LibraryCell(
                 item: file,
-                original: dependencies.versions.original(for: file.url),
+                original: dependencies.versions.recordedOriginal(for: file.url),
                 isSelected: viewModel.selection.contains(item.id),
                 openInEditor: { dependencies.editor.open(fileAt: $0) },
                 showQuickLook: { viewModel.previewURL = $0 }
@@ -391,7 +392,7 @@ struct LibraryView: View {
                 Button("Find Similar") { findSimilar(to: file) }
                     .disabled(dependencies.contentIndex.entry(for: file.url)?.featurePrint == nil)
             }
-            if dependencies.versions.hasOriginal(for: file.url) {
+            if dependencies.versions.recordedOriginal(for: file.url) != nil {
                 Button("Restore Original") { restoreOriginal(of: file.url) }
                     .disabled(files.count > 1)
             }

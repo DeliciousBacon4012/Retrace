@@ -12,6 +12,8 @@ final class EditorPresenter {
     @ObservationIgnored private let textHistory: TextHistory?
     @ObservationIgnored private let versions: CaptureVersions?
     @ObservationIgnored private var controllers: [EditorWindowController] = []
+    /// Files being decoded, so a double-click can't open one twice.
+    @ObservationIgnored private var opening: Set<URL> = []
     @ObservationIgnored private var keyWindowObserver: (any NSObjectProtocol)?
 
     /// The editor whose window is key, for the menu bar's editor commands. `nil` while any
@@ -54,33 +56,52 @@ final class EditorPresenter {
         ))
     }
 
-    /// Opens a saved image. Shows an alert if the file isn't a readable image.
+    /// Opens a saved image, decoding it in the background so the app keeps moving. Shows an
+    /// alert if the file isn't a readable image.
     func open(fileAt url: URL) {
-        if let existing = controllers.first(where: { $0.editorDocument.fileURL?.standardizedFileURL == url.standardizedFileURL }) {
+        let path = url.standardizedFileURL
+        if let existing = controllers.first(where: { $0.editorDocument.fileURL?.standardizedFileURL == path }) {
             existing.window?.makeKeyAndOrderFront(nil)
             NSApp.activate()
             return
         }
-        guard let (image, scale) = Self.loadImage(at: url) else { return }
-        present(EditorDocument(image: image, scale: scale, fileURL: url))
+        guard opening.insert(path).inserted else { return }
+        Task {
+            let loaded = await Self.loadImage(at: url)
+            opening.remove(path)
+            guard let (image, scale) = loaded else {
+                Self.presentUnreadable()
+                return
+            }
+            present(EditorDocument(image: image, scale: scale, fileURL: url))
+        }
     }
 
     /// Opens a copy of an image as a new, unsaved capture, leaving the file itself alone.
     func openCopy(ofImageAt url: URL) {
-        guard let (image, scale) = Self.loadImage(at: url) else { return }
-        present(EditorDocument(image: image, scale: scale, fileURL: nil))
+        Task {
+            guard let (image, scale) = await Self.loadImage(at: url) else {
+                Self.presentUnreadable()
+                return
+            }
+            present(EditorDocument(image: image, scale: scale, fileURL: nil))
+        }
     }
 
-    private static func loadImage(at url: URL) -> (CGImage, CGFloat)? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
-        else {
-            ErrorPresenter.present(String(localized: "This file can't be opened in the editor."), recovery: String(localized: "Only images can be annotated."))
-            return nil
-        }
-        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
-        let dpi = properties?[kCGImagePropertyDPIWidth] as? Double ?? 144
-        return (image, max(dpi / 72, 1))
+    private static func presentUnreadable() {
+        ErrorPresenter.present(String(localized: "This file can't be opened in the editor."), recovery: String(localized: "Only images can be annotated."))
+    }
+
+    nonisolated private static func loadImage(at url: URL) async -> (CGImage, CGFloat)? {
+        await Task.detached(priority: .userInitiated) {
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  // Decodes now, here, rather than during the window's first draw.
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
+            else { return nil }
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+            let dpi = properties?[kCGImagePropertyDPIWidth] as? Double ?? 144
+            return (image, max(dpi / 72, 1))
+        }.value
     }
 
     private func present(_ document: EditorDocument) {

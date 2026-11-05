@@ -63,6 +63,13 @@ final class CaptureVersions {
         original(for: url) != nil
     }
 
+    /// Whether an original is on record, without touching the disk, for drawing the Library.
+    /// Anything that acts on the file goes through `original(for:)`, which checks it first.
+    func recordedOriginal(for url: URL) -> URL? {
+        guard let folder, let entry = entries[Self.key(url)], Self.isSafeOriginalFilename(entry.file) else { return nil }
+        return folder.appending(path: entry.file)
+    }
+
     /// Where the original is kept, if this file was edited.
     func original(for url: URL) -> URL? {
         guard let folder, let entry = entries[Self.key(url)], Self.isSafeOriginalFilename(entry.file) else { return nil }

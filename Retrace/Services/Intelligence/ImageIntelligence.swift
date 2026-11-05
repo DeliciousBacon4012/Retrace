@@ -58,7 +58,8 @@ nonisolated struct ImageLabel: Codable, Hashable, Identifiable, Sendable {
 
 /// Apple's on-device image understanding. Nothing here leaves the Mac.
 nonisolated enum ImageIntelligence {
-    private static let queue = DispatchQueue(label: "Retrace.ImageIntelligence", qos: .utility)
+    private static let queue = DispatchQueue(label: "Retrace.ImageIntelligence", qos: .userInitiated)
+    private static let indexQueue = DispatchQueue(label: "Retrace.ImageIntelligence.index", qos: .background)
 
     /// What's in the picture, most certain first. Vision's list has over a thousand categories;
     /// a category only counts when Vision would rarely be wrong to report it.
@@ -135,6 +136,37 @@ nonisolated enum ImageIntelligence {
               padded.width < bounds.width * 0.98 || padded.height < bounds.height * 0.98
         else { return nil }
         return padded
+    }
+
+    /// Everything the Library's search needs from one file, in a single pass on a queue of its
+    /// own at background priority, so it never delays Copy Text or anything else you asked for.
+    static func indexEntry(for item: LibraryItem) async -> LibraryContentIndex.Entry {
+        await withCheckedContinuation { continuation in
+            indexQueue.async {
+                continuation.resume(returning: makeIndexEntry(for: item))
+            }
+        }
+    }
+
+    private static func makeIndexEntry(for item: LibraryItem) -> LibraryContentIndex.Entry {
+        var entry = LibraryContentIndex.Entry(modified: item.modified, labels: [], text: "", featurePrint: nil)
+        guard let image = downsampledImage(at: item.url) else { return entry }
+        let classify = VNClassifyImageRequest()
+        let print = VNGenerateImageFeaturePrintRequest()
+        let text = VNRecognizeTextRequest()
+        text.recognitionLevel = .accurate
+        text.usesLanguageCorrection = true
+        text.automaticallyDetectsLanguage = true
+        guard (try? VNImageRequestHandler(cgImage: image, options: [:]).perform([classify, print, text])) != nil else { return entry }
+        entry.labels = (classify.results ?? [])
+            .filter { $0.hasMinimumPrecision(0.7, forRecall: 0.05) }
+            .prefix(8)
+            .map { ImageLabel(name: $0.identifier, confidence: $0.confidence) }
+        entry.text = (text.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+        if let observation = print.results?.first {
+            entry.featurePrint = try? NSKeyedArchiver.archivedData(withRootObject: observation, requiringSecureCoding: true)
+        }
+        return entry
     }
 
     /// Reads a file at a reduced size, which is all recognition needs and far less memory.

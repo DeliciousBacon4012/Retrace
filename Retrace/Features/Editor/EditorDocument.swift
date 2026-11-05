@@ -238,6 +238,8 @@ final class EditorDocument {
     /// Blurred and pixelated copies of the screenshot, each as big as the screenshot itself
     /// (about 60 MB at 5K). Only a few are kept: see `keepRedactionLayer`.
     @ObservationIgnored private var redactionLayers: [String: CGImage] = [:]
+    @ObservationIgnored private var exportLayers: [String: CGImage] = [:]
+    @ObservationIgnored private var pendingExportLayers: Set<String> = []
     /// Layer keys, least recently used first.
     @ObservationIgnored private var redactionLayerUse: [String] = []
     @ObservationIgnored private var pendingRedactions: Set<String> = []
@@ -841,6 +843,7 @@ final class EditorDocument {
             return cached
         }
         prepareRedaction(redaction, levels: [level])
+        prepareExportLayer(redaction, level: level)
         let nearest = (0...10).sorted { abs($0 - level) < abs($1 - level) }
         return nearest.lazy.compactMap { self.redactionLayers[Self.key(redaction, $0)] }.first
     }
@@ -852,7 +855,27 @@ final class EditorDocument {
         let level = Self.level(for: strength)
         // Fast previews are made from a smaller copy, so an export never reuses one.
         if EditorBlurQuality.current == .quality, let cached = redactionLayers[Self.key(redaction, level)] { return cached }
+        if let prepared = exportLayers[Self.key(redaction, level)] { return prepared }
         return Self.redacted(image, redaction: redaction, level: Double(level) / 10, scale: scale, quality: .quality)
+    }
+
+    /// In Fast mode, what's on screen isn't what gets saved. This keeps the full-quality layer
+    /// ready, so saving doesn't have to stop and make it.
+    private func prepareExportLayer(_ redaction: Redaction, level: Int) {
+        guard EditorBlurQuality.current == .fast, redaction == .blur else { return }
+        let key = Self.key(redaction, level)
+        guard exportLayers[key] == nil, pendingExportLayers.insert(key).inserted else { return }
+        let image = image
+        let scale = scale
+        Task { [weak self] in
+            let layer = await Task.detached(priority: .utility) {
+                Self.redacted(image, redaction: redaction, level: Double(level) / 10, scale: scale, quality: .quality)
+            }.value
+            guard let self else { return }
+            self.pendingExportLayers.remove(key)
+            // Only the newest stays; older strengths can be made again if a mark goes back to them.
+            self.exportLayers = layer.map { [key: $0] } ?? [:]
+        }
     }
 
     /// Makes the current strength and its two neighbours in the background, so nudging the
@@ -876,6 +899,7 @@ final class EditorDocument {
         if let lead = annotations.last(where: { $0.tool == .spotlight }), lead.style.blur > 0.01 {
             inUse.insert(Self.key(.blur, Self.level(for: lead.style.blur)))
         }
+        exportLayers = [:]
         for key in redactionLayers.keys where !inUse.contains(key) {
             redactionLayers[key] = nil
         }

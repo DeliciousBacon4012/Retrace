@@ -41,7 +41,7 @@ struct FileThumbnail: View {
                 return
             }
             #endif
-            let loaded = await ThumbnailCache.shared.thumbnail(for: url, size: maximumSize, scale: displayScale)
+            let loaded = await ThumbnailCache.shared.thumbnail(for: url, version: version, size: maximumSize, scale: displayScale)
             guard !Task.isCancelled else { return }
             image = loaded
         }
@@ -74,8 +74,16 @@ final class ThumbnailCache {
         cache.removeAllObjects()
     }
 
-    func thumbnail(for url: URL, size: CGSize, scale: CGFloat) async -> NSImage? {
-        let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+    func thumbnail(for url: URL, version: Date? = nil, size: CGSize, scale: CGFloat) async -> NSImage? {
+        // Callers usually know the date already. Reading it from disk is kept off the main thread.
+        let modified: Date?
+        if let version {
+            modified = version
+        } else {
+            modified = await Task.detached(priority: .userInitiated) {
+                (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            }.value
+        }
         let key = "\(url.path(percentEncoded: false))|\(modified?.timeIntervalSince1970 ?? 0)|\(Int(size.width))x\(Int(size.height))@\(scale)" as NSString
         if let cached = cache.object(forKey: key) {
             return cached

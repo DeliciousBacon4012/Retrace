@@ -70,6 +70,7 @@ final class ClipboardHistory {
     @ObservationIgnored private let settings: SettingsStore
     @ObservationIgnored private let clipboard: any ClipboardWriting
     @ObservationIgnored private let folder: URL?
+    @ObservationIgnored private let saveQueue = DispatchQueue(label: "Retrace.ClipboardHistory.save", qos: .utility)
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var lastChangeCount = NSPasteboard.general.changeCount
     @ObservationIgnored private var historyGeneration = ClipboardHistoryGeneration()
@@ -234,8 +235,16 @@ final class ClipboardHistory {
         case .text(let text):
             clipboard.copy(text: text)
         case .image:
-            guard let url = imageURL(for: entry), let image = NSImage(contentsOf: url) else { return }
-            clipboard.copy(image)
+            guard let url = imageURL(for: entry) else { return }
+            Task {
+                let image = await Task.detached(priority: .userInitiated) { () -> NSImage? in
+                    guard let image = NSImage(contentsOf: url) else { return nil }
+                    // Decode here, so handing it to the pasteboard doesn't.
+                    _ = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                    return image
+                }.value
+                if let image { clipboard.copy(image) }
+            }
         }
     }
 
@@ -325,11 +334,16 @@ final class ClipboardHistory {
 
     private func save() {
         guard let indexURL, let folder else { return }
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try JSONEncoder().encode(entries).write(to: indexURL, options: .atomic)
-        } catch {
-            log.error("Saving clipboard history failed: \(error.localizedDescription, privacy: .public)")
+        let entries = entries
+        let log = log
+        // In order, off the main thread, since a long history can take a while to encode.
+        saveQueue.async {
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try JSONEncoder().encode(entries).write(to: indexURL, options: .atomic)
+            } catch {
+                log.error("Saving clipboard history failed: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 

@@ -14,6 +14,8 @@ Run on macOS 27 with an unsigned development build, which has no Screen Recordin
 
 All unit tests pass, including the move from the old Untitled data locations using temporary folders.
 
+Main-thread stalls, measured with the debug hang detector on 2026-11-05: none over 100 ms while switching tabs, scrolling, drag-selecting, indexing the Library in the background, or drawing marks on, blurring, and copying a 5120 × 2880 image. Launch had one stall of about 250 ms. Window resizing, real captures, and recordings weren't measured.
+
 ## Needs a person with a trackpad and a signed build
 
 - First launch of the signed app: settings, clipboard history, and captures carried over from Untitled

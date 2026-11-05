@@ -66,9 +66,16 @@ final class PinController {
 
     /// Pins a saved image, at the size it was saved for.
     func pin(fileAt url: URL) {
-        guard let image = NSImage(contentsOf: url), let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
-        let scale = image.size.width > 0 ? max(CGFloat(cgImage.width) / image.size.width, 1) : 1
-        pin(CapturedImage(image: cgImage, scale: scale, date: .now, fileURL: url))
+        Task {
+            let loaded = await Task.detached(priority: .userInitiated) { () -> (CGImage, CGFloat)? in
+                guard let image = NSImage(contentsOf: url),
+                      let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                else { return nil }
+                return (cgImage, image.size.width > 0 ? max(CGFloat(cgImage.width) / image.size.width, 1) : 1)
+            }.value
+            guard let (cgImage, scale) = loaded else { return }
+            pin(CapturedImage(image: cgImage, scale: scale, date: .now, fileURL: url))
+        }
     }
 
     private func close(_ panel: PinPanel) {

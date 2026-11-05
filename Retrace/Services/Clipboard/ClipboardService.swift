@@ -17,6 +17,8 @@ protocol ClipboardWriting: AnyObject {
 }
 
 final class SystemClipboard: ClipboardWriting {
+    /// The pasteboard only holds a weak reference to whoever supplies data later.
+    private var imageProvider: AnyObject?
     /// The clipboard's change count right after this app last copied an image.
     private var imageChangeCount: Int?
     private(set) var lastWriteChangeCount: Int?
@@ -31,12 +33,13 @@ final class SystemClipboard: ClipboardWriting {
     }
 
     func copyFile(at url: URL) {
-        // One item carrying both the file and its pixels, so apps paste it once.
+        // One item carrying both the file and its pixels, so apps paste it once. The pixels are
+        // only decoded if an app actually asks for them.
         let item = NSPasteboardItem()
         item.setString(url.absoluteString, forType: .fileURL)
-        if let image = NSImage(contentsOf: url), let tiff = image.tiffRepresentation {
-            item.setData(tiff, forType: .tiff)
-        }
+        let provider = FileImageProvider(url: url)
+        item.setDataProvider(provider, forTypes: [.tiff])
+        imageProvider = provider
         write([item])
         imageChangeCount = NSPasteboard.general.changeCount
     }
@@ -70,3 +73,17 @@ final class PreviewClipboard: ClipboardWriting {
     func copy(text: String) {}
 }
 #endif
+
+/// Supplies a file's pixels to the pasteboard on demand.
+private final class FileImageProvider: NSObject, NSPasteboardItemDataProvider {
+    private let url: URL
+
+    init(url: URL) {
+        self.url = url
+    }
+
+    func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem, provideDataForType type: NSPasteboard.PasteboardType) {
+        guard type == .tiff, let tiff = NSImage(contentsOf: url)?.tiffRepresentation else { return }
+        item.setData(tiff, forType: .tiff)
+    }
+}

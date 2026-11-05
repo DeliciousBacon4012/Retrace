@@ -6,6 +6,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let launch = LaunchContext()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        HangDetector.start()
+        #endif
         dependencies.start()
         Task.detached(priority: .utility) { ReplayWriter.removeLeftovers() }
         launch.finishLaunching(opensWindowSetting: dependencies.settings.opensWindowAtLaunch)

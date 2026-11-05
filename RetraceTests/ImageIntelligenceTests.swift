@@ -49,7 +49,8 @@ final class ImageIntelligenceTests: XCTestCase {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let index = LibraryContentIndex(fileURL: folder.appending(path: "index.json"))
-        XCTAssertFalse(index.matches(folder.appending(path: "none.png"), query: "x"))
+        let found = await index.search("x")
+        XCTAssertTrue(found.isEmpty)
         index.removeAll()
         XCTAssertEqual(index.indexedCount, 0)
     }

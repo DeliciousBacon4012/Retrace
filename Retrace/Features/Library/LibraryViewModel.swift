@@ -59,7 +59,9 @@ final class LibraryViewModel {
 
     var searchText = "" {
         didSet {
-            if searchText != oldValue { refreshVisibleItems() }
+            guard searchText != oldValue else { return }
+            refreshVisibleItems()
+            runContentSearch()
         }
     }
     var selectedCategories = Set(Category.allCases) {
@@ -69,7 +71,11 @@ final class LibraryViewModel {
         didSet { if sortOrder != oldValue { refreshVisibleItems() } }
     }
     /// Set by the Library so search can look inside images as well as at file names.
-    @ObservationIgnored var contentMatcher: ((URL, String) -> Bool)?
+    @ObservationIgnored var contentSearch: ((String) async -> Set<String>)?
+    /// Paths matching the current search by what's inside them. They arrive just after file-name
+    /// matches, so typing never waits for them.
+    @ObservationIgnored private var contentMatches: Set<String> = []
+    @ObservationIgnored private var contentSearchTask: Task<Void, Never>?
     /// When set, the Library shows only these files, in this order.
     var similarResults: [URL]? {
         didSet { if similarResults != oldValue { refreshVisibleItems() } }
@@ -127,7 +133,7 @@ final class LibraryViewModel {
                 guard matchesCategory else { return false }
                 return query.isEmpty
                     || file.name.localizedStandardContains(query)
-                    || contentMatcher?(file.url, query) == true
+                    || contentMatches.contains(file.url.standardizedFileURL.path)
             case .text(let snippet):
                 guard selectedCategories.contains(.capturedText) else { return false }
                 return query.isEmpty || snippet.text.localizedStandardContains(query)
@@ -147,7 +153,28 @@ final class LibraryViewModel {
 
     /// New information about what's inside images can change a search's results.
     func contentIndexDidChange() {
-        if !searchText.trimmingCharacters(in: .whitespaces).isEmpty { refreshVisibleItems() }
+        runContentSearch()
+    }
+
+    private func runContentSearch() {
+        contentSearchTask?.cancel()
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty, let contentSearch else {
+            if !contentMatches.isEmpty {
+                contentMatches = []
+                refreshVisibleItems()
+            }
+            return
+        }
+        contentSearchTask = Task { [weak self] in
+            // Waits out quick typing, so only the last few letters are searched.
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            let matches = await contentSearch(query)
+            guard !Task.isCancelled, let self else { return }
+            self.contentMatches = matches
+            self.refreshVisibleItems()
+        }
     }
 
     func select(_ item: RecentItem) {
