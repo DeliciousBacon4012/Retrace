@@ -193,7 +193,7 @@ final class CaptureCoordinator {
     /// new request, so pressing Capture Text during Capture Area switches to it instead of
     /// being ignored. A capture past its selection finishes first.
     private func claimCapture() async -> Bool {
-        guard hasPermission() else { return false }
+        guard await hasPermission() else { return false }
         if isCapturing, overlay.isSelecting {
             overlay.cancel()
             // The cancelled capture unwinds on the next turn of the main actor.
@@ -254,8 +254,10 @@ final class CaptureCoordinator {
         ))
     }
 
-    private func hasPermission() -> Bool {
-        guard permissions.screenRecordingStatus == .granted else {
+    private func hasPermission() async -> Bool {
+        var allowed = permissions.screenRecordingStatus == .granted
+        if !allowed { allowed = await permissions.confirmScreenRecordingAccess() == .granted }
+        guard allowed else {
             toast.showScreenRecordingNeeded(then: String(localized: "Try again."))
             return false
         }

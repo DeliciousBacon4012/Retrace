@@ -23,7 +23,7 @@ protocol PermissionProviding: AnyObject {
 
 final class SystemPermissionService: PermissionProviding {
     var screenRecordingStatus: PermissionStatus {
-        CGPreflightScreenCaptureAccess() ? .granted : .notGranted
+        ScreenAccess.isGranted ? .granted : .notGranted
     }
 
     func requestScreenRecordingAccess() {
@@ -42,17 +42,7 @@ final class SystemPermissionService: PermissionProviding {
     }
 
     func confirmScreenRecordingAccess() async -> PermissionStatus {
-        if CGPreflightScreenCaptureAccess() {
-            return .granted
-        }
-        do {
-            let content = try await SCShareableContent.current
-            Log.permissions.info("ScreenCaptureKit sees \(content.displays.count, privacy: .public) displays")
-            return content.displays.isEmpty ? .notGranted : .granted
-        } catch {
-            Log.permissions.info("ScreenCaptureKit check failed: \(error.localizedDescription, privacy: .public)")
-            return .notGranted
-        }
+        await ScreenAccess.confirm() ? .granted : .notGranted
     }
 }
 

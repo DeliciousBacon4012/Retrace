@@ -51,7 +51,7 @@ final class ReplayBuffer: NSObject {
     func start(seconds: Int, sizeLimitGB: Int, framesPerSecond: Int, codec: VideoCodec, quality: VideoQuality = .balanced, encoder: VideoEncoderChoice = .automatic, usesFullResolution: Bool = false, color: VideoColor = .automatic, queueDepth: Int = 6, includesAudio: Bool) async throws {
         guard state == .off else { return }
         let token = generation.begin()
-        guard CGPreflightScreenCaptureAccess() else { throw CaptureError.permissionDenied }
+        guard ScreenAccess.isGranted else { throw CaptureError.permissionDenied }
         state = .starting
         var pendingStream: SCStream?
         var pendingWriter: ReplayWriter?

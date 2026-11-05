@@ -328,7 +328,7 @@ final class ScreenRecorder: NSObject {
     }
 
     private static func makeStream(for target: RecordingTarget, options: RecordingOptions) async throws -> (SCContentFilter, SCStreamConfiguration) {
-        guard CGPreflightScreenCaptureAccess() else { throw CaptureError.permissionDenied }
+        guard ScreenAccess.isGranted else { throw CaptureError.permissionDenied }
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
 
         let configuration = SCStreamConfiguration()

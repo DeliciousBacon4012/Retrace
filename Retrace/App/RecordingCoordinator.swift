@@ -138,7 +138,9 @@ final class RecordingCoordinator {
             return
         }
         guard !isPreparing, !isFinishing else { return }
-        guard permissions.screenRecordingStatus == .granted else {
+        var allowed = permissions.screenRecordingStatus == .granted
+        if !allowed { allowed = await permissions.confirmScreenRecordingAccess() == .granted }
+        guard allowed else {
             toasts.showScreenRecordingNeeded(then: String(localized: "Try again."))
             return
         }

@@ -107,8 +107,6 @@ private struct LibraryFilterControl: View {
     @Binding var selection: Set<LibraryViewModel.Category>
     @Binding var sortOrder: LibraryViewModel.SortOrder
 
-    private var isFiltering: Bool { selection.count < LibraryViewModel.Category.allCases.count }
-
     var body: some View {
         Menu {
             Section("Show") {
@@ -134,9 +132,8 @@ private struct LibraryFilterControl: View {
                 }
             }
         } label: {
-            Label("Filter", systemImage: isFiltering ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+            Label("Filter", systemImage: "line.3.horizontal.decrease")
                 .labelStyle(.iconOnly)
-                .contentTransition(.symbolEffect(.replace))
         }
         .menuIndicator(.hidden)
         .accessibilityLabel("Filter and Sort Library")

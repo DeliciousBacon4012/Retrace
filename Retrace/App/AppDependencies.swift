@@ -140,6 +140,12 @@ final class AppDependencies {
 
     /// Call once the app has finished launching.
     func start() {
+        // If access worked before, confirm it quietly now so the app doesn't claim it's missing.
+        if !ScreenAccess.isGranted, ScreenAccess.wasConfirmedBefore {
+            Task { [weak self] in
+                if await ScreenAccess.confirm() { self?.replay.start() }
+            }
+        }
         followDockIconSetting()
         library.start()
         followSaveFolderSetting()

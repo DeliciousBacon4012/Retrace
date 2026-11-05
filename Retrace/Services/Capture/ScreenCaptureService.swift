@@ -96,7 +96,7 @@ final class ScreenCaptureKitService: ScreenCapturing {
     }
 
     private func shareableContent() async throws -> SCShareableContent {
-        guard CGPreflightScreenCaptureAccess() else {
+        guard ScreenAccess.isGranted else {
             throw CaptureError.permissionDenied
         }
         return try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)

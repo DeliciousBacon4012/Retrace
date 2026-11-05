@@ -30,11 +30,17 @@ final class ReplayCoordinator {
     }
 
     func setEnabled(_ enabled: Bool) {
-        if enabled, permissions.screenRecordingStatus != .granted {
-            toasts.showScreenRecordingNeeded(then: String(localized: "Turn the replay buffer on again."))
+        guard enabled, permissions.screenRecordingStatus != .granted else {
+            settings.replayBufferEnabled = enabled
             return
         }
-        settings.replayBufferEnabled = enabled
+        Task {
+            guard await permissions.confirmScreenRecordingAccess() == .granted else {
+                toasts.showScreenRecordingNeeded(then: String(localized: "Turn the replay buffer on again."))
+                return
+            }
+            settings.replayBufferEnabled = true
+        }
     }
 
     /// Saves the buffered clip to the save folder and shows it in Quick Access: all of it,

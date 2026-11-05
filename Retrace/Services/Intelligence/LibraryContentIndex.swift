@@ -46,9 +46,10 @@ final class LibraryContentIndex {
                 guard let data = try? Data(contentsOf: fileURL) else { return nil }
                 return try? JSONDecoder().decode([String: Entry].self, from: data)
             }.value
-            guard let self, let decoded else { return }
-            // What's been learned since launch is newer than what's on disk.
-            self.entries.merge(decoded) { current, _ in current }
+            guard let self else { return }
+            // What's been learned since launch is newer than what's on disk. A first launch has
+            // no file yet, and still counts as loaded.
+            self.entries.merge(decoded ?? [:]) { current, _ in current }
             self.indexedCount = self.entries.count
             self.isLoaded = true
             self.update(with: self.latestItems)

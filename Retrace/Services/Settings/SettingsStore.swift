@@ -285,6 +285,11 @@ final class SettingsStore {
         keepsClipboardHistory = value(.keepsClipboardHistory, default: Defaults.keepsClipboardHistory)
         clipboardRetention = ClipboardRetention(rawValue: value(.clipboardRetention, default: "")) ?? Defaults.clipboardRetention
         clipboardExcludedApps = value(.clipboardExcludedApps, default: Defaults.clipboardExcludedApps)
+        if !defaults.bool(forKey: "trimmedFormerExcludedApps") {
+            defaults.set(true, forKey: "trimmedFormerExcludedApps")
+            let trimmed = clipboardExcludedApps.filter { !Defaults.formerDefaultExcludedApps.contains($0) }
+            if trimmed != clipboardExcludedApps { clipboardExcludedApps = trimmed }
+        }
         let thumbnailMemory = value(.thumbnailMemoryMB, default: Defaults.thumbnailMemoryMB)
         thumbnailMemoryMB = Self.thumbnailMemoryChoices.contains(thumbnailMemory) ? thumbnailMemory : Defaults.thumbnailMemoryMB
         // Keep only known kinds with a time Settings offers, so the picker always shows a choice.
@@ -492,6 +497,10 @@ private extension SettingsStore {
         static let clipboardExcludedApps = [
             "com.apple.Passwords",
             "com.apple.keychainaccess",
+        ]
+        /// Earlier versions listed these by default. They're removed once, so only apps the
+        /// person added stay alongside Apple's two.
+        static let formerDefaultExcludedApps: Set<String> = [
             "com.1password.1password",
             "com.agilebits.onepassword7",
             "com.bitwarden.desktop",
