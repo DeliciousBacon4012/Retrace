@@ -97,9 +97,14 @@ final class ReplayCoordinator {
                 enabled: settings.replayBufferEnabled,
                 seconds: settings.replayBufferSeconds,
                 limit: settings.replayDiskLimitGB,
-                fps: settings.framesPerSecond,
+                fps: settings.replayFramesPerSecond,
                 codec: settings.videoCodec,
-                audio: settings.recordsSystemAudio
+                audio: settings.recordsSystemAudio,
+                quality: settings.replayQuality,
+                encoder: settings.videoEncoder,
+                fullResolution: settings.replayUsesFullResolution,
+                color: settings.videoColor,
+                queueDepth: settings.captureQueueDepth
             )
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -114,8 +119,13 @@ final class ReplayCoordinator {
                 try await buffer.start(
                     seconds: wanted.seconds,
                     sizeLimitGB: wanted.limit,
-                    framesPerSecond: min(wanted.fps, 30),
+                    framesPerSecond: wanted.fps,
                     codec: wanted.codec,
+                    quality: wanted.quality,
+                    encoder: wanted.encoder,
+                    usesFullResolution: wanted.fullResolution,
+                    color: wanted.color,
+                    queueDepth: wanted.queueDepth,
                     includesAudio: wanted.audio
                 )
             } catch is CancellationError {

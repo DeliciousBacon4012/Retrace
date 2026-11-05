@@ -75,7 +75,9 @@ private struct RecordingHUDView: View {
                 .glassEffect(.regular.tint(.red).interactive(), in: .circle)
                 .help("Stop recording")
                 .accessibilityLabel("Stop Recording")
-                .disabled(recorder.state == .finishing)
+                .disabled({
+                    if case .recording = recorder.state { false } else { true }
+                }())
             }
         }
         .scaleEffect(isShown ? 1 : 0.8)

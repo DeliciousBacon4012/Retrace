@@ -18,6 +18,9 @@ nonisolated struct RecordingOptions: Sendable {
     var recordsSystemAudio: Bool
     var recordsMicrophone: Bool
     var scale: CGFloat
+    var color: VideoColor = .automatic
+    var queueDepth: Int = 6
+    var showsClicks: Bool = false
 }
 
 /// Records the screen to a movie file using ScreenCaptureKit's built-in recording output.
@@ -34,6 +37,8 @@ final class ScreenRecorder: NSObject {
 
     /// Called once per recording with the finished file, or the reason it failed.
     @ObservationIgnored var onFinish: ((Result<URL, any Error>) -> Void)?
+    /// Called when the movie's first frame is written, with no delay beyond a hop to the main actor.
+    @ObservationIgnored var onRecordingBegan: (() -> Void)?
 
     @ObservationIgnored private var stream: SCStream?
     @ObservationIgnored private var recordingOutput: SCRecordingOutput?
@@ -82,7 +87,9 @@ final class ScreenRecorder: NSObject {
             let outputConfiguration = SCRecordingOutputConfiguration()
             outputConfiguration.outputURL = url
             outputConfiguration.outputFileType = .mov
-            outputConfiguration.videoCodecType = options.codec == .hevc ? .hevc : .h264
+            // Fall back to HEVC if this Mac can't record the chosen codec directly.
+            let available = outputConfiguration.availableVideoCodecTypes
+            outputConfiguration.videoCodecType = available.contains(options.codec.codecType) ? options.codec.codecType : .hevc
             let output = SCRecordingOutput(configuration: outputConfiguration, delegate: self)
 
             let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
@@ -327,7 +334,11 @@ final class ScreenRecorder: NSObject {
         let configuration = SCStreamConfiguration()
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(options.framesPerSecond, 1)))
         configuration.showsCursor = options.showsCursor
-        configuration.queueDepth = 6
+        configuration.queueDepth = options.queueDepth
+        configuration.showMouseClicks = options.showsClicks
+        if let colorSpace = options.color.colorSpaceName {
+            configuration.colorSpaceName = colorSpace
+        }
         configuration.capturesAudio = options.recordsSystemAudio
         configuration.excludesCurrentProcessAudio = true
         configuration.captureMicrophone = options.recordsMicrophone
@@ -403,6 +414,10 @@ nonisolated enum RecordingOutputValidation {
 }
 
 extension ScreenRecorder: SCRecordingOutputDelegate, SCStreamDelegate {
+    nonisolated func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {
+        Task { @MainActor in self.onRecordingBegan?() }
+    }
+
     nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
         let outputID = ObjectIdentifier(recordingOutput)
         Task { @MainActor in

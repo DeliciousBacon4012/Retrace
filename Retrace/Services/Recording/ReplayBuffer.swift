@@ -48,7 +48,7 @@ final class ReplayBuffer: NSObject {
         }
     }
 
-    func start(seconds: Int, sizeLimitGB: Int, framesPerSecond: Int, codec: VideoCodec, includesAudio: Bool) async throws {
+    func start(seconds: Int, sizeLimitGB: Int, framesPerSecond: Int, codec: VideoCodec, quality: VideoQuality = .balanced, encoder: VideoEncoderChoice = .automatic, usesFullResolution: Bool = false, color: VideoColor = .automatic, queueDepth: Int = 6, includesAudio: Bool) async throws {
         guard state == .off else { return }
         let token = generation.begin()
         guard CGPreflightScreenCaptureAccess() else { throw CaptureError.permissionDenied }
@@ -66,14 +66,16 @@ final class ReplayBuffer: NSObject {
             let ownApps = content.applications.filter { $0.processID == ownProcess }
             let filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
 
-            let width = display.width / 2 * 2
-            let height = display.height / 2 * 2
+            let scale = usesFullResolution ? Int(NSScreen.screens.first { $0.displayID == display.displayID }?.backingScaleFactor ?? 2) : 1
+            let width = display.width * scale / 2 * 2
+            let height = display.height * scale / 2 * 2
             let configuration = SCStreamConfiguration()
             configuration.width = width
             configuration.height = height
             configuration.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(framesPerSecond, 1)))
             configuration.showsCursor = true
-            configuration.queueDepth = 6
+            configuration.queueDepth = queueDepth
+            if let colorSpace = color.colorSpaceName { configuration.colorSpaceName = colorSpace }
             configuration.capturesAudio = includesAudio
             configuration.excludesCurrentProcessAudio = true
 
@@ -82,6 +84,8 @@ final class ReplayBuffer: NSObject {
                 height: height,
                 framesPerSecond: framesPerSecond,
                 codec: codec,
+                quality: quality,
+                encoder: encoder,
                 includesAudio: includesAudio,
                 maximumSeconds: Double(seconds),
                 maximumBytes: sizeLimitGB * 1_000_000_000

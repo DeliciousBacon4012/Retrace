@@ -47,6 +47,9 @@ final class RecordingCoordinator {
         self.clipboard = clipboard
         self.quickAccess = quickAccess
         self.toasts = toasts
+        recorder.onRecordingBegan = { [weak self] in
+            self?.cursorTracker?.start()
+        }
         recorder.onFinish = { [weak self] result in
             self?.finish(result)
         }
@@ -118,6 +121,11 @@ final class RecordingCoordinator {
     /// True from the moment a recording is asked for until it starts or is called off, so a
     /// second press of the shortcut meanwhile can't open a second picker or overlay.
     @ObservationIgnored private var isPreparing = false
+    /// Set while a finished movie gets its second pass. The HUD still shows, so nothing new starts.
+    @ObservationIgnored private var isFinishing = false
+    /// Follows the pointer when the movie's cursor will be drawn afterward.
+    @ObservationIgnored private var cursorTracker: CursorTracker?
+    @ObservationIgnored private var finishCodec = VideoCodec.hevc
 
     /// Starts a recording, or stops the one in progress. During the countdown, cancels it.
     func toggle(_ mode: CaptureMode, savingTo folder: URL? = nil) async {
@@ -129,7 +137,7 @@ final class RecordingCoordinator {
             recorder.stop()
             return
         }
-        guard !isPreparing else { return }
+        guard !isPreparing, !isFinishing else { return }
         guard permissions.screenRecordingStatus == .granted else {
             toasts.showScreenRecordingNeeded(then: String(localized: "Try again."))
             return
@@ -147,13 +155,20 @@ final class RecordingCoordinator {
         do {
             let url = try await storage.reserveURL(template: settings.filenameTemplate, date: .now, fileExtension: "mov", in: folder ?? settings.saveFolderURL)
             let scale = settings.downscalesRetina ? 1 : (screen?.backingScaleFactor ?? 2)
+            // A window can move, so its cursor can't be placed afterward; it keeps the live one.
+            let trackedArea: CGRect? = if settings.cursorBlurEnabled, case .display = target { area ?? screen?.frame } else { nil }
+            cursorTracker = trackedArea.map { CursorTracker(area: $0, pixelsPerPoint: scale) }
+            finishCodec = settings.videoCodec
             let options = RecordingOptions(
                 codec: settings.videoCodec,
                 framesPerSecond: settings.framesPerSecond,
-                showsCursor: true,
+                showsCursor: cursorTracker == nil,
                 recordsSystemAudio: settings.recordsSystemAudio,
                 recordsMicrophone: settings.recordsMicrophone,
-                scale: scale
+                scale: scale,
+                color: settings.videoColor,
+                queueDepth: settings.captureQueueDepth,
+                showsClicks: settings.showsClicks
             )
             try await recorder.start(target, options: options, to: url)
             if settings.playsSounds { CaptureSound.play() }
@@ -219,11 +234,32 @@ final class RecordingCoordinator {
     }
 
     private func finish(_ result: Result<URL, any Error>) {
-        hud.hide()
+        let cursor = cursorTracker?.stop()
+        cursorTracker = nil
         switch result {
         case .success(let url):
             if settings.playsSounds { CaptureSound.play() }
+            let finishing = RecordingFinisher.Options(
+                codec: finishCodec,
+                quality: settings.videoQuality,
+                encoder: settings.videoEncoder,
+                cursor: cursor,
+                cursorBlurMode: settings.cursorBlurMode,
+                cursorBlurAmount: settings.cursorBlurAmount
+            )
+            isFinishing = true
             Task {
+                // The HUD keeps saying "Saving…" until this is done.
+                defer {
+                    isFinishing = false
+                    hud.hide()
+                }
+                do {
+                    try await RecordingFinisher.process(url, options: finishing)
+                } catch {
+                    Log.capture.error("Couldn't process a recording: \(error.localizedDescription, privacy: .public)")
+                    ErrorPresenter.present(error, recovery: String(localized: "The recording was kept as it was captured."))
+                }
                 // Clean the file before it's copied or shown, so nothing hands out the original.
                 if settings.stripsVideoMetadata {
                     do {
@@ -256,6 +292,7 @@ final class RecordingCoordinator {
                 quickAccess.show(capture)
             }
         case .failure(let error):
+            hud.hide()
             ErrorPresenter.present(error)
         }
     }

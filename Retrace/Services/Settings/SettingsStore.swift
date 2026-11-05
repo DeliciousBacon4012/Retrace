@@ -91,6 +91,21 @@ final class SettingsStore {
     var recordsSystemAudio = Defaults.recordsSystemAudio { didSet { save(recordsSystemAudio, .recordsSystemAudio) } }
     var recordsMicrophone = Defaults.recordsMicrophone { didSet { save(recordsMicrophone, .recordsMicrophone) } }
     var showsClicks = Defaults.showsClicks { didSet { save(showsClicks, .showsClicks) } }
+    var videoColor = Defaults.videoColor { didSet { save(videoColor.rawValue, .videoColor) } }
+    var videoQuality = Defaults.videoQuality { didSet { save(videoQuality.rawValue, .videoQuality) } }
+    var videoEncoder = Defaults.videoEncoder { didSet { save(videoEncoder.rawValue, .videoEncoder) } }
+    /// How many frames ScreenCaptureKit may hold at once. More rides out busy moments; fewer uses less memory.
+    var captureQueueDepth = Defaults.captureQueueDepth { didSet { save(captureQueueDepth, .captureQueueDepth) } }
+    static let captureQueueDepthRange = 3...8
+    var cursorBlurEnabled = Defaults.cursorBlurEnabled { didSet { save(cursorBlurEnabled, .cursorBlurEnabled) } }
+    var cursorBlurMode = Defaults.cursorBlurMode { didSet { save(cursorBlurMode.rawValue, .cursorBlurMode) } }
+    /// How long the shutter stays open, as a share of one frame. 0.5 is film's 180° shutter.
+    var cursorBlurAmount = Defaults.cursorBlurAmount { didSet { save(cursorBlurAmount, .cursorBlurAmount) } }
+    static let cursorBlurAmountRange = 0.1...2.0
+    var replayFramesPerSecond = Defaults.replayFramesPerSecond { didSet { save(replayFramesPerSecond, .replayFramesPerSecond) } }
+    static let replayFrameRateChoices = [15, 24, 30, 60]
+    var replayUsesFullResolution = Defaults.replayUsesFullResolution { didSet { save(replayUsesFullResolution, .replayUsesFullResolution) } }
+    var replayQuality = Defaults.replayQuality { didSet { save(replayQuality.rawValue, .replayQuality) } }
     /// Shows a red dot and the elapsed time in the menu bar while recording.
     var showsRecordingTimeInMenuBar = Defaults.showsRecordingTimeInMenuBar { didSet { save(showsRecordingTimeInMenuBar, .showsRecordingTimeInMenuBar) } }
     /// Seconds to count down before a recording starts. Zero starts right away.
@@ -161,7 +176,7 @@ final class SettingsStore {
     }
 
     static let imageQualityChoices = 0.3...1.0
-    static let frameRateChoices = [30, 60]
+    static let frameRateChoices = [24, 30, 60, 120]
     static let recordingCountdownChoices = [0, 3, 5]
     static let overlayAutoCloseChoices = [0, 5, 10, 30, 60]
     static let replayBufferDurationChoices = [15, 30, 60, 120, 300, 600]
@@ -295,6 +310,21 @@ final class SettingsStore {
         recordsSystemAudio = value(.recordsSystemAudio, default: Defaults.recordsSystemAudio)
         recordsMicrophone = value(.recordsMicrophone, default: Defaults.recordsMicrophone)
         showsClicks = value(.showsClicks, default: Defaults.showsClicks)
+        videoColor = VideoColor(rawValue: value(.videoColor, default: "")) ?? Defaults.videoColor
+        videoQuality = VideoQuality(rawValue: value(.videoQuality, default: "")) ?? Defaults.videoQuality
+        videoEncoder = VideoEncoderChoice(rawValue: value(.videoEncoder, default: "")) ?? Defaults.videoEncoder
+        captureQueueDepth = min(max(value(.captureQueueDepth, default: Defaults.captureQueueDepth), Self.captureQueueDepthRange.lowerBound), Self.captureQueueDepthRange.upperBound)
+        cursorBlurEnabled = value(.cursorBlurEnabled, default: Defaults.cursorBlurEnabled)
+        cursorBlurMode = CursorBlurMode(rawValue: value(.cursorBlurMode, default: "")) ?? Defaults.cursorBlurMode
+        cursorBlurAmount = min(max(value(.cursorBlurAmount, default: Defaults.cursorBlurAmount), Self.cursorBlurAmountRange.lowerBound), Self.cursorBlurAmountRange.upperBound)
+        replayFramesPerSecond = Self.supportedChoice(
+            value(.replayFramesPerSecond, default: Defaults.replayFramesPerSecond),
+            in: Self.replayFrameRateChoices,
+            fallback: Defaults.replayFramesPerSecond
+        )
+        replayUsesFullResolution = value(.replayUsesFullResolution, default: Defaults.replayUsesFullResolution)
+        let storedReplayQuality = VideoQuality(rawValue: value(.replayQuality, default: "")) ?? Defaults.replayQuality
+        replayQuality = VideoQuality.replayChoices.contains(storedReplayQuality) ? storedReplayQuality : Defaults.replayQuality
         showsRecordingTimeInMenuBar = value(.showsRecordingTimeInMenuBar, default: Defaults.showsRecordingTimeInMenuBar)
         recordingCountdownSeconds = Self.supportedChoice(
             value(.recordingCountdownSeconds, default: Defaults.recordingCountdownSeconds),
@@ -406,6 +436,16 @@ private extension SettingsStore {
         case recordsSystemAudio
         case recordsMicrophone
         case showsClicks
+        case videoColor
+        case videoQuality
+        case videoEncoder
+        case captureQueueDepth
+        case cursorBlurEnabled
+        case cursorBlurMode
+        case cursorBlurAmount
+        case replayFramesPerSecond
+        case replayUsesFullResolution
+        case replayQuality
         case showsRecordingTimeInMenuBar
         case recordingCountdownSeconds
         case replayBufferEnabled
@@ -465,6 +505,16 @@ private extension SettingsStore {
         static let recordsSystemAudio = true
         static let recordsMicrophone = false
         static let showsClicks = false
+        static let videoColor = VideoColor.automatic
+        static let videoQuality = VideoQuality.original
+        static let videoEncoder = VideoEncoderChoice.automatic
+        static let captureQueueDepth = 6
+        static let cursorBlurEnabled = false
+        static let cursorBlurMode = CursorBlurMode.quality
+        static let cursorBlurAmount = 0.5
+        static let replayFramesPerSecond = 30
+        static let replayUsesFullResolution = false
+        static let replayQuality = VideoQuality.balanced
         static let showsRecordingTimeInMenuBar = true
         static let recordingCountdownSeconds = 3
         static let replayBufferEnabled = false

@@ -17,7 +17,7 @@ struct ReplayBufferSettingsView: View {
                     set: { dependencies.replay.setEnabled($0) }
                 ))
             } footer: {
-                Text("Retrace quietly records your screen at standard resolution and keeps only the last stretch, in a temporary folder that's cleared when it stops. Save it from the menu bar, the Capture page, or its shortcut.")
+                Text("Retrace quietly records your screen and keeps only the last stretch, in a temporary folder that's cleared when it stops. Save it from the menu bar, the Capture page, or its shortcut.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -33,8 +33,17 @@ struct ReplayBufferSettingsView: View {
                         Text("\(gigabytes) GB").tag(gigabytes)
                     }
                 }
+                Picker("Frame rate", selection: $settings.replayFramesPerSecond) {
+                    ForEach(SettingsStore.replayFrameRateChoices, id: \.self) { rate in
+                        Text("\(rate) fps").tag(rate)
+                    }
+                }
+                Picker("Quality", selection: $settings.replayQuality) {
+                    ForEach(VideoQuality.replayChoices) { Text($0.title).tag($0) }
+                }
+                Toggle("Full Retina resolution", isOn: $settings.replayUsesFullResolution)
             } footer: {
-                Text("The buffer uses the codec and system audio settings from Recording, at up to 30 frames per second.")
+                Text("The buffer shares the codec, color, encoder, and system audio settings above. ProRes uses HEVC here, since replays are written in short segments. Higher settings use more processor time and disk.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

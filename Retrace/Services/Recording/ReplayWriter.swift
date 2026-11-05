@@ -13,6 +13,8 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
         var height: Int
         var framesPerSecond: Int
         var codec: VideoCodec
+        var quality: VideoQuality = .balanced
+        var encoder: VideoEncoderChoice = .automatic
         var includesAudio: Bool
         var maximumSeconds: Double
         var maximumBytes: Int
@@ -126,10 +128,13 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
         writer.initialSegmentStartTime = time
         writer.delegate = self
 
-        // About 0.1 bits per pixel per frame is plenty for screen content.
-        let bitRate = max(2_000_000, Int(Double(configuration.width * configuration.height * configuration.framesPerSecond) * 0.1))
-        let video = AVAssetWriterInput(mediaType: .video, outputSettings: [
-            AVVideoCodecKey: configuration.codec == .hevc ? AVVideoCodecType.hevc : AVVideoCodecType.h264,
+        let bitRate = configuration.quality.bitRate(
+            width: configuration.width,
+            height: configuration.height,
+            framesPerSecond: Double(configuration.framesPerSecond)
+        )
+        var settings: [String: Any] = [
+            AVVideoCodecKey: configuration.codec.replayCodec.codecType,
             AVVideoWidthKey: configuration.width,
             AVVideoHeightKey: configuration.height,
             AVVideoCompressionPropertiesKey: [
@@ -137,7 +142,11 @@ nonisolated final class ReplayWriter: NSObject, SCStreamOutput, AVAssetWriterDel
                 AVVideoExpectedSourceFrameRateKey: configuration.framesPerSecond,
                 AVVideoMaxKeyFrameIntervalDurationKey: 1,
             ],
-        ])
+        ]
+        if let specification = configuration.encoder.specification {
+            settings[AVVideoEncoderSpecificationKey] = specification
+        }
+        let video = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
         video.expectsMediaDataInRealTime = true
         guard writer.canAdd(video) else {
             failed = true

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -35,6 +36,8 @@ nonisolated enum ImageFormat: String, CaseIterable, Identifiable, Sendable {
 nonisolated enum VideoCodec: String, CaseIterable, Identifiable, Sendable {
     case h264
     case hevc
+    case proRes422
+    case proRes422HQ
 
     var id: String { rawValue }
 
@@ -42,8 +45,26 @@ nonisolated enum VideoCodec: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .h264: "H.264"
         case .hevc: "HEVC"
+        case .proRes422: "ProRes 422"
+        case .proRes422HQ: "ProRes 422 HQ"
         }
     }
+
+    var codecType: AVVideoCodecType {
+        switch self {
+        case .h264: .h264
+        case .hevc: .hevc
+        case .proRes422: .proRes422
+        case .proRes422HQ: .proRes422HQ
+        }
+    }
+
+    /// ProRes is intra-frame and huge, and isn't allowed in the fragmented files a replay uses.
+    var replayCodec: VideoCodec {
+        isProRes ? .hevc : self
+    }
+
+    var isProRes: Bool { self == .proRes422 || self == .proRes422HQ }
 }
 
 /// How quickly Quick Access thumbnails move. Each speed scales every spring and fade together.
