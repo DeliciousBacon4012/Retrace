@@ -22,7 +22,9 @@ struct ExportSheet: View {
 
     @State private var options: ExportOptions
     @State private var estimatedBytes: Int?
+    @State private var estimateFailure: String?
     @State private var isEstimating = false
+    @State private var isExporting = false
     @State private var limitsSize = false
     @State private var limitKilobytes = 1000.0
     @Environment(\.dismiss) private var dismiss
@@ -36,9 +38,16 @@ struct ExportSheet: View {
 
     private var effectiveOptions: ExportOptions {
         var result = options
-        result.maximumBytes = limitsSize && options.format.isLossy ? Int(limitKilobytes * 1000) : nil
+        result.maximumBytes = limitsSize && options.format.isLossy ? sizeLimitBytes : nil
         if item.hidesContent { result.stripsMetadata = true }
         return result
+    }
+
+    private var sizeLimitBytes: Int {
+        guard limitKilobytes.isFinite, limitKilobytes > 0 else { return 0 }
+        let largestKilobytes = Double(Int.max) / 1_000
+        guard limitKilobytes < largestKilobytes else { return Int.max }
+        return Int(limitKilobytes * 1_000)
     }
 
     var body: some View {
@@ -96,13 +105,21 @@ struct ExportSheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Export…") { export() }
-                    .buttonStyle(.glassProminent)
-                    .keyboardShortcut(.defaultAction)
+                Button { export() } label: {
+                    if isExporting {
+                        ProgressView("Exporting…").controlSize(.small)
+                    } else {
+                        Text("Export…")
+                    }
+                }
+                .buttonStyle(.glassProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(isExporting)
             }
             .padding(Design.spacingL)
         }
         .frame(minWidth: 720)
+        .disabled(isExporting)
         .task(id: effectiveOptions) {
             await estimate()
         }
@@ -131,6 +148,10 @@ struct ExportSheet: View {
                 if let estimatedBytes {
                     Text(estimatedBytes.formatted(.byteCount(style: .file)))
                         .contentTransition(.numericText())
+                } else if let estimateFailure {
+                    Text(estimateFailure)
+                        .lineLimit(2)
+                        .foregroundStyle(.secondary)
                 }
                 if isEstimating {
                     ProgressView().controlSize(.mini)
@@ -148,31 +169,39 @@ struct ExportSheet: View {
         guard !Task.isCancelled else { return }
         isEstimating = true
         defer { isEstimating = false }
+        estimateFailure = nil
         do {
             let data = try await ImageEncoder.encodeInBackground(item.image, options: effectiveOptions, pointScale: item.scale)
             guard !Task.isCancelled else { return }
             estimatedBytes = data.count
         } catch {
             estimatedBytes = nil
+            estimateFailure = error.localizedDescription
         }
     }
 
     private func export() {
+        guard !isExporting else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [options.format.utType]
         panel.directoryURL = folder
         panel.nameFieldStringValue = item.suggestedName + "." + options.format.fileExtension
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            let data = try ImageEncoder.data(for: item.image, options: effectiveOptions, pointScale: item.scale)
-            try data.write(to: url, options: .atomic)
-            Log.capture.info("Exported an image")
-            onExported(url)
-            dismiss()
-        } catch {
-            Log.capture.error("Export failed: \(error.localizedDescription, privacy: .public)")
-            ErrorPresenter.present(error)
+        let exportOptions = effectiveOptions
+        isExporting = true
+        Task { @MainActor in
+            defer { isExporting = false }
+            do {
+                let data = try await ImageEncoder.encodeInBackground(item.image, options: exportOptions, pointScale: item.scale)
+                try await ImageEncoder.writeInBackground(data, to: url)
+                Log.capture.info("Exported an image")
+                onExported(url)
+                dismiss()
+            } catch {
+                Log.capture.error("Export failed: \(error.localizedDescription, privacy: .public)")
+                ErrorPresenter.present(error)
+            }
         }
     }
 }

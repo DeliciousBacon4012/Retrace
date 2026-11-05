@@ -25,6 +25,8 @@ nonisolated enum ImageEncoder {
         case unsupportedFormat
         case encodingFailed
         case preparationFailed
+        case invalidSizeLimit
+        case sizeLimitCannotBeMet
         case metadataCheckFailed
         /// The finished file still held metadata that should have been removed.
         case metadataLeft([String])
@@ -34,6 +36,8 @@ nonisolated enum ImageEncoder {
             case .unsupportedFormat: String(localized: "This Mac can't write that image format.")
             case .encodingFailed: String(localized: "The image couldn't be encoded.")
             case .preparationFailed: String(localized: "The image couldn't be converted to the selected size or color space. Nothing was saved.")
+            case .invalidSizeLimit: String(localized: "Enter a file size greater than zero.")
+            case .sizeLimitCannotBeMet: String(localized: "This image can't fit within the selected file size, even at the lowest quality.")
             case .metadataCheckFailed: String(localized: "The exported image couldn't be checked for remaining metadata. Nothing was saved.")
             case .metadataLeft(let found): String(localized: "The image wasn't saved because its metadata couldn't be fully removed (\(found.joined(separator: ", "))).")
             }
@@ -78,8 +82,9 @@ nonisolated enum ImageEncoder {
         }
 
         // Find the highest quality that still fits under the limit.
+        guard limit > 0 else { throw EncodingError.invalidSizeLimit }
         var best = try encode(prepared, options: options, quality: 0.05, dpi: dpi)
-        guard best.count <= limit else { return best }
+        guard best.count <= limit else { throw EncodingError.sizeLimitCannotBeMet }
         var low = 0.05
         var high = min(max(options.quality, 0.05), 1)
         let top = try encode(prepared, options: options, quality: high, dpi: dpi)
@@ -101,6 +106,12 @@ nonisolated enum ImageEncoder {
     @concurrent
     static func encodeInBackground(_ image: CGImage, options: ExportOptions, pointScale: CGFloat) async throws -> Data {
         try data(for: image, options: options, pointScale: pointScale)
+    }
+
+    /// Writes already encoded image data without blocking the UI actor on disk I/O.
+    @concurrent
+    static func writeInBackground(_ data: Data, to url: URL) async throws {
+        try data.write(to: url, options: .atomic)
     }
 
     /// The pixel size an image will have after resizing.
