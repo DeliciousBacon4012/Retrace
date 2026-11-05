@@ -4,7 +4,7 @@
 **Repository:** /Users/har/Documents/Developer/untitled-mac
 **Branch:** feature/stability-and-performance
 **Base:** origin/main at d902835
-**Source checkpoint:** e184e27
+**Source checkpoint:** a177c3b
 
 ## Objective and working rules
 
@@ -12,13 +12,13 @@ Polish the existing macOS app into retrace while preserving its repository, proj
 
 ## Git and Xcode setup
 
-- At source checkpoint e184e27, the feature branch is 29 commits ahead of origin/main. This documentation refresh is a separate docs-only commit, taking it to 30. The remote remains https://github.com/DeliciousBacon4012/untitled-mac.git. No push or merge occurred.
+- At source checkpoint a177c3b, the feature branch is 31 commits ahead of origin/main. This documentation refresh is a separate docs-only commit, taking it to 32. The remote remains https://github.com/DeliciousBacon4012/untitled-mac.git. No push or merge occurred.
 - Xcode uses the original Untitled.xcodeproj and My Mac. The active shared scheme is retrace. The shared Untitled scheme remains for compatibility. The app target is internally named Untitled and the hosted test target UntitledTests.
 - The app product, executable, display name, icon, and active scheme use retrace. App version is 0.1.0 (build 1), category Productivity, minimum macOS 26.0, and Swift 6.0.
 - Identity inventory: the project path, internal target/module names, test host, bundle identifier io.github.deliciousbacon4012.Untitled, Application Support domain, Pictures/Untitled folder, and Originals storage path remain unchanged. Those names participate in existing preferences, permissions, and user data. Existing Library filenames also remain untouched. The default filename template is retrace, but the user's saved Untitled template is preserved and currently appears in Settings; no user preference was reset.
 - Signing settings use Automatic signing, team ZX34GARNUS, Apple Development identity, and hardened runtime. No paid Developer ID certificate or distribution entitlement was added. Xcode builds and launches locally, but `security find-identity -v -p codesigning` reports zero valid identities and strict `codesign --verify --deep --strict` returns `CSSMERR_TP_NOT_TRUSTED`. This is usable for the current local Xcode workflow, not verified for distribution. App Sandbox remains off pending a distribution and file-access design.
 - The existing /Users/har/Downloads/logos and icons/retrace_app.icon and retrace_menubar_template.svg are integrated. The 1024-pixel PNG remains at /Users/har/Downloads/logos and icons/retrace_icon_1024_app.png.
-- Xcode's test-plan auto-creation is disabled on both shared schemes to prevent duplicate test discovery. The retrace scheme discovers 51 tests.
+- Xcode's test-plan auto-creation is disabled on both shared schemes to prevent duplicate test discovery. The retrace scheme discovers 52 tests.
 
 ## Source commits through c630108
 
@@ -54,6 +54,8 @@ Polish the existing macOS app into retrace while preserving its repository, proj
 27. fd1a75e — Add Vision person redaction and smart crop
 28. b34fdcc — Document Vision redaction and smart crop
 29. e184e27 — Add foreground subject copy with Vision
+30. 41859bc — Document foreground subject copy checkpoint
+31. a177c3b — Verify Vision OCR on readable image data
 
 ## Verified findings and completed work
 
@@ -88,10 +90,10 @@ Polish the existing macOS app into retrace while preserving its repository, proj
 - A negative-frame-size breakpoint was traced to AppKit's NSThemeFrame window-sharing session recipient indicator. Its stack stayed within AppKit and did not enter app code. No speculative size clamp was added.
 - A standalone xcodebuild Analyze attempt still fails in actool while opening the Icon Composer document. This is not a compiler warning; static analysis remains unverified.
 
-## Verification at source checkpoint e184e27
+## Verification at source checkpoint a177c3b
 
 - Xcode MCP built the existing project and ran all tests using the retrace scheme on My Mac. The app also launched successfully under Xcode after the subject-copy change.
-- All 51 XCTest tests passed: 0 failures, 0 skips, 0 expected failures, and 0 not run. Coverage includes Smart Crop bounds/undo, blank-image Vision behavior, and alpha composition for a generated subject mask; it does not verify detector accuracy or mask edge quality on real photographs.
+- All 52 XCTest tests passed: 0 failures, 0 skips, 0 expected failures, and 0 not run. A generated high-contrast sample confirms Vision returns readable OCR text despite the system E5 log messages. Coverage also includes Smart Crop bounds/undo, blank-image Vision behavior, and alpha composition for a generated subject mask; it does not verify detector accuracy or mask edge quality on real photographs.
 - The latest Xcode build succeeded and the warning query returned zero warnings or Swift compiler errors. A prior build logged a benign App Intents metadata-extraction warning because the app does not declare `AppIntents.framework`; it did not recur in the latest warning query.
 - Build settings report PRODUCT_NAME and CFBundleDisplayName as retrace, MARKETING_VERSION 0.1.0, CURRENT_PROJECT_VERSION 1, MACOSX_DEPLOYMENT_TARGET 26.0, Swift 6.0, automatic signing, and hardened runtime enabled.
 - The local app bundle reports team identifier ZX34GARNUS, but strict signature verification returns `CSSMERR_TP_NOT_TRUSTED` and security reports zero valid identities. Local Xcode launch succeeds; distribution signing is not established.
@@ -106,7 +108,7 @@ Polish the existing macOS app into retrace while preserving its repository, proj
 
 ### OCR runtime note
 
-- The latest Xcode launch again logged three `[e5rt]` errors from Apple's private TextRecognition runtime about missing E5 model bundles (text detection, orientation, and Latin/Cyrillic recognition). The app launched; no app crash stack was present, and the Xcode build warning query returned zero warnings. OCR was not exercised end-to-end in this verification session, so the system messages remain an open diagnostic to check against a positive OCR sample rather than a confirmed app defect.
+- The latest Xcode launch again logged three `[e5rt]` errors from Apple's private TextRecognition runtime about missing E5 model bundles (text detection, orientation, and Latin/Cyrillic recognition). The app launched; no app crash stack was present, and the Xcode build warning query returned zero warnings. A positive synthetic OCR integration check passed, so the messages do not currently show a broken OCR path. Keep monitoring and verify against a real capture before treating the system logs as harmless.
 
 ## Apple releases and design guidance checked 2026-11-05
 
@@ -120,6 +122,9 @@ At the check date, macOS 27.2 (26B123, released 2026-10-26) was the latest stabl
 - [Materials Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/materials)
 - [Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass)
 - [Icon Composer](https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer)
+- [Vision foreground instance-mask request](https://developer.apple.com/documentation/vision/vngenerateforegroundinstancemaskrequest)
+- [VNInstanceMaskObservation instances](https://developer.apple.com/documentation/vision/vninstancemaskobservation/allinstances)
+- [Generating a scaled Vision mask](https://developer.apple.com/documentation/vision/vninstancemaskobservation/generatescaledmaskforimage%28forinstances%3Afrom%3A%29)
 
 Apple's macOS guidance emphasizes flexible windows, keyboard and precise pointer input, useful information density, and personalization. Standard controls already adopt the current system materials; custom material effects should stay limited to places where they communicate an actual floating or interactive surface.
 
