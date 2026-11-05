@@ -6,12 +6,21 @@ import ImageIO
 ///
 /// It checks what ImageIO itself reports, so it sees exactly what other apps will see.
 nonisolated enum MetadataAudit {
+    enum AuditError: Error {
+        case unreadableImageData
+    }
+
     /// Human-readable names of what's left, such as "GPS" or "EXIF DateTimeOriginal".
     /// Empty when the data holds nothing but the image.
-    static func leftovers(in data: Data) -> [String] {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return [] }
+    static func leftovers(in data: Data) throws -> [String] {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            throw AuditError.unreadableImageData
+        }
+        let imageCount = CGImageSourceGetCount(source)
+        guard imageCount > 0 else { throw AuditError.unreadableImageData }
+
         var found: [String] = []
-        if CGImageSourceGetCount(source) > 1 {
+        if imageCount > 1 {
             found.append("extra images")
         }
         if let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] {

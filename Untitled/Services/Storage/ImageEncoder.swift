@@ -24,6 +24,8 @@ nonisolated enum ImageEncoder {
     enum EncodingError: LocalizedError {
         case unsupportedFormat
         case encodingFailed
+        case preparationFailed
+        case metadataCheckFailed
         /// The finished file still held metadata that should have been removed.
         case metadataLeft([String])
 
@@ -31,6 +33,8 @@ nonisolated enum ImageEncoder {
             switch self {
             case .unsupportedFormat: String(localized: "This Mac can't write that image format.")
             case .encodingFailed: String(localized: "The image couldn't be encoded.")
+            case .preparationFailed: String(localized: "The image couldn't be converted to the selected size or color space. Nothing was saved.")
+            case .metadataCheckFailed: String(localized: "The exported image couldn't be checked for remaining metadata. Nothing was saved.")
             case .metadataLeft(let found): String(localized: "The image wasn't saved because its metadata couldn't be fully removed (\(found.joined(separator: ", "))).")
             }
         }
@@ -49,7 +53,13 @@ nonisolated enum ImageEncoder {
     static func data(for image: CGImage, options: ExportOptions, pointScale: CGFloat = 1) throws -> Data {
         let data = try encoded(image, options: options, pointScale: pointScale)
         if options.stripsMetadata {
-            let found = MetadataAudit.leftovers(in: data)
+            let found: [String]
+            do {
+                found = try MetadataAudit.leftovers(in: data)
+            } catch {
+                Log.capture.error("Refused to write an image because its metadata couldn't be verified")
+                throw EncodingError.metadataCheckFailed
+            }
             guard found.isEmpty else {
                 Log.capture.error("Refused to write an image with metadata left: \(found.joined(separator: ", "), privacy: .public)")
                 throw EncodingError.metadataLeft(found)
@@ -59,7 +69,7 @@ nonisolated enum ImageEncoder {
     }
 
     private static func encoded(_ image: CGImage, options: ExportOptions, pointScale: CGFloat) throws -> Data {
-        let prepared = prepare(image, options: options)
+        let prepared = try prepare(image, options: options)
         let factor = max(options.scalePercent, 1) / 100
         let dpi = 72 * max(pointScale * factor, 1)
 
@@ -99,12 +109,15 @@ nonisolated enum ImageEncoder {
         return CGSize(width: max((CGFloat(image.width) * factor).rounded(), 1), height: max((CGFloat(image.height) * factor).rounded(), 1))
     }
 
-    private static func prepare(_ image: CGImage, options: ExportOptions) -> CGImage {
+    private static func prepare(_ image: CGImage, options: ExportOptions) throws -> CGImage {
         let size = outputSize(of: image, options: options)
         let resizes = Int(size.width) != image.width || Int(size.height) != image.height
         let target = targetColorSpace(for: image, options: options)
         guard resizes || target != nil else { return image }
-        return redrawn(image, size: size, in: target ?? image.colorSpace) ?? image
+        guard let prepared = redrawn(image, size: size, in: target ?? image.colorSpace) else {
+            throw EncodingError.preparationFailed
+        }
+        return prepared
     }
 
     /// The color space to convert to, or nil to keep the image's own.
